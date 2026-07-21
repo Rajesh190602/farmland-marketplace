@@ -18,4 +18,4 @@ async def upload_image(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) 

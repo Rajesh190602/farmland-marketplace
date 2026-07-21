@@ -19,6 +19,9 @@ function Login() {
       formData.append("username", email);
       formData.append("password", password);
 
+      console.log("API URL:", api.defaults.baseURL);
+      console.log("Sending Login Request...");
+
       const response = await api.post(
         "/users/login",
         formData,
@@ -29,7 +32,7 @@ function Login() {
         }
       );
 
-      console.log("Login Response:", response.data);
+      console.log("✅ Login Response:", response.data);
 
       localStorage.setItem("token", response.data.access_token);
 
@@ -38,15 +41,24 @@ function Login() {
       navigate("/home");
 
     } catch (error) {
-      console.log("Login Error:", error);
+      console.error("========== LOGIN ERROR ==========");
+      console.error("Message:", error.message);
+      console.error("Code:", error.code);
+      console.error("Response:", error.response);
+      console.error("Request:", error.request);
+      console.error(error);
 
       if (error.response) {
-        console.log("Status:", error.response.status);
-        console.log("Data:", error.response.data);
-
-        alert(error.response.data.detail || "Login Failed");
+        alert(
+          `Status: ${error.response.status}\n\n${
+            error.response.data.detail ||
+            JSON.stringify(error.response.data)
+          }`
+        );
       } else if (error.request) {
-        alert("Cannot connect to backend server.");
+        alert(
+          "Network Error!\n\nCheck the browser console (F12 → Console) for the exact error."
+        );
       } else {
         alert(error.message);
       }
@@ -71,7 +83,6 @@ function Login() {
       </h2>
 
       <form onSubmit={login}>
-
         <input
           type="email"
           placeholder="Email"
@@ -113,7 +124,6 @@ function Login() {
         >
           {loading ? "Logging in..." : "Login"}
         </button>
-
       </form>
 
       <br />
