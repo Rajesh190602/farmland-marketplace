@@ -1,28 +1,21 @@
-import os
-import shutil
-from uuid import uuid4
-
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, UploadFile, File, HTTPException
+import cloudinary.uploader
+from app import cloudinary_config
 
 router = APIRouter(
     prefix="/upload",
     tags=["Upload"]
 )
 
+@router.post("/")
+async def upload_image(file: UploadFile = File(...)):
+    try:
+        result = cloudinary.uploader.upload(file.file)
 
-@router.post("/image")
-def upload_image(file: UploadFile = File(...)):
+        return {
+            "filename": file.filename,
+            "url": result["secure_url"]
+        }
 
-    # Generate unique filename
-    extension = file.filename.split(".")[-1]
-    filename = f"{uuid4()}.{extension}"
-
-    upload_path = os.path.join("uploads", "lands", filename)
-
-    with open(upload_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return {
-        "message": "Image Uploaded Successfully",
-        "image_url": f"/uploads/lands/{filename}"
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
