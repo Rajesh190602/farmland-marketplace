@@ -42,7 +42,7 @@ function AddLand() {
     setSelectedImage(file);
     setPreview(URL.createObjectURL(file));
   };
-  const uploadImage = async () => {
+ const uploadImage = async () => {
   if (!selectedImage) return "";
 
   try {
@@ -52,7 +52,7 @@ function AddLand() {
     imageData.append("file", selectedImage);
 
     const response = await api.post(
-      "/upload/image",
+      "/upload/",
       imageData,
       {
         headers: {
@@ -63,17 +63,26 @@ function AddLand() {
 
     setUploading(false);
 
-    return response.data.image_url;
+    console.log("Cloudinary Response:", response.data);
+
+    return response.data.url;
 
   } catch (error) {
-    console.log(error);
+
+    console.error(error);
+
     setUploading(false);
 
-    alert("Image upload failed");
+    if (error.response) {
+      alert(error.response.data.detail);
+    } else {
+      alert("Image upload failed");
+    }
 
     return "";
   }
 };
+
   const addLand = async (e) => {
   e.preventDefault();
 
