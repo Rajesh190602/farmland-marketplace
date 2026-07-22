@@ -7,31 +7,40 @@ function AllLands() {
   const navigate = useNavigate();
 
   const [lands, setLands] = useState([]);
-  const [search, setSearch] = useState("");
+  const [district, setDistrict] = useState("");
+  const [village, setVillage] = useState("");
+  const [cropType, setCropType] = useState("");
 
   useEffect(() => {
-    fetchLands();
-  }, []);
-
+  fetchLands();
+}, [district, village, cropType]);
   const fetchLands = async () => {
-    try {
-      const response = await api.get("/lands");
-      setLands(response.data);
-    } catch (error) {
-      console.log(error);
-      alert("Failed to load lands.");
-    }
-  };
+  try {
 
-  const filteredLands = lands.filter((land) => {
-    const value = search.toLowerCase();
+    const response = await api.get("/lands/search", {
+      params: {
+        district: district || undefined,
+        village: village || undefined,
+        crop_type: cropType || undefined,
+      },
+    });
 
-    return (
-      land.title.toLowerCase().includes(value) ||
-      land.village.toLowerCase().includes(value) ||
-      land.district.toLowerCase().includes(value)
-    );
-  });
+    setLands(response.data);
+
+  } catch (error) {
+  console.log("Full Error:", error);
+
+  if (error.response) {
+    console.log("Status:", error.response.status);
+    console.log("Response:", error.response.data);
+  }
+
+  alert("Failed to load lands.");
+}
+};
+
+  
+  
 
   return (
     <>
@@ -83,24 +92,67 @@ function AllLands() {
           </button>
 
           <input
-            type="text"
-            placeholder="Search by title, village or district..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              flex: 1,
-              minWidth: "250px",
-              padding: "10px",
-              borderRadius: "5px",
-              border: "1px solid gray",
-            }}
-          />
+  type="text"
+  placeholder="District"
+  value={district}
+  onChange={(e) => setDistrict(e.target.value)}
+/>
+
+<input
+  type="text"
+  placeholder="Village"
+  value={village}
+  onChange={(e) => setVillage(e.target.value)}
+/>
+<input
+  type="text"
+  placeholder="District"
+  value={district}
+  onChange={(e) => setDistrict(e.target.value)}
+  style={{
+    flex: 1,
+    minWidth: "200px",
+    padding: "10px",
+    borderRadius: "5px",
+    border: "1px solid gray",
+  }}
+/>
+
+<input
+  type="text"
+  placeholder="Village"
+  value={village}
+  onChange={(e) => setVillage(e.target.value)}
+  style={{
+    flex: 1,
+    minWidth: "200px",
+    padding: "10px",
+    borderRadius: "5px",
+    border: "1px solid gray",
+  }}
+/>
+
+<input
+  type="text"
+  placeholder="Crop Type"
+  value={cropType}
+  onChange={(e) => setCropType(e.target.value)}
+  style={{
+    flex: 1,
+    minWidth: "200px",
+    padding: "10px",
+    borderRadius: "5px",
+    border: "1px solid gray",
+  }}
+/>
+
+
         </div>
 
-        {filteredLands.length === 0 ? (
+        {lands.length === 0 ? (
           <h2>No lands found.</h2>
         ) : (
-          filteredLands.map((land) => (
+          lands.map((land) => (
            <div
   key={land.id}
   onClick={() => navigate(`/land/${land.id}`)}
@@ -117,7 +169,7 @@ function AllLands() {
               <h2>{land.title}</h2>
               {land.image_url && (
   <img
-    src={`http://127.0.0.1:8000${land.image_url}`}
+    src={land.image_url}
     alt={land.title}
     style={{
       width: "100%",
