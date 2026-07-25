@@ -35,35 +35,51 @@ class LandCreate(BaseModel):
     title: str
     description: str
     image_url: str | None = None
+
     price: float
     area: float
+
     village: str
     mandal: str
     district: str
     state: str
     pincode: str
+
     survey_number: str
+
     soil_type: str
     water_source: str
     crop_type: str
 
+    # Google Maps
+    latitude: float | None = None
+    longitude: float | None = None
 
 class LandResponse(BaseModel):
     id: int
     title: str
     description: str
     image_url: str | None = None
+
     price: float
     area: float
+
     village: str
     mandal: str
     district: str
     state: str
     pincode: str
+
     survey_number: str
+
     soil_type: str
     water_source: str
     crop_type: str
+
+    # Google Maps
+    latitude: float | None = None
+    longitude: float | None = None
+
     owner_id: int
 
     class Config:

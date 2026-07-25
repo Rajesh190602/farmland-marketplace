@@ -37,6 +37,8 @@ def create_land(
         soil_type=land.soil_type,
         water_source=land.water_source,
         crop_type=land.crop_type,
+        latitude=land.latitude,
+        longitude=land.longitude,
         owner_id=current_user
     )
 
@@ -186,6 +188,8 @@ def update_land(
     existing_land.soil_type = land.soil_type
     existing_land.water_source = land.water_source
     existing_land.crop_type = land.crop_type
+    existing_land.latitude = land.latitude
+    existing_land.longitude = land.longitude
 
     db.commit()
     db.refresh(existing_land)
