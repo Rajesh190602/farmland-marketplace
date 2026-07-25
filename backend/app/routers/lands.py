@@ -142,6 +142,8 @@ def get_land(land_id: int, db: Session = Depends(get_db)):
         "soil_type": land.soil_type,
         "water_source": land.water_source,
         "crop_type": land.crop_type,
+        "latitude": land.latitude,
+        "longitude": land.longitude,
         "owner_name": owner.full_name if owner else "",
         "owner_mobile": owner.mobile if owner else "",
     }
