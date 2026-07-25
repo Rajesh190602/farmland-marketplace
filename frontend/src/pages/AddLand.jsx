@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import LocationPicker from "../components/LocationPicker";
 import api from "../services/api";
 
 function AddLand() {
@@ -9,6 +10,8 @@ function AddLand() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [preview, setPreview] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -95,11 +98,13 @@ function AddLand() {
     }
 
     await api.post("/lands", {
-      ...formData,
-      image_url: imageUrl,
-      price: Number(formData.price),
-      area: Number(formData.area),
-    });
+  ...formData,
+  image_url: imageUrl,
+  price: Number(formData.price),
+  area: Number(formData.area),
+  latitude: latitude,
+  longitude: longitude,
+});
 
     alert("Land Added Successfully!");
 
@@ -160,6 +165,14 @@ function AddLand() {
 {uploading && (
   <p>Uploading Image...</p>
 )}
+
+<br />
+<LocationPicker
+  latitude={latitude}
+  longitude={longitude}
+  setLatitude={setLatitude}
+  setLongitude={setLongitude}
+/>
 
 <br />
 
