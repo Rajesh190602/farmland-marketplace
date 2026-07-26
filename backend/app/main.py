@@ -1,4 +1,5 @@
 from app import cloudinary_config
+from app.routers import admin
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +50,7 @@ app.include_router(users.router)
 app.include_router(lands.router)
 app.include_router(upload.router)
 app.include_router(dashboard.router)
+app.include_router(admin.router)
 
 
 

@@ -1,3 +1,6 @@
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import User
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -5,11 +8,19 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("o9vCDnvocAsnxm0xorg_IvktZDQ")
+
+
 
 # ==========================
 # Configuration
 # ==========================
-SECRET_KEY = "your_secret_key_here"
+SECRET_KEY = "o9vCDnvocAsnxm0xorg_IvktZDQ"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -98,3 +109,23 @@ def get_current_user(
 
     except JWTError:
         raise credentials_exception
+
+def get_current_admin(
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
+
+    return user.id

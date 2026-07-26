@@ -96,7 +96,8 @@ function AddLand() {
     if (selectedImage) {
       imageUrl = await uploadImage();
     }
-
+    console.log("Latitude:", latitude);
+    console.log("Longitude:", longitude);
     await api.post("/lands", {
   ...formData,
   image_url: imageUrl,
