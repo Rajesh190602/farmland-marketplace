@@ -2,6 +2,7 @@ import MyLands from "./pages/MyLands";
 import LandDetails from "./pages/LandDetails";
 import EditLand from "./pages/EditLand";
 import AllLands from "./pages/AllLands";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/Login";
@@ -16,6 +17,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/my-lands" element={<MyLands />} />
         <Route path="/edit-land/:id" element={<EditLand />} />
         <Route path="/all-lands" element={<AllLands />} />
