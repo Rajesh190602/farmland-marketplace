@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 
 function AdminDashboard() {
+  const navigate = useNavigate();
+
   const [stats, setStats] = useState({
     total_users: 0,
     total_lands: 0,
@@ -16,24 +19,22 @@ function AdminDashboard() {
 
   const fetchDashboard = async () => {
     try {
-      const token = localStorage.getItem("token");
-      console.log("Stored Token:", token);
+      // api.js automatically attaches the JWT token
+      const response = await api.get("/admin/dashboard");
 
-      const response = await api.get("/admin/dashboard", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      console.log("Dashboard Response:", response.data);
 
       setStats(response.data);
-
     } catch (error) {
-  console.log("Status:", error.response?.status);
-  console.log("Response:", error.response?.data);
-  console.log("Token:", localStorage.getItem("token"));
+      console.log("Status:", error.response?.status);
+      console.log("Response:", error.response?.data);
+      console.log(
+        "URL:",
+        error.config?.baseURL + error.config?.url
+      );
 
-  alert("Failed to load Admin Dashboard");
-}
+      alert("Failed to load Admin Dashboard");
+    }
   };
 
   const cardStyle = {
@@ -68,33 +69,48 @@ function AdminDashboard() {
         <div style={cardStyle}>
           <h2>👥</h2>
           <h3>Total Users</h3>
-          <h1>{stats.total_users}</h1>
+          <h1>{stats?.total_users ?? 0}</h1>
         </div>
 
         <div style={cardStyle}>
           <h2>🌾</h2>
           <h3>Total Lands</h3>
-          <h1>{stats.total_lands}</h1>
+          <h1>{stats?.total_lands ?? 0}</h1>
         </div>
 
         <div style={cardStyle}>
           <h2>👨‍🌾</h2>
           <h3>Farmers</h3>
-          <h1>{stats.total_farmers}</h1>
+          <h1>{stats?.total_farmers ?? 0}</h1>
         </div>
 
         <div style={cardStyle}>
           <h2>🛒</h2>
           <h3>Buyers</h3>
-          <h1>{stats.total_buyers}</h1>
+          <h1>{stats?.total_buyers ?? 0}</h1>
         </div>
 
         <div style={cardStyle}>
           <h2>👑</h2>
           <h3>Admins</h3>
-          <h1>{stats.total_admins}</h1>
+          <h1>{stats?.total_admins ?? 0}</h1>
         </div>
       </div>
+
+      <button
+        onClick={() => navigate("/admin/users")}
+        style={{
+          marginTop: "30px",
+          padding: "12px 20px",
+          backgroundColor: "#2E7D32",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
+        }}
+      >
+        👥 Manage Users
+      </button>
     </div>
   );
 }

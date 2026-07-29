@@ -1,10 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-
+from app.models import User, EmailVerification
 from app.database import get_db
-from app.models import User
+from app.models import User,EmailVerification
 from app.schemas import UserCreate
+from datetime import datetime, timedelta
+
+from app.models import User, EmailVerification
+from app.schemas import (
+    UserCreate,
+    SendOTPRequest,
+    VerifyOTPRequest
+)
+from app.utils.email import generate_otp, send_email_otp
 from app.auth import (
     hash_password,
     verify_password,
@@ -19,12 +28,32 @@ router = APIRouter(
 # ==========================
 # Register User
 # ==========================
+# ==========================
+# Register User
+# ==========================
 @router.post("/register")
 def register(
     user: UserCreate,
     db: Session = Depends(get_db)
 ):
 
+    # Check email verification
+    verification = (
+        db.query(EmailVerification)
+        .filter(
+            EmailVerification.email == user.email,
+            EmailVerification.verified == True
+        )
+        .first()
+    )
+
+    if not verification:
+        raise HTTPException(
+            status_code=400,
+            detail="Please verify your email before registering."
+        )
+
+    # Check existing email
     existing_email = (
         db.query(User)
         .filter(User.email == user.email)
@@ -37,6 +66,7 @@ def register(
             detail="Email already exists"
         )
 
+    # Check existing mobile
     existing_mobile = (
         db.query(User)
         .filter(User.mobile == user.mobile)
@@ -49,6 +79,7 @@ def register(
             detail="Mobile number already exists"
         )
 
+    # Create user
     new_user = User(
         full_name=user.full_name,
         mobile=user.mobile,
@@ -60,11 +91,14 @@ def register(
     db.commit()
     db.refresh(new_user)
 
+    # Delete OTP record after successful registration
+    db.delete(verification)
+    db.commit()
+
     return {
         "message": "User Registered Successfully",
         "user_id": new_user.id
     }
-
 
 # ==========================
 # Login User
@@ -135,4 +169,87 @@ def get_me(
         "id": user.id,
         "email": user.email,
         "role": user.role
+    }
+@router.post("/send-otp")
+def send_otp(
+    data: SendOTPRequest,
+    db: Session = Depends(get_db)
+):
+
+    existing_user = db.query(User).filter(
+        User.email == data.email
+    ).first()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
+
+    otp = generate_otp()
+
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+
+    verification = db.query(EmailVerification).filter(
+        EmailVerification.email == data.email
+    ).first()
+
+    if verification:
+        verification.otp = otp
+        verification.verified = False
+        verification.expires_at = expiry
+    else:
+        verification = EmailVerification(
+            email=data.email,
+            otp=otp,
+            verified=False,
+            expires_at=expiry
+        )
+        db.add(verification)
+
+    db.commit()
+
+    if send_email_otp(data.email, otp):
+        return {
+            "message": "OTP sent successfully"
+        }
+
+    raise HTTPException(
+        status_code=500,
+        detail="Unable to send OTP"
+    )
+@router.post("/verify-otp")
+def verify_otp(
+    data: VerifyOTPRequest,
+    db: Session = Depends(get_db)
+):
+
+    verification = db.query(EmailVerification).filter(
+        EmailVerification.email == data.email
+    ).first()
+
+    if not verification:
+        raise HTTPException(
+            status_code=404,
+            detail="OTP not found"
+        )
+
+    if verification.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=400,
+            detail="OTP has expired"
+        )
+
+    if verification.otp != data.otp:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OTP"
+        )
+
+    verification.verified = True
+
+    db.commit()
+
+    return {
+        "message": "Email verified successfully"
     }

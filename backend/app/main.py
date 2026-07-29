@@ -7,7 +7,12 @@ import os
 
 from app.database import Base, engine
 from app.routers import users, lands,upload,dashboard
+from app import models
 
+# Create all tables
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI()
 # Create FastAPI application
 app = FastAPI(
     title="Farmland Marketplace API",

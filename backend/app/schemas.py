@@ -1,4 +1,30 @@
 from pydantic import BaseModel
+from typing import Optional
+from pydantic import BaseModel, EmailStr
+
+
+class LandUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    area: Optional[float] = None
+
+    village: Optional[str] = None
+    mandal: Optional[str] = None
+    district: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+
+    survey_number: Optional[str] = None
+
+    soil_type: Optional[str] = None
+    water_source: Optional[str] = None
+    crop_type: Optional[str] = None
+
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+    image_url: Optional[str] = None
 
 
 # =========================
@@ -23,7 +49,15 @@ class UserResponse(BaseModel):
     mobile: str
     email: str
 
-    class Config:
+class SendOTPRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+class Config:
         from_attributes = True
 
 

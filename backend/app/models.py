@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime
 from app.database import Base
+from datetime import datetime
 
 
 class User(Base):
@@ -11,6 +12,8 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
     role = Column(String, default="farmer")
+
+
 class Land(Base):
     __tablename__ = "lands"
 
@@ -35,16 +38,26 @@ class Land(Base):
     water_source = Column(String)
     crop_type = Column(String)
 
-    # Google Maps Location
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
 
     owner_id = Column(Integer, ForeignKey("users.id"))
+
+
+class EmailVerification(Base):
+    __tablename__ = "email_verifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    otp = Column(String, nullable=False)
+    verified = Column(Boolean, default=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class LandImage(Base):
     __tablename__ = "land_images"
 
     id = Column(Integer, primary_key=True, index=True)
-
     image_url = Column(String, nullable=False)
-
     land_id = Column(Integer, ForeignKey("lands.id"))
