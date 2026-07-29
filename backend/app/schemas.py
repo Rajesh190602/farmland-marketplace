@@ -1,7 +1,10 @@
-from pydantic import BaseModel
-from typing import Optional
 from pydantic import BaseModel, EmailStr
+from typing import Optional, List
 
+
+# =========================
+# LAND UPDATE
+# =========================
 
 class LandUpdate(BaseModel):
     title: Optional[str] = None
@@ -34,12 +37,12 @@ class LandUpdate(BaseModel):
 class UserCreate(BaseModel):
     full_name: str
     mobile: str
-    email: str
+    email: EmailStr
     password: str
 
 
 class UserLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 
@@ -47,7 +50,11 @@ class UserResponse(BaseModel):
     id: int
     full_name: str
     mobile: str
-    email: str
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
+
 
 class SendOTPRequest(BaseModel):
     email: EmailStr
@@ -57,7 +64,16 @@ class VerifyOTPRequest(BaseModel):
     email: EmailStr
     otp: str
 
-class Config:
+
+# =========================
+# LAND IMAGE SCHEMA
+# =========================
+
+class LandImageResponse(BaseModel):
+    id: int
+    image_url: str
+
+    class Config:
         from_attributes = True
 
 
@@ -68,7 +84,9 @@ class Config:
 class LandCreate(BaseModel):
     title: str
     description: str
-    image_url: str | None = None
+
+    # Keep this for compatibility
+    image_url: Optional[str] = None
 
     price: float
     area: float
@@ -85,15 +103,20 @@ class LandCreate(BaseModel):
     water_source: str
     crop_type: str
 
-    # Google Maps
-    latitude: float | None = None
-    longitude: float | None = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
 
 class LandResponse(BaseModel):
     id: int
     title: str
     description: str
-    image_url: str | None = None
+
+    # Existing field (temporary)
+    image_url: Optional[str] = None
+
+    # New field for multiple images
+    images: List[LandImageResponse] = []
 
     price: float
     area: float
@@ -110,11 +133,41 @@ class LandResponse(BaseModel):
     water_source: str
     crop_type: str
 
-    # Google Maps
-    latitude: float | None = None
-    longitude: float | None = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
     owner_id: int
+
+    class Config:
+        from_attributes = True
+# =========================
+# CHAT SCHEMAS
+# =========================
+
+class ConversationCreate(BaseModel):
+    land_id: int
+
+
+class MessageCreate(BaseModel):
+    conversation_id: int
+    message: str
+
+
+class MessageResponse(BaseModel):
+    id: int
+    sender_id: int
+    message: str
+    is_read: bool
+
+    class Config:
+        from_attributes = True
+
+
+class ConversationResponse(BaseModel):
+    id: int
+    buyer_id: int
+    farmer_id: int
+    land_id: int
 
     class Config:
         from_attributes = True

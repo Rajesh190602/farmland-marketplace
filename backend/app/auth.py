@@ -80,36 +80,36 @@ def create_access_token(
 # ==========================
 # Current Logged-in User
 # ==========================
-def get_current_user(
-    token: str = Depends(oauth2_scheme)
-):
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    print("=" * 50)
+    print("Received token:", token)
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={
-            "WWW-Authenticate": "Bearer"
-        }
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
     try:
-
         payload = jwt.decode(
             token,
             SECRET_KEY,
             algorithms=[ALGORITHM]
         )
 
+        print("Decoded payload:", payload)
+
         user_id = payload.get("user_id")
 
         if user_id is None:
+            print("No user_id in token")
             raise credentials_exception
 
         return user_id
 
-    except JWTError:
+    except JWTError as e:
+        print("JWT ERROR:", e)
         raise credentials_exception
-
 def get_current_admin(
     current_user: int = Depends(get_current_user),
     db: Session = Depends(get_db)

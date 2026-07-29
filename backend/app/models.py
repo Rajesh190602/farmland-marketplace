@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime
+from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
 
@@ -13,6 +14,8 @@ class User(Base):
     password = Column(String, nullable=False)
     role = Column(String, default="farmer")
 
+    lands = relationship("Land", back_populates="owner", cascade="all, delete")
+
 
 class Land(Base):
     __tablename__ = "lands"
@@ -21,7 +24,7 @@ class Land(Base):
 
     title = Column(String, nullable=False)
     description = Column(String)
-    image_url = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)   # Keep for backward compatibility
 
     price = Column(Float, nullable=False)
     area = Column(Float, nullable=False)
@@ -43,6 +46,14 @@ class Land(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"))
 
+    owner = relationship("User", back_populates="lands")
+
+    images = relationship(
+        "LandImage",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
 
 class EmailVerification(Base):
     __tablename__ = "email_verifications"
@@ -60,4 +71,52 @@ class LandImage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     image_url = Column(String, nullable=False)
+
     land_id = Column(Integer, ForeignKey("lands.id"))
+
+    land = relationship("Land", back_populates="images")
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    farmer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    land_id = Column(Integer, ForeignKey("lands.id"), nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    messages = relationship(
+        "Message",
+        back_populates="conversation",
+        cascade="all, delete-orphan"
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    conversation_id = Column(
+        Integer,
+        ForeignKey("conversations.id"),
+        nullable=False
+    )
+
+    sender_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    message = Column(String, nullable=False)
+
+    is_read = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    conversation = relationship(
+        "Conversation",
+        back_populates="messages"
+    )

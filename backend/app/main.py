@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
-
+from app.routers import users, lands, upload, dashboard, chat
+from app.routers import admin
 from app.database import Base, engine
 from app.routers import users, lands,upload,dashboard
 from app import models
@@ -56,6 +57,7 @@ app.include_router(lands.router)
 app.include_router(upload.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
+app.include_router(chat.router)
 
 
 

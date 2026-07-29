@@ -1,10 +1,10 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-
+import SearchLands from "./pages/SearchLands";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 import AddLand from "./pages/AddLand";
-
+import ChatPage from "./pages/ChatPage";
 import MyLands from "./pages/MyLands";
 import EditLand from "./pages/EditLand"; // Farmer Edit Land
 import AllLands from "./pages/AllLands";
@@ -31,8 +31,12 @@ function App() {
         <Route path="/my-lands" element={<MyLands />} />
         <Route path="/edit-land/:id" element={<EditLand />} />
         <Route path="/all-lands" element={<AllLands />} />
+        <Route path="/search" element={<SearchLands />} />
         <Route path="/land/:id" element={<LandDetails />} />
-
+        <Route
+          path="/chat/:conversationId"
+          element={<ChatPage />}
+        />
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
