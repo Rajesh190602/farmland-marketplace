@@ -1,31 +1,39 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-
-const API = "https://farmland-backend-ncnk.onrender.com";
+import api from "../services/api";
 
 function Notifications() {
   const [notifications, setNotifications] = useState([]);
-
-  const token = localStorage.getItem("token");
+  const [loading, setLoading] = useState(true);
 
   const fetchNotifications = async () => {
     try {
-      const res = await axios.get(`${API}/notifications/`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await api.get("/notifications/");
+      setNotifications(response.data);
+    } catch (error) {
+      console.error("Notification Error:", error);
 
-      setNotifications(res.data);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to load notifications");
+      if (error.response) {
+        alert(error.response.data.detail);
+      } else {
+        alert("Failed to load notifications");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchNotifications();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="container mt-4">
+        <h2>🔔 Notifications</h2>
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mt-4">
