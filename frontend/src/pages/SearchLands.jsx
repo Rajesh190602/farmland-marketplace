@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../services/api";
 
 function SearchLands() {
@@ -18,28 +19,25 @@ function SearchLands() {
   });
 
   const loadLands = async () => {
-  try {
-    const params = {};
+    try {
+      const params = {};
 
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== "" && value !== null && value !== undefined) {
-        params[key] = value;
-      }
-    });
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== "") {
+          params[key] = value;
+        }
+      });
 
-    const response = await api.get("/lands/search", {
-      params,
-    });
+      const response = await api.get("/lands/search", {
+        params,
+      });
 
-    setLands(response.data);
-  } catch (err) {
-    console.error(err);
-
-    if (err.response) {
-      console.log(err.response.data);
+      setLands(response.data);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load lands");
     }
-  }
-};
+  };
 
   useEffect(() => {
     loadLands();
@@ -52,77 +50,193 @@ function SearchLands() {
     });
   };
 
+  const clearFilters = () => {
+    setFilters({
+      district: "",
+      village: "",
+      mandal: "",
+      crop_type: "",
+      soil_type: "",
+      water_source: "",
+      min_price: "",
+      max_price: "",
+      min_area: "",
+      max_area: "",
+    });
+
+    setTimeout(loadLands, 100);
+  };
+
   return (
-    <div style={{ padding: 30 }}>
-      <h2>Search Farmland</h2>
+    <div className="container mt-4">
 
-      <input
-        name="district"
-        placeholder="District"
-        value={filters.district}
-        onChange={handleChange}
-      />
+      <h2 className="mb-4">🔍 Search Farmland</h2>
 
-      <input
-        name="village"
-        placeholder="Village"
-        value={filters.village}
-        onChange={handleChange}
-      />
+      <div className="row g-3">
 
-      <input
-        name="crop_type"
-        placeholder="Crop"
-        value={filters.crop_type}
-        onChange={handleChange}
-      />
+        <div className="col-md-4">
+          <input
+            className="form-control"
+            name="district"
+            placeholder="District"
+            value={filters.district}
+            onChange={handleChange}
+          />
+        </div>
 
-      <input
-        name="min_price"
-        placeholder="Minimum Price"
-        value={filters.min_price}
-        onChange={handleChange}
-      />
+        <div className="col-md-4">
+          <input
+            className="form-control"
+            name="village"
+            placeholder="Village"
+            value={filters.village}
+            onChange={handleChange}
+          />
+        </div>
 
-      <input
-        name="max_price"
-        placeholder="Maximum Price"
-        value={filters.max_price}
-        onChange={handleChange}
-      />
+        <div className="col-md-4">
+          <input
+            className="form-control"
+            name="mandal"
+            placeholder="Mandal"
+            value={filters.mandal}
+            onChange={handleChange}
+          />
+        </div>
 
-      <button onClick={loadLands}>
-        Search
-      </button>
+        <div className="col-md-4">
+          <input
+            className="form-control"
+            name="crop_type"
+            placeholder="Crop Type"
+            value={filters.crop_type}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div className="col-md-4">
+          <input
+            className="form-control"
+            name="soil_type"
+            placeholder="Soil Type"
+            value={filters.soil_type}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div className="col-md-4">
+          <input
+            className="form-control"
+            name="water_source"
+            placeholder="Water Source"
+            value={filters.water_source}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div className="col-md-3">
+          <input
+            type="number"
+            className="form-control"
+            name="min_price"
+            placeholder="Min Price"
+            value={filters.min_price}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div className="col-md-3">
+          <input
+            type="number"
+            className="form-control"
+            name="max_price"
+            placeholder="Max Price"
+            value={filters.max_price}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div className="col-md-3">
+          <input
+            type="number"
+            className="form-control"
+            name="min_area"
+            placeholder="Min Area"
+            value={filters.min_area}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div className="col-md-3">
+          <input
+            type="number"
+            className="form-control"
+            name="max_area"
+            placeholder="Max Area"
+            value={filters.max_area}
+            onChange={handleChange}
+          />
+        </div>
+
+      </div>
+
+      <div className="mt-4">
+        <button
+          className="btn btn-success me-2"
+          onClick={loadLands}
+        >
+          Search
+        </button>
+
+        <button
+          className="btn btn-secondary"
+          onClick={clearFilters}
+        >
+          Clear Filters
+        </button>
+      </div>
 
       <hr />
 
+      <h4>{lands.length} Lands Found</h4>
+
       {lands.length === 0 ? (
-        <h3>No Lands Found</h3>
+        <div className="alert alert-warning">
+          No lands found.
+        </div>
       ) : (
         lands.map((land) => (
-          <div
-            key={land.id}
-            style={{
-              border: "1px solid #ccc",
-              padding: 15,
-              marginBottom: 15,
-            }}
-          >
-            <h3>{land.title}</h3>
+          <div className="card mb-3" key={land.id}>
+            <div className="card-body">
 
-            <p>{land.description}</p>
+              <h4>{land.title}</h4>
 
-            <p>₹ {land.price}</p>
+              <p>{land.description}</p>
 
-            <p>{land.area} Acres</p>
+              <p>
+                <strong>Price:</strong> ₹{land.price}
+              </p>
 
-            <p>
-              {land.village}, {land.mandal}, {land.district}
-            </p>
+              <p>
+                <strong>Area:</strong> {land.area} Acres
+              </p>
+
+              <p>
+                <strong>Location:</strong> {land.village}, {land.mandal}, {land.district}
+              </p>
+
+              <Link
+                className="btn btn-primary"
+                to={`/land/${land.id}`}
+              >
+                View Details
+              </Link>
+
+            </div>
           </div>
         ))
       )}
+
     </div>
   );
 }

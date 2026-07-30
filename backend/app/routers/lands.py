@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException,Query
 from sqlalchemy.orm import Session
-
+from app import models
+from sqlalchemy import or_
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Land, User
 from app.schemas import LandCreate
-
+from typing import Optional
 router = APIRouter(
     prefix="/lands",
     tags=["Lands"]
@@ -56,9 +57,41 @@ def create_land(
 # Get All Lands
 # ==========================
 @router.get("/")
-def get_all_lands(db: Session = Depends(get_db)):
-    return db.query(Land).all()
+def get_all_lands(
+    search: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    min_price: Optional[float] = Query(None),
+    max_price: Optional[float] = Query(None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Land)
 
+    if search:
+        query = query.filter(
+            or_(
+                models.Land.title.ilike(f"%{search}%"),
+                models.Land.description.ilike(f"%{search}%"),
+            )
+        )
+
+    if location:
+
+         query = query.filter(
+        or_(
+            models.Land.village.ilike(f"%{location}%"),
+            models.Land.mandal.ilike(f"%{location}%"),
+            models.Land.district.ilike(f"%{location}%"),
+            models.Land.state.ilike(f"%{location}%"),
+        )
+    )
+
+    if min_price is not None:
+        query = query.filter(models.Land.price >= min_price)
+
+    if max_price is not None:
+        query = query.filter(models.Land.price <= max_price)
+
+    return query.order_by(models.Land.id.desc()).all()
 # ==========================
 # Search & Filter Lands
 # ==========================

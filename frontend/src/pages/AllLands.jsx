@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
 
+const API = "https://farmland-backend-ncnk.onrender.com";
+
 function AllLands() {
   const navigate = useNavigate();
 
   const [lands, setLands] = useState([]);
-
   const [district, setDistrict] = useState("");
   const [village, setVillage] = useState("");
   const [cropType, setCropType] = useState("");
@@ -26,17 +27,9 @@ function AllLands() {
         },
       });
 
-      console.log("Search Response:", response.data);
-
       setLands(response.data);
     } catch (error) {
-      console.log("Full Error:", error);
-
-      if (error.response) {
-        console.log("Status:", error.response.status);
-        console.log("Response:", error.response.data);
-      }
-
+      console.error(error);
       alert("Failed to load lands.");
     }
   };
@@ -52,14 +45,17 @@ function AllLands() {
           minHeight: "100vh",
         }}
       >
-        <h1 style={{ color: "#2E7D32" }}>🌾 Available Lands</h1>
+        <h1 style={{ color: "#2E7D32", marginBottom: "20px" }}>
+          🌾 Available Lands
+        </h1>
 
+        {/* Search Filters */}
         <div
           style={{
             display: "flex",
             gap: "10px",
             flexWrap: "wrap",
-            marginBottom: "20px",
+            marginBottom: "25px",
           }}
         >
           <button
@@ -87,7 +83,7 @@ function AllLands() {
               cursor: "pointer",
             }}
           >
-            Refresh
+            🔄 Refresh
           </button>
 
           <input
@@ -149,11 +145,11 @@ function AllLands() {
                 cursor: "pointer",
               }}
             >
-              <h2>{land.title}</h2>
+              <h2 style={{ color: "#2E7D32" }}>{land.title}</h2>
 
               {land.image_url && (
                 <img
-                  src={land.image_url}
+                  src={`${API}${land.image_url}`}
                   alt={land.title}
                   style={{
                     width: "100%",
@@ -177,6 +173,32 @@ function AllLands() {
               <p><strong>Soil Type:</strong> {land.soil_type}</p>
               <p><strong>Water Source:</strong> {land.water_source}</p>
               <p><strong>Crop Type:</strong> {land.crop_type}</p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  marginTop: "20px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/land/${land.id}`);
+                  }}
+                  style={{
+                    background: "#1976D2",
+                    color: "white",
+                    border: "none",
+                    padding: "10px 20px",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                  }}
+                >
+                  👁️ View Details
+                </button>
+              </div>
             </div>
           ))
         )}
