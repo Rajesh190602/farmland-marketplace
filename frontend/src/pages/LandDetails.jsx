@@ -22,6 +22,21 @@ function LandDetails() {
       alert("Failed to load land details.");
     }
   };
+  const startChat = async () => {
+  try {
+    const response = await api.post("/chat/start", {
+      land_id: land.id,
+    });
+
+    navigate(`/chat/${response.data.conversation_id}`);
+  } catch (error) {
+    console.log(error);
+
+    alert(
+      error.response?.data?.detail || "Unable to start conversation."
+    );
+  }
+};
 
   if (!land) {
     return (
@@ -116,6 +131,20 @@ function LandDetails() {
   >
     💬 WhatsApp
   </a>
+  <button
+  onClick={startChat}
+  style={{
+    background: "#1976D2",
+    color: "white",
+    padding: "10px 20px",
+    border: "none",
+    borderRadius: "5px",
+    cursor: "pointer",
+  }}
+>
+  💬 Chat with Seller
+</button>
+
 </div>
 
         <button

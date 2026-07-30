@@ -1,6 +1,12 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
-
+class ProfileUpdate(BaseModel):
+    full_name: str
+    mobile: str
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
 
 # =========================
 # LAND UPDATE

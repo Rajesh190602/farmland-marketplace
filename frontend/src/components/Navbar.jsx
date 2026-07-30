@@ -37,6 +37,12 @@ function Navbar() {
         <Link to="/all-lands" style={{ color: "white", textDecoration: "none" }}>
           Browse
         </Link>
+        <button onClick={() => navigate("/my-chats")}>
+          💬 My Chats
+        </button>
+        <button onClick={() => navigate("/profile")}>
+          👤 My Profile
+        </button>
 
         <button
           onClick={logout}

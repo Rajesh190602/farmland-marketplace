@@ -3,7 +3,6 @@ from app.database import get_db
 from app.models import User
 from datetime import datetime, timedelta
 from typing import Optional
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -40,6 +39,8 @@ oauth2_scheme = OAuth2PasswordBearer(
 # Password Functions
 # ==========================
 def hash_password(password: str):
+    return pwd_context.hash(password)
+def get_password_hash(password: str):
     return pwd_context.hash(password)
 
 

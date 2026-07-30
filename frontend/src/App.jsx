@@ -9,10 +9,12 @@ import MyLands from "./pages/MyLands";
 import EditLand from "./pages/EditLand"; // Farmer Edit Land
 import AllLands from "./pages/AllLands";
 import LandDetails from "./pages/LandDetails";
-
+import MyChats from "./pages/MyChats";
 import AdminLayout from "./components/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Users from "./pages/admin/Users";
+import Profile from "./pages/profile";
+import ChangePassword from "./pages/ChangePassword";
 import Lands from "./pages/admin/Lands";
 import AdminEditLand from "./pages/admin/EditLand"; // Admin Edit Land
 
@@ -36,6 +38,18 @@ function App() {
         <Route
           path="/chat/:conversationId"
           element={<ChatPage />}
+        />
+        <Route
+          path="/my-chats"
+          element={<MyChats />}
+        />
+        <Route
+          path="/profile"
+          element={<Profile />}
+        />
+        <Route
+         path="/change-password"
+         element={<ChangePassword />}
         />
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>

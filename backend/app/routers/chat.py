@@ -1,3 +1,5 @@
+from sqlalchemy import or_, desc
+from app.models import User
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.models import Conversation, Land, Message
@@ -127,3 +129,57 @@ def get_messages(
     )
 
     return messages
+@router.get("/my-conversations")
+def my_conversations(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversations = (
+        db.query(Conversation)
+        .filter(
+            or_(
+                Conversation.buyer_id == current_user,
+                Conversation.farmer_id == current_user
+            )
+        )
+        .order_by(desc(Conversation.id))
+        .all()
+    )
+
+    result = []
+
+    for conversation in conversations:
+
+        if conversation.buyer_id == current_user:
+            other_user = db.query(User).filter(
+                User.id == conversation.farmer_id
+            ).first()
+        else:
+            other_user = db.query(User).filter(
+                User.id == conversation.buyer_id
+            ).first()
+
+        land = db.query(Land).filter(
+            Land.id == conversation.land_id
+        ).first()
+
+        last_message = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == conversation.id
+            )
+            .order_by(Message.created_at.desc())
+            .first()
+        )
+
+        result.append({
+            "conversation_id": conversation.id,
+            "land_title": land.title if land else "",
+            "other_user": other_user.full_name if other_user else "",
+            "last_message": last_message.message if last_message else "",
+            "last_message_time": (
+                last_message.created_at if last_message else None
+            )
+        })
+
+    return result
