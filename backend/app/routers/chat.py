@@ -1,13 +1,17 @@
 from sqlalchemy import or_, desc
-from app.models import User
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.models import Conversation, Land, Message
-from app.schemas import ConversationCreate, MessageCreate
+
 from app.database import get_db
 from app.auth import get_current_user
-from app.models import Conversation, Land
-from app.schemas import ConversationCreate
+from app.models import (
+    Conversation,
+    Land,
+    Message,
+    User,
+    Notification
+)
+from app.schemas import ConversationCreate, MessageCreate
 
 router = APIRouter(
     prefix="/chat",
@@ -21,6 +25,7 @@ def start_chat(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # Check land exists
     land = db.query(Land).filter(
         Land.id == data.land_id
     ).first()
@@ -31,12 +36,14 @@ def start_chat(
             detail="Land not found"
         )
 
+    # Prevent chatting with own land
     if land.owner_id == current_user:
         raise HTTPException(
             status_code=400,
             detail="You cannot chat with yourself."
         )
 
+    # Check existing conversation
     conversation = db.query(Conversation).filter(
         Conversation.land_id == land.id,
         Conversation.buyer_id == current_user,
@@ -49,6 +56,7 @@ def start_chat(
             "message": "Conversation already exists"
         }
 
+    # Create conversation
     conversation = Conversation(
         buyer_id=current_user,
         farmer_id=land.owner_id,
@@ -59,10 +67,26 @@ def start_chat(
     db.commit()
     db.refresh(conversation)
 
+    # Get buyer details
+    buyer = db.query(User).filter(
+        User.id == current_user
+    ).first()
+
+    # Create notification for farmer
+    notification = Notification(
+        user_id=land.owner_id,
+        title="💬 New Chat",
+        message=f"{buyer.full_name} started a conversation about your land '{land.title}'."
+    )
+
+    db.add(notification)
+    db.commit()
+
     return {
         "conversation_id": conversation.id,
         "message": "Conversation created successfully"
     }
+
 @router.post("/send")
 def send_message(
     data: MessageCreate,
@@ -85,6 +109,7 @@ def send_message(
             detail="You are not part of this conversation"
         )
 
+    # Save message
     message = Message(
         conversation_id=conversation.id,
         sender_id=current_user,
@@ -95,10 +120,34 @@ def send_message(
     db.commit()
     db.refresh(message)
 
+    # Get sender details
+    sender = db.query(User).filter(
+        User.id == current_user
+    ).first()
+
+    # Decide receiver
+    if current_user == conversation.buyer_id:
+        receiver_id = conversation.farmer_id
+    else:
+        receiver_id = conversation.buyer_id
+
+    # Create notification
+    notification = Notification(
+        user_id=receiver_id,
+        title="💬 New Message",
+        message=f"{sender.full_name} sent you a new message."
+    )
+
+    db.add(notification)
+    db.commit()
+
     return {
         "message": "Message sent successfully",
         "message_id": message.id
     }
+
+
+
 @router.get("/messages/{conversation_id}")
 def get_messages(
     conversation_id: int,
@@ -129,6 +178,8 @@ def get_messages(
     )
 
     return messages
+
+
 @router.get("/my-conversations")
 def my_conversations(
     db: Session = Depends(get_db),

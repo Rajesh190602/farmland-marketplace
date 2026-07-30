@@ -26,6 +26,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
+    notifications = relationship(
+    "Notification",
+    cascade="all, delete-orphan"
+)
 
 class Land(Base):
     __tablename__ = "lands"
@@ -166,3 +170,26 @@ class Favorite(Base):
         "Land",
         back_populates="favorites"
     )
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    title = Column(String, nullable=False)
+
+    message = Column(String, nullable=False)
+
+    is_read = Column(Boolean, default=False)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    user = relationship("User")

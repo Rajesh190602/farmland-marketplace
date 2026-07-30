@@ -21,31 +21,44 @@ function Navbar() {
     >
       <h2>🌾 Farmland Marketplace</h2>
 
-      <div style={{ display: "flex", gap: "15px" }}>
-        <Link to="/home" style={{ color: "white", textDecoration: "none" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "15px",
+          alignItems: "center",
+        }}
+      >
+        <Link to="/home" style={linkStyle}>
           Home
         </Link>
 
-        <Link to="/add-land" style={{ color: "white", textDecoration: "none" }}>
+        <Link to="/add-land" style={linkStyle}>
           Add Land
         </Link>
 
-        <Link to="/my-lands" style={{ color: "white", textDecoration: "none" }}>
+        <Link to="/my-lands" style={linkStyle}>
           My Lands
         </Link>
 
-        <Link to="/all-lands" style={{ color: "white", textDecoration: "none" }}>
+        <Link to="/all-lands" style={linkStyle}>
           Browse
         </Link>
 
-        <button onClick={() => navigate("/my-chats")}>
-          💬 My Chats
-        </button>
-        <button onClick={() => navigate("/profile")}>
-          👤 My Profile
-        </button>
-        <Link to="/favorites">❤️ My Favorites</Link>
+        <Link to="/favorites" style={linkStyle}>
+          ❤️ My Favorites
+        </Link>
 
+        <Link to="/my-chats" style={linkStyle}>
+          💬 My Chats
+        </Link>
+
+        <Link to="/notifications" style={linkStyle}>
+          🔔 Notifications
+        </Link>
+
+        <Link to="/profile" style={linkStyle}>
+          👤 My Profile
+        </Link>
 
         <button
           onClick={logout}
@@ -64,5 +77,11 @@ function Navbar() {
     </nav>
   );
 }
+
+const linkStyle = {
+  color: "white",
+  textDecoration: "none",
+  fontWeight: "500",
+};
 
 export default Navbar;

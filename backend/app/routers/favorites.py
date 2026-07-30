@@ -2,20 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Favorite, Land
+from app.models import Favorite, Land, Notification, User
 from app.auth import get_current_user
 
 router = APIRouter(
     prefix="/favorites",
     tags=["Favorites"]
 )
-
 @router.post("/{land_id}")
 def add_favorite(
     land_id: int,
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # Check land exists
     land = db.query(Land).filter(Land.id == land_id).first()
 
     if not land:
@@ -24,6 +24,7 @@ def add_favorite(
             detail="Land not found"
         )
 
+    # Check if already favorited
     existing = db.query(Favorite).filter(
         Favorite.user_id == current_user,
         Favorite.land_id == land_id
@@ -35,17 +36,33 @@ def add_favorite(
             detail="Already in favorites"
         )
 
+    # Add favorite
     favorite = Favorite(
         user_id=current_user,
         land_id=land_id
     )
 
     db.add(favorite)
+
+    # Get buyer details
+    buyer = db.query(User).filter(User.id == current_user).first()
+
+    # Create notification for land owner
+    notification = Notification(
+        user_id=land.owner_id,
+        title="❤️ New Favorite",
+        message=f"{buyer.full_name} added your land '{land.title}' to favorites."
+    )
+
+    db.add(notification)
+
+    # Save both favorite and notification
     db.commit()
 
     return {
         "message": "Added to favorites"
     }
+
 @router.delete("/{land_id}")
 def remove_favorite(
     land_id: int,

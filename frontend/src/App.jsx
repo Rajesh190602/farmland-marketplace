@@ -18,6 +18,7 @@ import ChangePassword from "./pages/ChangePassword";
 import Lands from "./pages/admin/Lands";
 import AdminEditLand from "./pages/admin/EditLand"; // Admin Edit Land
 import MyFavorites from "./pages/MyFavorites";
+import Notifications from "./pages/Notifications";
 function App() {
   return (
     <BrowserRouter>
@@ -55,6 +56,7 @@ function App() {
           path="/favorites"
           element={<MyFavorites />}
         />
+        <Route path="/notifications" element={<Notifications />} />
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
