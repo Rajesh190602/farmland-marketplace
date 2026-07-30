@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, Date
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
+from sqlalchemy.sql import func
 
 
 class User(Base):
@@ -14,8 +15,17 @@ class User(Base):
     password = Column(String, nullable=False)
     role = Column(String, default="farmer")
 
-    lands = relationship("Land", back_populates="owner", cascade="all, delete")
+    lands = relationship(
+        "Land",
+        back_populates="owner",
+        cascade="all, delete"
+    )
 
+    favorites = relationship(
+        "Favorite",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
 
 class Land(Base):
     __tablename__ = "lands"
@@ -24,7 +34,7 @@ class Land(Base):
 
     title = Column(String, nullable=False)
     description = Column(String)
-    image_url = Column(String, nullable=True)   # Keep for backward compatibility
+    image_url = Column(String, nullable=True)
 
     price = Column(Float, nullable=False)
     area = Column(Float, nullable=False)
@@ -54,6 +64,11 @@ class Land(Base):
         cascade="all, delete-orphan"
     )
 
+    favorites = relationship(
+        "Favorite",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
 
 class EmailVerification(Base):
     __tablename__ = "email_verifications"
@@ -119,4 +134,35 @@ class Message(Base):
     conversation = relationship(
         "Conversation",
         back_populates="messages"
+    )
+class Favorite(Base):
+    __tablename__ = "favorites"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    user = relationship(
+        "User",
+        back_populates="favorites"
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="favorites"
     )

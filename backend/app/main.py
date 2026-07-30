@@ -1,19 +1,17 @@
-from app import cloudinary_config
-from app.routers import admin
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 import os
-from app.routers import users, lands, upload, dashboard, chat
-from app.routers import admin
-from app.database import Base, engine
-from app.routers import users, lands,upload,dashboard
-from app import models
 
-# Create all tables
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from app.routers import favorites
+from app import cloudinary_config
+from app import models
+from app.database import Base, engine
+from app.routers import admin, chat, dashboard, lands, upload, users
+
+# Create all database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
 # Create FastAPI application
 app = FastAPI(
     title="Farmland Marketplace API",
@@ -21,49 +19,41 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# -------------------------
 # Enable CORS
-# -------------------------
-from fastapi.middleware.cors import CORSMiddleware
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://farmland-marketplace-mdnq.vercel.app"
+        "https://farmland-marketplace-mdnq.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
-# Create uploads folder automatically
+# Create uploads folder
 os.makedirs("uploads/lands", exist_ok=True)
 
 # Serve uploaded files
 app.mount(
     "/uploads",
     StaticFiles(directory="uploads"),
-    name="uploads"
+    name="uploads",
 )
 
-# Register Routers
+# Register routers
 app.include_router(users.router)
 app.include_router(lands.router)
 app.include_router(upload.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(chat.router)
-
-
+app.include_router(favorites.router)
 
 @app.get("/")
 def root():
     return {
         "message": "🌾 Welcome to Farmland Marketplace API",
-        "docs": "/docs"
+        "docs": "/docs",
     }

@@ -17,7 +17,7 @@ import Profile from "./pages/profile";
 import ChangePassword from "./pages/ChangePassword";
 import Lands from "./pages/admin/Lands";
 import AdminEditLand from "./pages/admin/EditLand"; // Admin Edit Land
-
+import MyFavorites from "./pages/MyFavorites";
 function App() {
   return (
     <BrowserRouter>
@@ -50,6 +50,10 @@ function App() {
         <Route
          path="/change-password"
          element={<ChangePassword />}
+        />
+        <Route
+          path="/favorites"
+          element={<MyFavorites />}
         />
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
