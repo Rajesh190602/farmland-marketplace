@@ -19,6 +19,7 @@ import Lands from "./pages/admin/Lands";
 import AdminEditLand from "./pages/admin/EditLand"; // Admin Edit Land
 import MyFavorites from "./pages/MyFavorites";
 import Notifications from "./pages/Notifications";
+import ForgotPassword from "./pages/ForgotPassword";
 function App() {
   return (
     <BrowserRouter>
@@ -28,6 +29,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* Farmer Routes */}
         <Route path="/add-land" element={<AddLand />} />
@@ -52,6 +54,7 @@ function App() {
          path="/change-password"
          element={<ChangePassword />}
         />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route
           path="/favorites"
           element={<MyFavorites />}

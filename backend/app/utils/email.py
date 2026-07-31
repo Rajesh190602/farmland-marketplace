@@ -2,6 +2,7 @@ import os
 import random
 import smtplib
 import traceback
+import socket
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
@@ -54,6 +55,19 @@ Farmland Marketplace Team
         print("SMTP Username:", SMTP_USERNAME)
         print("Receiver:", receiver_email)
         print("================================\n")
+
+        print("Testing network connectivity...")
+
+        # Socket connectivity test
+        try:
+            ip = socket.gethostbyname(SMTP_SERVER)
+            print("Resolved IP:", ip)
+
+            socket.create_connection((SMTP_SERVER, SMTP_PORT), timeout=10)
+            print("Socket connection successful")
+
+        except Exception as e:
+            print("Socket test failed:", repr(e))
 
         print("Connecting to Gmail SMTP...")
 

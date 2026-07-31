@@ -1,4 +1,4 @@
-    import { useState } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 
@@ -17,9 +17,7 @@ function Register() {
   const [otpVerified, setOtpVerified] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // =========================
   // Handle Input Change
-  // =========================
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -29,9 +27,7 @@ function Register() {
     }));
   };
 
-  // =========================
   // Send OTP
-  // =========================
   const sendOTP = async () => {
     if (!formData.email.trim()) {
       alert("Please enter your email.");
@@ -39,11 +35,10 @@ function Register() {
     }
 
     try {
+      setLoading(true);
       setOtp("");
       setOtpSent(false);
       setOtpVerified(false);
-
-      setLoading(true);
 
       const response = await api.post("/users/send-otp", {
         email: formData.email,
@@ -52,19 +47,13 @@ function Register() {
       alert(response.data.message);
       setOtpSent(true);
     } catch (error) {
-      if (error.response) {
-        alert(error.response.data.detail);
-      } else {
-        alert("Unable to send OTP");
-      }
+      alert(error.response?.data?.detail || "Unable to send OTP");
     } finally {
       setLoading(false);
     }
   };
 
-  // =========================
   // Verify OTP
-  // =========================
   const verifyOTP = async () => {
     if (!otp.trim()) {
       alert("Please enter OTP.");
@@ -82,24 +71,28 @@ function Register() {
       alert(response.data.message);
       setOtpVerified(true);
     } catch (error) {
-      if (error.response) {
-        alert(error.response.data.detail);
-      } else {
-        alert("OTP Verification Failed");
-      }
+      alert(error.response?.data?.detail || "OTP Verification Failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // =========================
-  // Register
-  // =========================
+  // Register User
   const register = async (e) => {
     e.preventDefault();
 
     if (!otpVerified) {
       alert("Please verify your email first.");
+      return;
+    }
+
+    if (formData.mobile.length !== 10) {
+      alert("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      alert("Password must be at least 8 characters.");
       return;
     }
 
@@ -110,20 +103,27 @@ function Register() {
 
       alert("Registration Successful! Please login.");
 
+      setFormData({
+        full_name: "",
+        mobile: "",
+        email: "",
+        password: "",
+      });
+
+      setOtp("");
+      setOtpSent(false);
+      setOtpVerified(false);
+
       navigate("/");
     } catch (error) {
-      if (error.response) {
-        alert(error.response.data.detail);
-      } else {
-        alert("Registration Failed");
-      }
+      alert(error.response?.data?.detail || "Registration Failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-        <div
+    <div
       style={{
         maxWidth: "450px",
         margin: "40px auto",
@@ -152,28 +152,26 @@ function Register() {
           value={formData.full_name}
           onChange={handleChange}
           required
-          style={{
-            width: "100%",
-            padding: "10px",
-            marginBottom: "12px",
-            boxSizing: "border-box",
-          }}
+          style={inputStyle}
         />
 
         {/* Mobile */}
         <input
-          type="text"
+          type="tel"
           name="mobile"
-          placeholder="Mobile Number"
+          placeholder="10-digit Mobile Number"
           value={formData.mobile}
-          onChange={handleChange}
-          required
-          style={{
-            width: "100%",
-            padding: "10px",
-            marginBottom: "12px",
-            boxSizing: "border-box",
+          onChange={(e) => {
+            const value = e.target.value.replace(/\D/g, "");
+            if (value.length <= 10) {
+              setFormData((prev) => ({
+                ...prev,
+                mobile: value,
+              }));
+            }
           }}
+          required
+          style={inputStyle}
         />
 
         {/* Email */}
@@ -183,12 +181,11 @@ function Register() {
           placeholder="Email Address"
           value={formData.email}
           onChange={handleChange}
+          disabled={otpSent}
           required
           style={{
-            width: "100%",
-            padding: "10px",
-            marginBottom: "12px",
-            boxSizing: "border-box",
+            ...inputStyle,
+            backgroundColor: otpSent ? "#f5f5f5" : "#fff",
           }}
         />
 
@@ -197,55 +194,31 @@ function Register() {
           type="button"
           onClick={sendOTP}
           disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px",
-            backgroundColor: "#1976D2",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-            marginBottom: "12px",
-          }}
+          style={blueButton}
         >
-          {loading
-            ? "Sending..."
-            : otpSent
-            ? "Resend OTP"
-            : "Send OTP"}
+          {loading ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
         </button>
 
-        {/* OTP */}
+        {/* OTP Section */}
         {otpSent && !otpVerified && (
           <>
             <input
               type="text"
-              placeholder="Enter OTP"
+              placeholder="Enter 6-digit OTP"
               value={otp}
-              onChange={(e) => setOtp(e.target.value)}
+              onChange={(e) =>
+                setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              maxLength={6}
               required
-              style={{
-                width: "100%",
-                padding: "10px",
-                marginBottom: "12px",
-                boxSizing: "border-box",
-              }}
+              style={inputStyle}
             />
 
             <button
               type="button"
               onClick={verifyOTP}
               disabled={loading}
-              style={{
-                width: "100%",
-                padding: "12px",
-                backgroundColor: "#FF9800",
-                color: "white",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                marginBottom: "12px",
-              }}
+              style={orangeButton}
             >
               {loading ? "Verifying..." : "Verify OTP"}
             </button>
@@ -273,16 +246,11 @@ function Register() {
         <input
           type="password"
           name="password"
-          placeholder="Password"
+          placeholder="Password (Minimum 8 characters)"
           value={formData.password}
           onChange={handleChange}
           required
-          style={{
-            width: "100%",
-            padding: "10px",
-            marginBottom: "20px",
-            boxSizing: "border-box",
-          }}
+          style={inputStyle}
         />
 
         {/* Register */}
@@ -290,13 +258,9 @@ function Register() {
           type="submit"
           disabled={!otpVerified || loading}
           style={{
-            width: "100%",
-            padding: "12px",
+            ...greenButton,
             backgroundColor:
               otpVerified && !loading ? "#2E7D32" : "#9E9E9E",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
             cursor:
               otpVerified && !loading ? "pointer" : "not-allowed",
           }}
@@ -305,19 +269,49 @@ function Register() {
         </button>
       </form>
 
-      <p
-        style={{
-          marginTop: "20px",
-          textAlign: "center",
-        }}
-      >
+      <p style={{ marginTop: "20px", textAlign: "center" }}>
         Already have an account? <Link to="/">Login</Link>
       </p>
     </div>
   );
 }
 
+// Styles
+const inputStyle = {
+  width: "100%",
+  padding: "10px",
+  marginBottom: "12px",
+  boxSizing: "border-box",
+};
+
+const blueButton = {
+  width: "100%",
+  padding: "12px",
+  backgroundColor: "#1976D2",
+  color: "#fff",
+  border: "none",
+  borderRadius: "5px",
+  cursor: "pointer",
+  marginBottom: "12px",
+};
+
+const orangeButton = {
+  width: "100%",
+  padding: "12px",
+  backgroundColor: "#FF9800",
+  color: "#fff",
+  border: "none",
+  borderRadius: "5px",
+  cursor: "pointer",
+  marginBottom: "12px",
+};
+
+const greenButton = {
+  width: "100%",
+  padding: "12px",
+  color: "#fff",
+  border: "none",
+  borderRadius: "5px",
+};
+
 export default Register;
-
-
-    
