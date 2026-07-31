@@ -11,6 +11,26 @@ from datetime import datetime, timedelta
 from app.schemas import ChangePassword
 from app.auth import verify_password, get_password_hash
 from app.models import User, EmailVerification
+from pydantic import BaseModel, EmailStr
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyForgotOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+    confirm_password: str
+from app.schemas import (
+    ForgotPasswordRequest,
+    VerifyForgotOTPRequest,
+    ResetPasswordRequest,
+)
 from app.schemas import (
     UserCreate,
     SendOTPRequest,
@@ -255,6 +275,123 @@ def verify_otp(
 
     return {
         "message": "Email verified successfully"
+    }
+@router.post("/forgot-password")
+def forgot_password(
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.email == data.email).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Email not registered"
+        )
+
+    otp = generate_otp()
+    expiry = datetime.utcnow() + timedelta(minutes=10)
+
+    verification = db.query(EmailVerification).filter(
+        EmailVerification.email == data.email
+    ).first()
+
+    if verification:
+        verification.otp = otp
+        verification.verified = False
+        verification.expires_at = expiry
+    else:
+        verification = EmailVerification(
+            email=data.email,
+            otp=otp,
+            verified=False,
+            expires_at=expiry
+        )
+        db.add(verification)
+
+    db.commit()
+
+    if send_email_otp(data.email, otp):
+        return {"message": "OTP sent successfully"}
+
+    raise HTTPException(
+        status_code=500,
+        detail="Unable to send OTP"
+    )
+@router.post("/verify-forgot-otp")
+def verify_forgot_otp(
+    data: VerifyForgotOTPRequest,
+    db: Session = Depends(get_db)
+):
+    verification = db.query(EmailVerification).filter(
+        EmailVerification.email == data.email
+    ).first()
+
+    if not verification:
+        raise HTTPException(
+            status_code=404,
+            detail="OTP not found"
+        )
+
+    if verification.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=400,
+            detail="OTP has expired"
+        )
+
+    if verification.otp != data.otp:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OTP"
+        )
+
+    verification.verified = True
+    db.commit()
+
+    return {
+        "message": "OTP verified successfully"
+    }
+@router.post("/reset-password")
+def reset_password(
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    if data.new_password != data.confirm_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Passwords do not match"
+        )
+
+    verification = db.query(EmailVerification).filter(
+        EmailVerification.email == data.email
+    ).first()
+
+    if not verification or not verification.verified:
+        raise HTTPException(
+            status_code=400,
+            detail="Please verify OTP first"
+        )
+
+    user = db.query(User).filter(
+        User.email == data.email
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.password = hash_password(data.new_password)
+
+    db.commit()
+
+    # Clean up the OTP record
+    db.delete(verification)
+    db.commit()
+
+    return {
+        "message": "Password reset successfully"
     }
 @router.get("/profile")
 def get_profile(

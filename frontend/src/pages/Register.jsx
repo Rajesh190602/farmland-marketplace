@@ -1,4 +1,4 @@
-import { useState } from "react";
+    import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
 
@@ -17,13 +17,21 @@ function Register() {
   const [otpVerified, setOtpVerified] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // =========================
+  // Handle Input Change
+  // =========================
   const handleChange = (e) => {
+    const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
   };
 
+  // =========================
+  // Send OTP
+  // =========================
   const sendOTP = async () => {
     if (!formData.email.trim()) {
       alert("Please enter your email.");
@@ -31,6 +39,10 @@ function Register() {
     }
 
     try {
+      setOtp("");
+      setOtpSent(false);
+      setOtpVerified(false);
+
       setLoading(true);
 
       const response = await api.post("/users/send-otp", {
@@ -39,7 +51,6 @@ function Register() {
 
       alert(response.data.message);
       setOtpSent(true);
-
     } catch (error) {
       if (error.response) {
         alert(error.response.data.detail);
@@ -51,9 +62,12 @@ function Register() {
     }
   };
 
+  // =========================
+  // Verify OTP
+  // =========================
   const verifyOTP = async () => {
     if (!otp.trim()) {
-      alert("Please enter OTP");
+      alert("Please enter OTP.");
       return;
     }
 
@@ -67,7 +81,6 @@ function Register() {
 
       alert(response.data.message);
       setOtpVerified(true);
-
     } catch (error) {
       if (error.response) {
         alert(error.response.data.detail);
@@ -79,6 +92,9 @@ function Register() {
     }
   };
 
+  // =========================
+  // Register
+  // =========================
   const register = async (e) => {
     e.preventDefault();
 
@@ -92,9 +108,9 @@ function Register() {
 
       await api.post("/users/register", formData);
 
-      alert("Registration Successful!");
-      navigate("/");
+      alert("Registration Successful! Please login.");
 
+      navigate("/");
     } catch (error) {
       if (error.response) {
         alert(error.response.data.detail);
@@ -107,7 +123,7 @@ function Register() {
   };
 
   return (
-    <div
+        <div
       style={{
         maxWidth: "450px",
         margin: "40px auto",
@@ -117,56 +133,67 @@ function Register() {
         boxShadow: "0 0 10px rgba(0,0,0,0.15)",
       }}
     >
-      <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
+      <h2
+        style={{
+          textAlign: "center",
+          marginBottom: "20px",
+          color: "#2E7D32",
+        }}
+      >
         🌾 Farmer Registration
       </h2>
 
       <form onSubmit={register}>
+        {/* Full Name */}
         <input
           type="text"
           name="full_name"
           placeholder="Full Name"
           value={formData.full_name}
           onChange={handleChange}
+          required
           style={{
             width: "100%",
             padding: "10px",
             marginBottom: "12px",
             boxSizing: "border-box",
           }}
-          required
         />
 
+        {/* Mobile */}
         <input
           type="text"
           name="mobile"
           placeholder="Mobile Number"
           value={formData.mobile}
           onChange={handleChange}
+          required
           style={{
             width: "100%",
             padding: "10px",
             marginBottom: "12px",
             boxSizing: "border-box",
           }}
-          required
         />
 
+        {/* Email */}
         <input
           type="email"
           name="email"
-          placeholder="Email"
+          placeholder="Email Address"
           value={formData.email}
           onChange={handleChange}
+          required
           style={{
             width: "100%",
             padding: "10px",
             marginBottom: "12px",
             boxSizing: "border-box",
           }}
-          required
         />
-                <button
+
+        {/* Send OTP */}
+        <button
           type="button"
           onClick={sendOTP}
           disabled={loading}
@@ -181,16 +208,22 @@ function Register() {
             marginBottom: "12px",
           }}
         >
-          {loading ? "Sending..." : "Send OTP"}
+          {loading
+            ? "Sending..."
+            : otpSent
+            ? "Resend OTP"
+            : "Send OTP"}
         </button>
 
-        {otpSent && (
+        {/* OTP */}
+        {otpSent && !otpVerified && (
           <>
             <input
               type="text"
               placeholder="Enter OTP"
               value={otp}
               onChange={(e) => setOtp(e.target.value)}
+              required
               style={{
                 width: "100%",
                 padding: "10px",
@@ -214,39 +247,45 @@ function Register() {
                 marginBottom: "12px",
               }}
             >
-              Verify OTP
+              {loading ? "Verifying..." : "Verify OTP"}
             </button>
           </>
         )}
 
+        {/* OTP Success */}
         {otpVerified && (
-          <p
+          <div
             style={{
-              color: "green",
+              background: "#E8F5E9",
+              color: "#2E7D32",
+              padding: "12px",
+              borderRadius: "6px",
+              marginBottom: "15px",
               textAlign: "center",
-              marginBottom: "12px",
               fontWeight: "bold",
             }}
           >
             ✅ Email Verified Successfully
-          </p>
+          </div>
         )}
 
+        {/* Password */}
         <input
           type="password"
           name="password"
           placeholder="Password"
           value={formData.password}
           onChange={handleChange}
+          required
           style={{
             width: "100%",
             padding: "10px",
             marginBottom: "20px",
             boxSizing: "border-box",
           }}
-          required
         />
 
+        {/* Register */}
         <button
           type="submit"
           disabled={!otpVerified || loading}
@@ -262,16 +301,23 @@ function Register() {
               otpVerified && !loading ? "pointer" : "not-allowed",
           }}
         >
-          Register
+          {loading ? "Registering..." : "Register"}
         </button>
       </form>
 
-      <p style={{ marginTop: "20px", textAlign: "center" }}>
-        Already have an account?{" "}
-        <Link to="/">Login</Link>
+      <p
+        style={{
+          marginTop: "20px",
+          textAlign: "center",
+        }}
+      >
+        Already have an account? <Link to="/">Login</Link>
       </p>
     </div>
   );
 }
 
 export default Register;
+
+
+    
