@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # SMTP Configuration
-SMTP_SERVER = os.getenv("SMTP_SERVER")
+SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
@@ -22,6 +22,8 @@ print("SMTP_USERNAME:", SMTP_USERNAME)
 print("EMAIL_FROM:", EMAIL_FROM)
 print("SMTP_PASSWORD loaded:", SMTP_PASSWORD is not None)
 print("SMTP_PASSWORD length:", len(SMTP_PASSWORD) if SMTP_PASSWORD else 0)
+print("SMTP_SERVER ENV:", os.getenv("SMTP_SERVER"))
+print("SMTP_SERVER USED:", SMTP_SERVER)
 
 
 def generate_otp():
@@ -54,20 +56,30 @@ Farmland Marketplace Team
         print("SMTP Port:", SMTP_PORT)
         print("SMTP Username:", SMTP_USERNAME)
         print("Receiver:", receiver_email)
-        print("================================\n")
+        print("================================")
 
-        print("Testing network connectivity...")
+        print("\n========== NETWORK TEST ==========")
 
-        # Socket connectivity test
-        try:
-            ip = socket.gethostbyname(SMTP_SERVER)
-            print("Resolved IP:", ip)
+        tests = [
+            ("smtp.gmail.com", 587),
+            ("smtp.gmail.com", 465),
+            ("google.com", 443),
+        ]
 
-            socket.create_connection((SMTP_SERVER, SMTP_PORT), timeout=10)
-            print("Socket connection successful")
+        for host, port in tests:
+            try:
+                ip = socket.gethostbyname(host)
+                print(f"{host} resolved to {ip}")
 
-        except Exception as e:
-            print("Socket test failed:", repr(e))
+                sock = socket.create_connection((host, port), timeout=10)
+                sock.close()
+
+                print(f"SUCCESS: Connected to {host}:{port}")
+
+            except Exception as e:
+                print(f"FAILED: {host}:{port} -> {repr(e)}")
+
+        print("==================================\n")
 
         print("Connecting to Gmail SMTP...")
 
@@ -88,7 +100,7 @@ Farmland Marketplace Team
                 message.as_string()
             )
 
-        print("Email sent successfully.")
+        print("✅ Email sent successfully.")
         return True
 
     except smtplib.SMTPAuthenticationError as e:
@@ -97,6 +109,7 @@ Farmland Marketplace Team
 
     except smtplib.SMTPException as e:
         print("SMTP Exception:", str(e))
+        traceback.print_exc()
         return False
 
     except Exception as e:
