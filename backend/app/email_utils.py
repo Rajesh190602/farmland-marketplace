@@ -15,12 +15,11 @@ SMTP_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 EMAIL_FROM = SMTP_USERNAME
 
-# Generate 6-digit OTP
+
 def generate_otp():
     return str(random.randint(100000, 999999))
 
 
-# Send OTP Email
 def send_email_otp(receiver_email, otp):
     try:
         subject = "Farmland Marketplace - Email Verification OTP"
@@ -40,19 +39,28 @@ Farmland Marketplace Team
         message["From"] = EMAIL_FROM
         message["To"] = receiver_email
         message["Subject"] = subject
-
         message.attach(MIMEText(body, "plain"))
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        print("========== SMTP DEBUG ==========")
+        print("SMTP Server:", SMTP_SERVER)
+        print("SMTP Port:", SMTP_PORT)
+        print("SMTP Username:", SMTP_USERNAME)
+        print("Receiver:", receiver_email)
+        print("Password Loaded:", SMTP_PASSWORD is not None)
+        print("Password Length:", len(SMTP_PASSWORD) if SMTP_PASSWORD else 0)
+        print("================================")
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+            server.set_debuglevel(1)
+
             server.ehlo()
             server.starttls()
             server.ehlo()
 
-            print("SMTP_USERNAME:", repr(SMTP_USERNAME))
-            print("SMTP_PASSWORD length:", len(SMTP_PASSWORD) if SMTP_PASSWORD else 0)
-
+            print("Logging in...")
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
 
+            print("Sending email...")
             server.sendmail(
                 EMAIL_FROM,
                 receiver_email,
@@ -62,6 +70,16 @@ Farmland Marketplace Team
         print("Email sent successfully.")
         return True
 
+    except smtplib.SMTPAuthenticationError as e:
+        print("SMTP Authentication Error:", e.smtp_code, e.smtp_error)
+        return False
+
+    except smtplib.SMTPException as e:
+        print("SMTP Exception:", str(e))
+        return False
+
     except Exception as e:
-        print("Email Error:", e)
+        import traceback
+        traceback.print_exc()
+        print("General Email Error:", str(e))
         return False

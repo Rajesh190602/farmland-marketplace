@@ -1,14 +1,16 @@
 import os
 import random
 import smtplib
+import traceback
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 
 load_dotenv()
 
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+# SMTP Configuration
+SMTP_SERVER = os.getenv("SMTP_SERVER")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 EMAIL_FROM = os.getenv("EMAIL_FROM")
@@ -53,12 +55,19 @@ Farmland Marketplace Team
         print("Receiver:", receiver_email)
         print("================================\n")
 
-        print("Connecting via SMTP_SSL...")
+        print("Connecting to Gmail SMTP...")
 
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+            server.set_debuglevel(1)
+
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+
+            print("Logging in...")
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            print("SMTP login successful.")
 
+            print("Sending email...")
             server.sendmail(
                 EMAIL_FROM,
                 receiver_email,
@@ -68,8 +77,15 @@ Farmland Marketplace Team
         print("Email sent successfully.")
         return True
 
+    except smtplib.SMTPAuthenticationError as e:
+        print("SMTP Authentication Error:", e.smtp_code, e.smtp_error)
+        return False
+
+    except smtplib.SMTPException as e:
+        print("SMTP Exception:", str(e))
+        return False
+
     except Exception as e:
-        import traceback
         traceback.print_exc()
-        print("Email Error:", repr(e))
+        print("General Email Error:", repr(e))
         return False
