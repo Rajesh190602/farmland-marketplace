@@ -22,21 +22,11 @@ app = FastAPI(
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-
-    # Old deployment
-    "https://farmland-marketplace-mdnq.vercel.app",
-
-    # Current deployment
-    "https://farmland-marketplace-steel.vercel.app",
-],
+    allow_origin_regex=r"https://farmland-marketplace.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Create uploads folder
 os.makedirs("uploads/lands", exist_ok=True)
 
