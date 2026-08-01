@@ -13,8 +13,8 @@ function LandDetails() {
   const [land, setLand] = useState(null);
 
   useEffect(() => {
-    fetchLand();
-  }, []);
+  fetchLand();
+}, [id]);
 
   const fetchLand = async () => {
     try {
@@ -42,214 +42,448 @@ function LandDetails() {
       );
     }
   };
-
   if (!land) {
-    return (
-      <>
-        <Navbar />
-        <h2 style={{ textAlign: "center", marginTop: "50px" }}>
-          Loading...
-        </h2>
-      </>
-    );
-  }
-
   return (
     <>
       <Navbar />
 
       <div
         style={{
-          maxWidth: "900px",
-          margin: "30px auto",
-          background: "white",
-          padding: "25px",
-          borderRadius: "10px",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+          minHeight: "100vh",
+          background: "#F4F7F8",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
         }}
       >
+        <div
+          style={{
+            background: "#fff",
+            padding: "50px",
+            borderRadius: "20px",
+            boxShadow: "0 12px 35px rgba(0,0,0,.15)",
+            textAlign: "center",
+             width: "360px"
+          }}
+        >
+          <h1
+            style={{
+              color: "#2E7D32",
+              marginBottom: "10px",
+            }}
+          >
+            🌾
+          </h1>
+
+          <h2
+            style={{
+              color: "#2E7D32",
+              marginBottom: "10px",
+            }}
+          >
+            🌾 Loading Land Details...
+          </h2>
+
+          <p style={{
+              color: "#666",
+              marginBottom: 0,
+            }}
+          > Please wait while we load the property.</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+
+
+  
+  return (
+    <>
+      <Navbar />
+      <div
+  style={{
+    maxWidth: "1200px",
+    margin: "40px auto",
+    background: "#fff",
+    borderRadius: "20px",
+    overflow: "hidden",
+    boxShadow: "0 10px 30px rgba(0,0,0,.15)",
+  }}
+>
+      
         {land.image_url && (
+
+          
           <img
             src={`${API}${land.image_url}`}
             alt={land.title}
             style={{
               width: "100%",
-              height: "400px",
+              height: "520px",
               objectFit: "cover",
-              borderRadius: "10px",
             }}
           />
         )}
+        <div
+  style={{
+    padding: "35px",
+    paddingBottom: "10px",
+  }}
+>
+  <h1
+    style={{
+      margin: 0,
+      fontSize: "40px",
+      color: "#2E7D32",
+    }}
+  >
+    🌾 {land.title}
+  </h1>
 
-        <h1>{land.title}</h1>
+  <div
+    style={{
+      marginTop: "20px",
+      display: "inline-block",
+      background: "#E8F5E9",
+      color: "#2E7D32",
+      padding: "12px 25px",
+      borderRadius: "30px",
+      fontWeight: "bold",
+      fontSize: "30px",
+    }}
+  >
+    💰 ₹ {land.price}
+  </div>
+  <div
+  style={{
+    display: "flex",
+    gap: "15px",
+    flexWrap: "wrap",
+    marginTop: "25px",
+    marginBottom: "35px",
+  }}
+>
+  <span style={badgeStyle}>
+    🌱 {land.crop_type}
+  </span>
 
-        <h2 style={{ color: "green" }}>₹ {land.price}</h2>
+  <span style={badgeStyle}>
+    📏 {land.area} Acres
+  </span>
 
-        <p>
-          <strong>Description:</strong> {land.description}
-        </p>
+  <span style={badgeStyle}>
+    🌍 {land.soil_type}
+  </span>
 
-        <p>
-          <strong>Area:</strong> {land.area} Acres
-        </p>
+  <span style={badgeStyle}>
+    💧 {land.water_source}
+  </span>
+</div>
 
-        <p>
-          <strong>Village:</strong> {land.village}
-        </p>
 
-        <p>
-          <strong>Mandal:</strong> {land.mandal}
-        </p>
 
-        <p>
-          <strong>District:</strong> {land.district}
-        </p>
+        
+         
+        <div
 
-        <p>
-          <strong>State:</strong> {land.state}
-        </p>
+  style={{
+    background: "#FFFFFF",
+    padding: "25px",
+    marginTop: "20px",
+    borderRadius: "15px",
+    boxShadow: "0 5px 20px rgba(0,0,0,.08)",
+    lineHeight: "30px",
+  }}
+>
+  <h2
+    style={{
+      color: "#2E7D32",
+      marginBottom: "20px",
+    }}
+  >
+    📋 Property Information
+  </h2>
 
-        <p>
-          <strong>Pincode:</strong> {land.pincode}
-        </p>
+  <p><strong>📝 Description:</strong> {land.description}</p>
 
-        <p>
-          <strong>Survey Number:</strong> {land.survey_number}
-        </p>
+  <p><strong>📏 Area:</strong> {land.area} Acres</p>
 
-        <p>
-          <strong>Soil Type:</strong> {land.soil_type}
-        </p>
+  <p><strong>🌱 Crop Type:</strong> {land.crop_type}</p>
 
-        <p>
-          <strong>Water Source:</strong> {land.water_source}
-        </p>
+  <p><strong>🌍 Soil Type:</strong> {land.soil_type}</p>
 
-        <p>
-          <strong>Crop Type:</strong> {land.crop_type}
-        </p>
+  <p><strong>💧 Water Source:</strong> {land.water_source}</p>
 
-        <hr />
+  <hr />
 
-        <h2>📍 Land Location</h2>
+  <p><strong>📍 Village:</strong> {land.village}</p>
 
-        <p>
-          <strong>Latitude:</strong> {land.latitude}
-        </p>
+  <p><strong>🏛 Mandal:</strong> {land.mandal}</p>
 
-        <p>
-          <strong>Longitude:</strong> {land.longitude}
-        </p>
+  <p><strong>🏙 District:</strong> {land.district}</p>
 
-        {land.latitude && land.longitude && (
-          <>
-            <LandMap
-              latitude={Number(land.latitude)}
-              longitude={Number(land.longitude)}
-              title={land.title}
-            />
+  <p><strong>🌎 State:</strong> {land.state}</p>
 
-            <br />
+  <p><strong>📮 Pincode:</strong> {land.pincode}</p>
 
-            <a
-              href={`https://www.google.com/maps?q=${land.latitude},${land.longitude}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "inline-block",
-                background: "#4285F4",
-                color: "white",
-                padding: "12px 20px",
-                borderRadius: "6px",
-                textDecoration: "none",
-                fontWeight: "bold",
-              }}
-            >
-              📍 Open in Google Maps
-            </a>
-          </>
-        )}
+  <p><strong>📑 Survey Number:</strong> {land.survey_number}</p>
+</div>
 
-        <hr />
+       <div
+  style={{
+    background: "#FFFFFF",
+    marginTop: "30px",
+    padding: "25px",
+    borderRadius: "15px",
+    boxShadow: "0 5px 20px rgba(0,0,0,.08)",
+  }}
+>
+  <h2
+    style={{
+      color: "#2E7D32",
+      marginBottom: "20px",
+    }}
+  >
+    📍 Land Location
+  </h2>
 
-        <h2>Seller Details</h2>
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "15px",
+      marginBottom: "20px",
+    }}
+  >
+    <div>
+      <strong>Latitude</strong>
+      <br />
+      {land.latitude}
+    </div>
 
-        <p>
-          <strong>Name:</strong> {land.owner_name}
-        </p>
+    <div>
+      <strong>Longitude</strong>
+      <br />
+      {land.longitude}
+    </div>
+  </div>
 
-        <p>
-          <strong>Mobile:</strong> {land.owner_mobile}
-        </p>
+  {land.latitude && land.longitude && (
+    <>
+      <LandMap
+        latitude={Number(land.latitude)}
+        longitude={Number(land.longitude)}
+        title={land.title}
+      />
+
+      <div
+        style={{
+          marginTop: "20px",
+        }}
+      >
+        <a
+          href={`https://www.google.com/maps?q=${land.latitude},${land.longitude}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-block",
+            background: "#1976D2",
+            color: "#fff",
+            padding: "12px 24px",
+            borderRadius: "8px",
+            textDecoration: "none",
+            fontWeight: "bold",
+          }}
+        >
+          📍 Open in Google Maps
+        </a>
+      </div>
+    </>
+  )}
+</div>
 
         <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            flexWrap: "wrap",
-            marginTop: "20px",
-          }}
-        >
-          <a
-            href={`tel:${land.owner_mobile}`}
-            style={{
-              background: "#2E7D32",
-              color: "white",
-              padding: "10px 20px",
-              textDecoration: "none",
-              borderRadius: "5px",
-            }}
-          >
-            📞 Call Seller
-          </a>
+  style={{
+    background: "#FFFFFF",
+    marginTop: "30px",
+    padding: "25px",
+    borderRadius: "15px",
+    boxShadow: "0 5px 20px rgba(0,0,0,.08)",
+  }}
+>
+  <h2
+    style={{
+      color: "#2E7D32",
+      marginBottom: "20px",
+    }}
+  >
+    👤 Seller Information
+  </h2>
 
-          <a
-            href={`https://wa.me/91${land.owner_mobile}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              background: "#25D366",
-              color: "white",
-              padding: "10px 20px",
-              textDecoration: "none",
-              borderRadius: "5px",
-            }}
-          >
-            💬 WhatsApp
-          </a>
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "20px",
+      marginBottom: "25px",
+    }}
+  >
+    <div>
+      <strong>Seller Name</strong>
+      <br />
+      {land.owner_name}
+    </div>
 
-          <button
-            onClick={startChat}
-            style={{
-              background: "#1976D2",
-              color: "white",
-              padding: "10px 20px",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-            }}
-          >
-            💬 Chat with Seller
-          </button>
-        </div>
+    <div>
+      <strong>Mobile Number</strong>
+      <br />
+      {land.owner_mobile}
+    </div>
+  </div>
 
-        <button
-          onClick={() => navigate("/all-lands")}
-          style={{
-            marginTop: "30px",
-            padding: "12px 25px",
-            background: "#2E7D32",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          ⬅ Back
-        </button>
+  <div
+    style={{
+      
+      display:"grid",
+      gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",
+      gap:"15px"
+      
+    }}
+  >
+    <a
+      href={`tel:${land.owner_mobile}`}
+      style={{
+        background: "#2E7D32",
+        color: "#fff",
+        padding: "12px 20px",
+        borderRadius: "8px",
+        textDecoration: "none",
+        fontWeight: "bold",
+      }}
+    >
+      📞 Call
+    </a>
+
+    <a
+      href={`https://wa.me/91${land.owner_mobile}`}
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        background: "#25D366",
+        color: "#fff",
+        padding: "12px 20px",
+        borderRadius: "8px",
+        textDecoration: "none",
+        fontWeight: "bold",
+      }}
+    >
+      💬 WhatsApp
+    </a>
+
+    <button
+      onClick={startChat}
+      style={{
+        background: "#1976D2",
+        color: "#fff",
+        padding: "12px 20px",
+        border: "none",
+        borderRadius: "8px",
+        cursor: "pointer",
+        fontWeight: "bold",
+      }}
+    >
+      💬 Chat
+    </button>
+
+    <button
+      style={{
+        background: "#E91E63",
+        color: "#fff",
+        padding: "12px 20px",
+        border: "none",
+        borderRadius: "8px",
+        cursor: "pointer",
+        fontWeight: "bold",
+      }}
+    >
+      ❤️ Favorite
+    </button>
+
+    <button
+      onClick={() => {
+        if (navigator.share) {
+          navigator.share({
+            title: land.title,
+            text: land.description,
+            url: window.location.href,
+          });
+        } else {
+          navigator.clipboard.writeText(window.location.href);
+          alert("Link copied to clipboard!");
+        }
+      }}
+      style={{
+        background: "#FF9800",
+        color: "#fff",
+        padding: "12px 20px",
+        border: "none",
+        borderRadius: "8px",
+        cursor: "pointer",
+        fontWeight: "bold",
+      }}
+    >
+      📤 Share
+    </button>
+  </div>
+</div>
+        <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: "35px",
+    flexWrap: "wrap",
+    gap: "15px",
+  }}
+>
+  <button
+    onClick={() => navigate("/all-lands")}
+    style={{
+      background: "#424242",
+      color: "#fff",
+      padding: "14px 28px",
+      border: "none",
+      borderRadius: "10px",
+      cursor: "pointer",
+      fontWeight: "bold",
+      fontSize: "15px",
+    }}
+  >
+    ⬅ Back to Marketplace
+  </button>
+
+  <div
+    style={{
+      color: "#666",
+      fontSize: "14px",
+    }}
+  >
+    🌾 Thank you for using Farmland Marketplace
+  </div>
+</div>
+      </div>
       </div>
     </>
   );
 }
+const badgeStyle = {
+  background: "#E8F5E9",
+  color: "#2E7D32",
+  padding: "8px 18px",
+  borderRadius: "25px",
+  fontWeight: "bold",
+  fontSize: "15px",
+};
 
 export default LandDetails;
