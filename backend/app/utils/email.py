@@ -1,118 +1,92 @@
-import os
 import random
-import smtplib
-import traceback
-import socket
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import os
+
 from dotenv import load_dotenv
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
+
+# ==============================
+# Load Environment Variables
+# ==============================
 
 load_dotenv()
 
-# SMTP Configuration
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-EMAIL_FROM = os.getenv("EMAIL_FROM")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+SENDER_NAME = os.getenv("SENDER_NAME")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 
-print("SMTP_SERVER:", SMTP_SERVER)
-print("SMTP_PORT:", SMTP_PORT)
-print("SMTP_USERNAME:", SMTP_USERNAME)
-print("EMAIL_FROM:", EMAIL_FROM)
-print("SMTP_PASSWORD loaded:", SMTP_PASSWORD is not None)
-print("SMTP_PASSWORD length:", len(SMTP_PASSWORD) if SMTP_PASSWORD else 0)
-print("SMTP_SERVER ENV:", os.getenv("SMTP_SERVER"))
-print("SMTP_SERVER USED:", SMTP_SERVER)
+# ==============================
+# Configure Brevo
+# ==============================
 
+configuration = sib_api_v3_sdk.Configuration()
+configuration.api_key["api-key"] = BREVO_API_KEY
+
+api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+    sib_api_v3_sdk.ApiClient(configuration)
+)
+
+# ==============================
+# Generate OTP
+# ==============================
 
 def generate_otp():
     return str(random.randint(100000, 999999))
 
+# ==============================
+# Send OTP
+# ==============================
 
 def send_email_otp(receiver_email, otp):
     try:
+
         subject = "Farmland Marketplace - Email Verification OTP"
 
         body = f"""
-Hello,
+        <html>
+        <body>
+            <h2>🌾 Farmland Marketplace</h2>
 
-Your OTP is: {otp}
+            <p>Hello,</p>
 
-This OTP is valid for 10 minutes.
+            <p>Your OTP is:</p>
 
-Regards,
-Farmland Marketplace Team
-"""
+            <h1 style="color:green;">{otp}</h1>
 
-        message = MIMEMultipart()
-        message["From"] = EMAIL_FROM
-        message["To"] = receiver_email
-        message["Subject"] = subject
-        message.attach(MIMEText(body, "plain"))
+            <p>This OTP is valid for <b>10 minutes</b>.</p>
 
-        print("\n========== SMTP DEBUG ==========")
-        print("SMTP Server:", SMTP_SERVER)
-        print("SMTP Port:", SMTP_PORT)
-        print("SMTP Username:", SMTP_USERNAME)
-        print("Receiver:", receiver_email)
-        print("================================")
+            <br>
 
-        print("\n========== NETWORK TEST ==========")
+            <p>Regards,<br>
+            Farmland Marketplace Team</p>
 
-        tests = [
-            ("smtp.gmail.com", 587),
-            ("smtp.gmail.com", 465),
-            ("google.com", 443),
-        ]
+        </body>
+        </html>
+        """
 
-        for host, port in tests:
-            try:
-                ip = socket.gethostbyname(host)
-                print(f"{host} resolved to {ip}")
+        email = sib_api_v3_sdk.SendSmtpEmail(
+            sender={
+                "name": SENDER_NAME,
+                "email": SENDER_EMAIL
+            },
+            to=[
+                {
+                    "email": receiver_email
+                }
+            ],
+            subject=subject,
+            html_content=body
+        )
 
-                sock = socket.create_connection((host, port), timeout=10)
-                sock.close()
+        api_instance.send_transac_email(email)
 
-                print(f"SUCCESS: Connected to {host}:{port}")
-
-            except Exception as e:
-                print(f"FAILED: {host}:{port} -> {repr(e)}")
-
-        print("==================================\n")
-
-        print("Connecting to Gmail SMTP...")
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.set_debuglevel(1)
-
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-
-            print("Logging in...")
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-
-            print("Sending email...")
-            server.sendmail(
-                EMAIL_FROM,
-                receiver_email,
-                message.as_string()
-            )
-
-        print("✅ Email sent successfully.")
+        print("✅ OTP Email Sent Successfully")
         return True
 
-    except smtplib.SMTPAuthenticationError as e:
-        print("SMTP Authentication Error:", e.smtp_code, e.smtp_error)
-        return False
-
-    except smtplib.SMTPException as e:
-        print("SMTP Exception:", str(e))
-        traceback.print_exc()
+    except ApiException as e:
+        print("Brevo API Error:", e)
         return False
 
     except Exception as e:
-        traceback.print_exc()
-        print("General Email Error:", repr(e))
+        print("General Email Error:", e)
         return False
