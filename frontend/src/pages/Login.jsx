@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api from "../services/api";
+import "./Login.css";
 
 function Login() {
   const navigate = useNavigate();
@@ -31,21 +32,13 @@ function Login() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await api.post(
-        "/users/login",
-        formData,
-        {
-          headers: {
-            "Content-Type":
-              "application/x-www-form-urlencoded",
-          },
-        }
-      );
+      const response = await api.post("/users/login", formData, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
 
-      localStorage.setItem(
-        "token",
-        response.data.access_token
-      );
+      localStorage.setItem("token", response.data.access_token);
 
       if (rememberMe) {
         localStorage.setItem("email", email);
@@ -54,14 +47,10 @@ function Login() {
       }
 
       alert("Login Successful");
-
       navigate("/home");
     } catch (error) {
       if (error.response) {
-        alert(
-          error.response.data.detail ||
-            "Invalid email or password."
-        );
+        alert(error.response.data.detail || "Invalid email or password.");
       } else {
         alert("Unable to connect to server.");
       }
@@ -71,165 +60,69 @@ function Login() {
   };
 
   return (
-    <div
-      style={{
-        maxWidth: "430px",
-        margin: "50px auto",
-        padding: "30px",
-        background: "#fff",
-        borderRadius: "10px",
-        boxShadow: "0 0 10px rgba(0,0,0,0.15)",
-      }}
-    >
-      <h2
-        style={{
-          textAlign: "center",
-          color: "#2E7D32",
-          marginBottom: "5px",
-        }}
-      >
-        🌾 Farmland Marketplace
-      </h2>
+    <div className="login-page">
+      <div className="login-card">
+        <h2>🌾 Farmland Marketplace</h2>
+        <p>Login to your account</p>
 
-      <p
-        style={{
-          textAlign: "center",
-          color: "#666",
-          marginBottom: "25px",
-        }}
-      >
-        Login to your account
-      </p>
-
-      <form onSubmit={login}>
-        {/* Email */}
-
-        <input
-          type="email"
-          placeholder="Email Address"
-          value={email}
-          onChange={(e) =>
-            setEmail(e.target.value)
-          }
-          required
-          style={inputStyle}
-        />
-
-        {/* Password */}
-
-        <div style={{ position: "relative" }}>
+        <form onSubmit={login}>
           <input
-            type={
-              showPassword
-                ? "text"
-                : "password"
-            }
-            placeholder="Password"
-            value={password}
-            onChange={(e) =>
-              setPassword(e.target.value)
-            }
+            type="email"
+            placeholder="Email Address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
-            style={{
-              ...inputStyle,
-              marginBottom: "5px",
-            }}
           />
 
-          <button
-            type="button"
-            onClick={() =>
-              setShowPassword(!showPassword)
-            }
-            style={{
-              position: "absolute",
-              right: "10px",
-              top: "10px",
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-            }}
-          >
-            {showPassword ? "🙈" : "👁"}
-          </button>
-        </div>
-
-        {/* Remember Me */}
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent:
-              "space-between",
-            alignItems: "center",
-            marginBottom: "20px",
-          }}
-        >
-          <label>
+          <div className="password-box">
             <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={() =>
-                setRememberMe(
-                  !rememberMe
-                )
-              }
-            />{" "}
-            Remember Me
-          </label>
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
 
-          <Link
-            to="/forgot-password"
-            style={{
-              color: "#1976D2",
-              textDecoration: "none",
-            }}
+            <button
+              type="button"
+              className="eye-btn"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
+          </div>
+
+          <div className="remember-row">
+            <label>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={() => setRememberMe(!rememberMe)}
+              />
+              Remember Me
+            </label>
+
+            <Link to="/forgot-password">
+              Forgot Password?
+            </Link>
+          </div>
+
+          <button
+            type="submit"
+            className="login-btn"
+            disabled={loading}
           >
-            Forgot Password?
-          </Link>
-        </div>
+            {loading ? "Logging in..." : "Login"}
+          </button>
+        </form>
 
-        {/* Login Button */}
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px",
-            backgroundColor: "#2E7D32",
-            color: "#fff",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          {loading
-            ? "Logging in..."
-            : "Login"}
-        </button>
-      </form>
-
-      <p
-        style={{
-          marginTop: "20px",
-          textAlign: "center",
-        }}
-      >
-        Don't have an account?{" "}
-        <Link to="/register">
-          Register
-        </Link>
-      </p>
+        <p className="register-link">
+          Don't have an account?
+          <Link to="/register"> Register</Link>
+        </p>
+      </div>
     </div>
   );
 }
-
-const inputStyle = {
-  width: "100%",
-  padding: "10px",
-  marginBottom: "15px",
-  boxSizing: "border-box",
-};
 
 export default Login;

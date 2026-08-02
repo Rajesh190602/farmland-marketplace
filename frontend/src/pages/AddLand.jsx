@@ -5,6 +5,7 @@ import LocationPicker from "../components/LocationPicker";
 import api from "../services/api";
 
 function AddLand() {
+  const [addingLand, setAddingLand] = useState(false);
   const navigate = useNavigate();
 
   const [selectedImage, setSelectedImage] = useState(null);
@@ -85,34 +86,79 @@ function AddLand() {
     return "";
   }
 };
-
-  const addLand = async (e) => {
+const addLand = async (e) => {
   e.preventDefault();
 
+  // Validation
+  if (!formData.title.trim()) {
+    alert("Please enter the land title.");
+    return;
+  }
+
+  if (Number(formData.price) <= 0) {
+    alert("Enter a valid land price.");
+    return;
+  }
+
+  if (Number(formData.area) <= 0) {
+    alert("Enter a valid land area.");
+    return;
+  }
+
+  if (!latitude || !longitude) {
+    alert("Please select the land location on the map.");
+    return;
+  }
+
   try {
+    setAddingLand(true);
 
     let imageUrl = "";
 
     if (selectedImage) {
       imageUrl = await uploadImage();
     }
+
     console.log("Latitude:", latitude);
     console.log("Longitude:", longitude);
+
     await api.post("/lands", {
-  ...formData,
-  image_url: imageUrl,
-  price: Number(formData.price),
-  area: Number(formData.area),
-  latitude: latitude,
-  longitude: longitude,
-});
+      ...formData,
+      image_url: imageUrl,
+      price: Number(formData.price),
+      area: Number(formData.area),
+      latitude,
+      longitude,
+    });
 
     alert("Land Added Successfully!");
+
+    // Clear form
+    setFormData({
+      title: "",
+      description: "",
+      image_url: "",
+      price: "",
+      area: "",
+      village: "",
+      mandal: "",
+      district: "",
+      state: "",
+      pincode: "",
+      survey_number: "",
+      soil_type: "",
+      water_source: "",
+      crop_type: "",
+    });
+
+    setSelectedImage(null);
+    setPreview("");
+    setLatitude(null);
+    setLongitude(null);
 
     navigate("/my-lands");
 
   } catch (error) {
-
     console.log(error);
 
     if (error.response) {
@@ -120,8 +166,12 @@ function AddLand() {
     } else {
       alert("Server Error");
     }
+  } finally {
+    setAddingLand(false);
   }
 };
+
+
 
   
 
@@ -310,6 +360,7 @@ function AddLand() {
 
           <button
             type="submit"
+            disabled={addingLand || uploading}
             style={{
               width: "100%",
               padding: "12px",
@@ -321,7 +372,11 @@ function AddLand() {
               fontSize: "16px",
             }}
           >
-            Add Land
+            {addingLand
+              ? "Adding Land..."
+              : uploading
+              ? "Uploading Image..."
+              : "Add Land"}
           </button>
 
         </form>
@@ -329,5 +384,4 @@ function AddLand() {
     </>
   );
 }
-
 export default AddLand;

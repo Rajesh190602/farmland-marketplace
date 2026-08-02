@@ -11,6 +11,7 @@ function ForgotPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // ==========================
@@ -37,6 +38,30 @@ function ForgotPassword() {
       setLoading(false);
     }
   };
+  const verifyOTP = async () => {
+  if (otp.length !== 6) {
+    alert("Please enter the 6-digit OTP.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const response = await api.post("/users/verify-forgot-otp", {
+      email,
+      otp,
+    });
+
+    alert(response.data.message);
+
+    setOtpVerified(true);
+
+  } catch (error) {
+    alert(error.response?.data?.detail || "OTP Verification Failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ==========================
   // Reset Password
@@ -64,8 +89,8 @@ function ForgotPassword() {
 
       const response = await api.post("/users/reset-password", {
         email,
-        otp,
         new_password: newPassword,
+        confirm_password: confirmPassword,
       });
 
       alert(response.data.message);
@@ -137,7 +162,7 @@ function ForgotPassword() {
         </button>
 
         {/* OTP Section */}
-        {otpSent && (
+        {otpSent && !otpVerified && (
           <>
             <input
               type="text"
@@ -155,6 +180,25 @@ function ForgotPassword() {
                 boxSizing: "border-box",
               }}
             />
+            <button
+
+              type="button"
+              onClick={verifyOTP}
+              disabled={loading}
+              style={{
+                width: "100%",
+                padding: "12px",
+                backgroundColor: "#FB8C00",
+                color: "#fff",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+                marginBottom: "20px",
+              }}
+            >
+              {loading ? "Verifying..." : "Verify OTP"}
+            </button>
+
 
             <input
               type="password"

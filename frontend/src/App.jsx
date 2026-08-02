@@ -54,7 +54,7 @@ function App() {
          path="/change-password"
          element={<ChangePassword />}
         />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+        
         <Route
           path="/favorites"
           element={<MyFavorites />}

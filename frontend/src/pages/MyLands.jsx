@@ -4,6 +4,8 @@ import Navbar from "../components/Navbar";
 import api from "../services/api";
 
 function MyLands() {
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
   const [lands, setLands] = useState([]);
   const navigate = useNavigate();
 
@@ -12,37 +14,66 @@ function MyLands() {
   }, []);
 
   const fetchMyLands = async () => {
-    try {
-      const response = await api.get("/lands/my/lands");
-      setLands(response.data);
-    } catch (error) {
-      console.log(error);
-      alert("Failed to load your lands.");
-    }
-  };
+  try {
+    setLoading(true);
+
+    const response = await api.get("/lands/my/lands");
+
+    setLands(response.data);
+
+  } catch (error) {
+    console.log(error);
+    alert("Failed to load your lands.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const deleteLand = async (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this land?"
-    );
+  if (!window.confirm("Are you sure you want to delete this land?")) {
+    return;
+  }
 
-    if (!confirmDelete) return;
+  try {
+    setDeletingId(id);
 
-    try {
-      await api.delete(`/lands/${id}`);
+    await api.delete(`/lands/${id}`);
 
-      alert("Land deleted successfully.");
+    alert("Land deleted successfully.");
 
-      fetchMyLands();
-    } catch (error) {
-      console.log(error);
-      alert("Failed to delete land.");
-    }
-  };
+    fetchMyLands();
+
+  } catch (error) {
+    console.log(error);
+
+    alert(error.response?.data?.detail || "Failed to delete land.");
+
+  } finally {
+    setDeletingId(null);
+  }
+};
 
   const editLand = (id) => {
     navigate(`/edit-land/${id}`);
   };
+  if (loading) {
+  return (
+    <>
+      <Navbar />
+      <div
+        style={{
+          textAlign: "center",
+          marginTop: "80px",
+          fontSize: "22px",
+          color: "#2E7D32",
+          fontWeight: "bold",
+        }}
+      >
+        Loading Your Lands...
+      </div>
+    </>
+  );
+}
 
   return (
     <>
@@ -89,7 +120,7 @@ function MyLands() {
               <h2>{land.title}</h2>
               {land.image_url && (
   <img
-    src={`http://127.0.0.1:8000${land.image_url}`}
+    src={land.image_url}
     alt={land.title}
     style={{
       width: "100%",
@@ -169,20 +200,24 @@ function MyLands() {
                 >
                   Edit
                 </button>
-
-                <button
+               <button
                   onClick={() => deleteLand(land.id)}
+                  disabled={deletingId === land.id}
                   style={{
                     backgroundColor: "red",
                     color: "white",
                     border: "none",
                     padding: "10px 20px",
                     borderRadius: "5px",
-                    cursor: "pointer",
+                    cursor: deletingId === land.id ? "not-allowed" : "pointer",
+                    opacity: deletingId === land.id ? 0.6 : 1,
                   }}
                 >
-                  Delete
+                 {deletingId === land.id ? "Deleting..." : "Delete"}
                 </button>
+
+
+                
               </div>
             </div>
           ))

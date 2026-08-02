@@ -20,23 +20,43 @@ function ChangePassword() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    try {
-      const response = await api.put("/users/change-password", form);
+  if (!form.current_password.trim()) {
+    alert("Please enter your current password.");
+    return;
+  }
 
-      alert(response.data.message);
+  if (form.new_password.length < 8) {
+    alert("New password must be at least 8 characters.");
+    return;
+  }
 
-      navigate("/profile");
-    } catch (error) {
-      console.error(error);
+  if (form.new_password !== form.confirm_password) {
+    alert("New Password and Confirm Password do not match.");
+    return;
+  }
 
-      alert(
-        error.response?.data?.detail ||
-        "Failed to change password."
-      );
-    }
-  };
+  try {
+    const response = await api.put("/users/change-password", form);
+
+    alert(response.data.message);
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    alert("Please login again with your new password.");
+
+    navigate("/");
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      error.response?.data?.detail ||
+      "Failed to change password."
+    );
+  }
+};
 
   return (
     <>

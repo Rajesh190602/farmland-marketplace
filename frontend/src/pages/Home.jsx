@@ -67,7 +67,9 @@ function Home() {
     cursor: "pointer",
     fontSize: "16px",
     fontWeight: "bold",
-    width: "220px",
+    width: "100%",
+    maxWidth: "280px",
+    
   });
 
   return (
@@ -210,6 +212,7 @@ function Home() {
           style={{
             display: "flex",
             flexWrap: "wrap",
+             justifyContent: "center",
             gap: "20px",
             marginTop: "25px",
           }}

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 
 function SearchLands() {
+  const [loading, setLoading] = useState(false);
   const [lands, setLands] = useState([]);
 
   const [filters, setFilters] = useState({
@@ -17,27 +18,33 @@ function SearchLands() {
     min_area: "",
     max_area: "",
   });
-
   const loadLands = async () => {
-    try {
-      const params = {};
+  try {
+    setLoading(true);
 
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== "") {
-          params[key] = value;
-        }
-      });
+    const params = {};
 
-      const response = await api.get("/lands/search", {
-        params,
-      });
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== "") {
+        params[key] = value;
+      }
+    });
 
-      setLands(response.data);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to load lands");
-    }
-  };
+    const response = await api.get("/lands/search", {
+      params,
+    });
+
+    setLands(response.data);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to load lands");
+  } finally {
+    setLoading(false);
+  }
+};
+
+  
 
   useEffect(() => {
     loadLands();
@@ -184,8 +191,10 @@ function SearchLands() {
         <button
           className="btn btn-success me-2"
           onClick={loadLands}
+          disabled={loading}
+
         >
-          Search
+           {loading ? "Searching..." : "Search"}
         </button>
 
         <button
@@ -197,8 +206,14 @@ function SearchLands() {
       </div>
 
       <hr />
+      {loading ? (
+         <h4>Loading Lands...</h4>
+      ) : (
+        <h4>{lands.length} Lands Found</h4>
+      )}
 
-      <h4>{lands.length} Lands Found</h4>
+
+      
 
       {lands.length === 0 ? (
         <div className="alert alert-warning">
@@ -208,6 +223,23 @@ function SearchLands() {
         lands.map((land) => (
           <div className="card mb-3" key={land.id}>
             <div className="card-body">
+              {land.image_url && (
+                <img
+                  src={land.image_url}
+                  alt={land.title}
+                  style={{
+                    width: "100%",
+                    height: "220px",
+                    objectFit: "cover",
+                    borderRadius: "8px",
+                    marginBottom: "15px",
+                  }}
+                />
+              )}
+
+
+
+
 
               <h4>{land.title}</h4>
 

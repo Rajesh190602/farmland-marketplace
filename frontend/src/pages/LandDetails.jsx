@@ -4,7 +4,6 @@ import Navbar from "../components/Navbar";
 import LandMap from "../components/LandMap";
 import api from "../services/api";
 
-const API = "https://farmland-backend-ncnk.onrender.com";
 
 function LandDetails() {
   const { id } = useParams();
@@ -42,6 +41,20 @@ function LandDetails() {
       );
     }
   };
+  const addFavorite = async () => {
+  try {
+    await api.post(`/favorites/${land.id}`);
+
+    alert("Land added to Favorites.");
+
+  } catch (error) {
+    alert(
+      error.response?.data?.detail ||
+      "Unable to add favorite."
+    );
+  }
+};
+
   if (!land) {
   return (
     <>
@@ -116,7 +129,7 @@ function LandDetails() {
 
           
           <img
-            src={`${API}${land.image_url}`}
+            src={land.image_url}
             alt={land.title}
             style={{
               width: "100%",
@@ -397,6 +410,7 @@ function LandDetails() {
     </button>
 
     <button
+      onClick={addFavorite}
       style={{
         background: "#E91E63",
         color: "#fff",
@@ -418,10 +432,19 @@ function LandDetails() {
             text: land.description,
             url: window.location.href,
           });
-        } else {
-          navigator.clipboard.writeText(window.location.href);
-          alert("Link copied to clipboard!");
+        } 
+        try {
+          
+
+           navigator.clipboard.writeText(window.location.href);
+           alert("Link copied!");
         }
+       catch {
+        
+
+        alert("Sharing is not supported.");
+       }
+
       }}
       style={{
         background: "#FF9800",
@@ -457,7 +480,7 @@ function LandDetails() {
       borderRadius: "10px",
       cursor: "pointer",
       fontWeight: "bold",
-      fontSize: "15px",
+      fontSize: "16px",
     }}
   >
     ⬅ Back to Marketplace
@@ -483,7 +506,7 @@ const badgeStyle = {
   padding: "8px 18px",
   borderRadius: "25px",
   fontWeight: "bold",
-  fontSize: "15px",
+  fontSize: "16px",
 };
 
 export default LandDetails;

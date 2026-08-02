@@ -6,6 +6,8 @@ import api from "../services/api";
 function EditLand() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
 
   const [land, setLand] = useState({
     title: "",
@@ -26,17 +28,24 @@ function EditLand() {
   useEffect(() => {
     loadLand();
   }, []);
-
   const loadLand = async () => {
-    try {
-      const response = await api.get(`/lands/${id}`);
-      setLand(response.data);
-    } catch (error) {
-      console.log(error);
-      alert("Failed to load land details.");
-      navigate("/my-lands");
-    }
-  };
+  try {
+    setLoading(true);
+
+    const response = await api.get(`/lands/${id}`);
+
+    setLand(response.data);
+
+  } catch (error) {
+    console.log(error);
+    alert("Failed to load land details.");
+    navigate("/my-lands");
+  } finally {
+    setLoading(false);
+  }
+};
+
+  
 
   const handleChange = (e) => {
     setLand({
@@ -44,11 +53,26 @@ function EditLand() {
       [e.target.name]: e.target.value,
     });
   };
+  if (!land.title.trim()) {
+  alert("Title is required.");
+  return;
+}
+
+if (Number(land.price) <= 0) {
+  alert("Enter a valid price.");
+  return;
+}
+
+if (Number(land.area) <= 0) {
+  alert("Enter a valid area.");
+  return;
+}
 
   const updateLand = async (e) => {
     e.preventDefault();
 
     try {
+      setUpdating(true);
       await api.put(`/lands/${id}`, {
         title: land.title,
         description: land.description,
@@ -68,16 +92,18 @@ function EditLand() {
       alert("Land updated successfully!");
 
       navigate("/my-lands");
-    } catch (error) {
-      console.log(error);
+    }  catch (error) {
+    console.log(error);
 
-      if (error.response) {
-        alert(error.response.data.detail || "Update failed");
-      } else {
-        alert("Server Error");
-      }
+    if (error.response) {
+      alert(error.response.data.detail || "Update failed");
+    } else {
+      alert("Server Error");
     }
-  };
+  } finally {
+    setUpdating(false);
+  }
+};
 
   return (
     <>

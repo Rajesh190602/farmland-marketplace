@@ -16,7 +16,6 @@ import {
 import Navbar from "../components/Navbar";
 import api from "../services/api";
 
-const API = "https://farmland-backend-ncnk.onrender.com";
 
 function AllLands() {
 
@@ -318,7 +317,7 @@ function AllLands() {
                 {land.image_url ? (
 
                   <img
-                    src={`${API}${land.image_url}`}
+                    src={land.image_url}
                     alt={land.title}
                     style={imageStyle}
                   />

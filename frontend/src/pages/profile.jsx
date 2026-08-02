@@ -25,26 +25,44 @@ function Profile() {
       setLoading(false);
     }
   };
-
   const updateProfile = async () => {
-    setSaving(true);
+  if (!user.full_name.trim()) {
+    alert("Full Name is required.");
+    return;
+  }
 
-    try {
-      await api.put("/users/profile", {
-        full_name: user.full_name,
-        mobile: user.mobile,
-      });
+  if (user.mobile.length !== 10) {
+    alert("Enter a valid 10-digit mobile number.");
+    return;
+  }
 
-      alert("Profile updated successfully!");
+  setSaving(true);
 
-      await fetchProfile();
-    } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.detail || "Failed to update profile.");
-    } finally {
-      setSaving(false);
-    }
-  };
+  try {
+    await api.put("/users/profile", {
+      full_name: user.full_name,
+      mobile: user.mobile,
+    });
+
+    const response = await api.get("/users/profile");
+
+    setUser(response.data);
+
+    localStorage.setItem(
+      "user",
+      JSON.stringify(response.data)
+    );
+
+    alert("Profile updated successfully!");
+  } catch (error) {
+    console.error(error);
+    alert(error.response?.data?.detail || "Failed to update profile.");
+  } finally {
+    setSaving(false);
+  }
+};
+
+  
 
   if (loading) {
     return (

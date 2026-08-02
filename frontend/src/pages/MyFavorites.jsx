@@ -4,32 +4,80 @@ import Navbar from "../components/Navbar";
 import api from "../services/api";
 
 function MyFavorites() {
+  const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchFavorites();
   }, []);
-
   const fetchFavorites = async () => {
-    try {
-      const response = await api.get("/favorites");
-      setFavorites(response.data);
-    } catch (error) {
-      console.error(error);
-      alert("Failed to load favorites");
-    }
-  };
+  try {
+    setLoading(true);
 
-  const removeFavorite = async (landId) => {
-    try {
-      await api.delete(`/favorites/${landId}`);
-      fetchFavorites();
-    } catch (error) {
-      console.error(error);
-      alert("Failed to remove favorite");
-    }
-  };
+    const response = await api.get("/favorites");
+
+    setFavorites(response.data);
+
+  } catch (error) {
+    console.error(error);
+    alert("Failed to load favorites");
+  } finally {
+    setLoading(false);
+  }
+};
+const removeFavorite = async (landId) => {
+
+  if (!window.confirm("Remove this land from favorites?")) {
+    return;
+  }
+
+  try {
+
+    setRemovingId(landId);
+
+    await api.delete(`/favorites/${landId}`);
+
+    alert("Removed from favorites.");
+
+    fetchFavorites();
+
+  } catch (error) {
+
+    console.error(error);
+
+    alert(
+      error.response?.data?.detail ||
+      "Failed to remove favorite"
+    );
+
+  } finally {
+
+    setRemovingId(null);
+
+  }
+};
+if (loading) {
+  return (
+    <>
+      <Navbar />
+
+      <div
+        style={{
+          textAlign: "center",
+          marginTop: "80px",
+          fontSize: "24px",
+          color: "#2E7D32",
+          fontWeight: "bold",
+        }}
+      >
+        Loading Favorites...
+      </div>
+    </>
+  );
+}
+
 
   return (
     <>
@@ -52,6 +100,20 @@ function MyFavorites() {
                 background: "#fff",
               }}
             >
+              {land.image_url && (
+                <img
+                  src={land.image_url}
+                  alt={land.title}
+                   style={{
+                     width: "100%",
+                      height: "220px",
+                      objectFit: "cover",
+                      borderRadius: "10px",
+                      marginBottom: "15px",
+                    }}
+                  />  
+                )}
+
               <h3>{land.title}</h3>
 
               <p><strong>Price:</strong> ₹{land.price}</p>

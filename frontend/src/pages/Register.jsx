@@ -358,7 +358,8 @@ function Register() {
           <button
             type="button"
             onClick={sendOTP}
-            disabled={loading}
+            disabled={loading || (otpSent && timer > 0)}
+           
             style={blueButton}
           >
             {loading
@@ -654,8 +655,8 @@ const eyeStyle = {
 };
 
 const otpBox = {
-  width: "44px",
-  height: "500px",
+  width: "48px",
+  height: "48px",
   borderRadius: "10px",
   border: "2px solid #ddd",
   outline: "none",
