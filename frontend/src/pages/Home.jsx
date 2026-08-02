@@ -55,7 +55,7 @@ function Home() {
     boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
     textAlign: "center",
     flex: "1",
-    minWidth: "220px",
+    minWidth: "180px",
   };
 
   const quickButton = (color) => ({
@@ -78,7 +78,7 @@ function Home() {
         style={{
           minHeight: "100vh",
           background: "#F5F7FA",
-          padding: "35px",
+          padding: "25px",
         }}
       >
         {/* Welcome */}
@@ -89,14 +89,14 @@ function Home() {
               "linear-gradient(135deg,#2E7D32,#43A047)",
             color: "#fff",
             borderRadius: "20px",
-            padding: "35px",
+            padding: "24px",
             marginBottom: "35px",
           }}
         >
           <h1
             style={{
               margin: 0,
-              fontSize: "38px",
+              fontSize:"clamp(28px, 5vw, 38px)" ,
             }}
           >
             🌾 Farmland Marketplace
@@ -112,7 +112,7 @@ function Home() {
 
           <p
             style={{
-              fontSize: "18px",
+              fontSize: "clamp(15px, 2.5vw, 18px)",
               marginTop: "10px",
             }}
           >

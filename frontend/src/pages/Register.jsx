@@ -268,7 +268,7 @@ function Register() {
           <p
             style={{
               color: "#666",
-              fontSize: "15px",
+              fontSize: "16px",
             }}
           >
             Create your Farmer Account
@@ -378,7 +378,7 @@ function Register() {
                 textAlign: "center",
                 marginBottom: "18px",
                 color: "#555",
-                fontSize: "15px",
+                fontSize: "16px",
               }}
             >
               <p style={{ marginBottom: "8px" }}>
@@ -445,8 +445,9 @@ function Register() {
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
-                  gap: "10px",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  gap: "8px",
                   marginBottom: "25px",
                 }}
               >
@@ -616,12 +617,14 @@ const cardStyle = {
   background: "#ffffff",
   borderRadius: "18px",
   padding: "35px",
+   padding: window.innerWidth < 480 ? "20px" : "35px",
   boxShadow: "0 15px 40px rgba(0,0,0,0.15)",
 };
 
 const inputWrapper = {
   display: "flex",
   alignItems: "center",
+  minWidth: 0,
   background: "#fff",
   border: "1px solid #dcdcdc",
   borderRadius: "10px",
@@ -635,7 +638,7 @@ const modernInput = {
   padding: "15px 12px",
   border: "none",
   outline: "none",
-  fontSize: "15px",
+  fontSize: "16px",
   background: "transparent",
 };
 
@@ -651,13 +654,13 @@ const eyeStyle = {
 };
 
 const otpBox = {
-  width: "55px",
-  height: "60px",
+  width: "44px",
+  height: "500px",
   borderRadius: "10px",
   border: "2px solid #ddd",
   outline: "none",
   textAlign: "center",
-  fontSize: "24px",
+  fontSize: "20px",
   fontWeight: "bold",
   transition: "0.3s",
   background: "#fff",
