@@ -26,11 +26,21 @@ function Home() {
     chats: 0,
     notifications: 0,
   });
+  const [featuredLands, setFeaturedLands] = useState([]);
 
   useEffect(() => {
     fetchDashboard();
+    fetchFeaturedLands();
   }, []);
+const fetchFeaturedLands = async () => {
+  try {
+    const response = await api.get("/lands");
 
+    setFeaturedLands(response.data.slice(0, 3));
+  } catch (error) {
+    console.log(error);
+  }
+};
   const fetchDashboard = async () => {
     try {
       const response = await api.get("/dashboard");
@@ -245,6 +255,109 @@ function Home() {
             <FaUserCircle /> My Profile
           </button>
         </div>
+        {/* Featured Lands */}
+
+<div
+  style={{
+    marginTop: "60px",
+  }}
+>
+  <h2
+    style={{
+      color: "#2E7D32",
+      marginBottom: "25px",
+      textAlign: "center",
+    }}
+  >
+    ⭐ Featured Lands
+  </h2>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
+      gap: "25px",
+    }}
+  >
+    {featuredLands.map((land) => (
+      <div
+        key={land.id}
+        style={{
+          background: "#fff",
+          borderRadius: "18px",
+          overflow: "hidden",
+          boxShadow: "0 8px 20px rgba(0,0,0,.12)",
+          transition: ".3s",
+        }}
+      >
+        <img
+          src={land.image_url || "https://via.placeholder.com/400x250"}
+          alt={land.title}
+          style={{
+            width: "100%",
+            height: "220px",
+            objectFit: "cover",
+          }}
+        />
+
+        <div
+          style={{
+            padding: "20px",
+          }}
+        >
+          <h3
+            style={{
+              marginBottom: "10px",
+              color: "#2E7D32",
+            }}
+          >
+            {land.title}
+          </h3>
+
+          <p>
+            <strong>📍</strong> {land.village}, {land.district}
+          </p>
+
+          <p>
+            <strong>🌱 Soil:</strong> {land.soil_type}
+          </p>
+
+          <p>
+            <strong>📐 Area:</strong> {land.area} Acres
+          </p>
+
+          <p
+            style={{
+              color: "#E65100",
+              fontWeight: "bold",
+              fontSize: "20px",
+            }}
+          >
+            ₹{land.price}
+          </p>
+
+          <button
+            onClick={() => navigate(`/land/${land.id}`)}
+            style={{
+              marginTop: "15px",
+              width: "100%",
+              background: "#2E7D32",
+              color: "#fff",
+              border: "none",
+              padding: "12px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            View Details
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+
 
         {/* Recent Activity */}
 

@@ -7,26 +7,28 @@ function Navbar() {
 
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 992);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 1200);
 
   const userName = "Farmer";
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth <= 992) {
-        setIsMobile(true);
-      } else {
-        setIsMobile(false);
-        setMenuOpen(false);
-      }
-    };
+useEffect(() => {
+  const handleResize = () => {
+    console.log("Screen Width:", window.innerWidth);
 
-    window.addEventListener("resize", handleResize);
+    setIsMobile(window.innerWidth <= 1200);
 
-    return () =>
-      window.removeEventListener("resize", handleResize);
-  }, []);
+    if (window.innerWidth > 1200) {
+      setMenuOpen(false);
+    }
+  };
 
+  handleResize();
+
+  window.addEventListener("resize", handleResize);
+
+  return () =>
+    window.removeEventListener("resize", handleResize);
+}, []);
   const logout = () => {
     localStorage.removeItem("token");
     navigate("/");
