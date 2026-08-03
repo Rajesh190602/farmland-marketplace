@@ -113,7 +113,7 @@ const fetchFeaturedLands = async () => {
               fontSize:"clamp(28px, 5vw, 38px)" ,
             }}
           >
-            🌾 Farmland Marketplace
+            🌾 Farmland Marketplace TEST
           </h1>
 
           <h2
@@ -121,7 +121,7 @@ const fetchFeaturedLands = async () => {
               marginTop: "15px",
             }}
           >
-            Welcome Back 👋
+            Welcome Back, {userName}! 👋 TEST
           </h2>
 
           <p
