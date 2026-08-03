@@ -175,7 +175,7 @@ def login(
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "full_name":db_user.user.full_name 
+        "full_name": db_user.full_name 
     }
 from app.auth import get_current_user
 

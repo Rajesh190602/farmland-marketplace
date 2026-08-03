@@ -37,8 +37,8 @@ function Login() {
           "Content-Type": "application/x-www-form-urlencoded",
         },
       });
-
       localStorage.setItem("token", response.data.access_token);
+      localStorage.setItem("full_name", response.data.full_name);
 
       if (rememberMe) {
         localStorage.setItem("email", email);

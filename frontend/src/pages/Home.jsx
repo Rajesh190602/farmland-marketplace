@@ -26,6 +26,8 @@ function Home() {
     chats: 0,
     notifications: 0,
   });
+  const userName =
+  localStorage.getItem("full_name") || "Farmer";
   const [featuredLands, setFeaturedLands] = useState([]);
 
   useEffect(() => {
