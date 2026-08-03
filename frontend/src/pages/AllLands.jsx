@@ -98,6 +98,20 @@ function AllLands() {
     }
 
   };
+  const addFavorite = async (landId) => {
+  try {
+    await api.post(`/favorites/${landId}`);
+
+    alert("Added to favorites ❤️");
+
+  } catch (error) {
+    alert(
+      error.response?.data?.detail ||
+      "Failed to add favorite."
+    );
+  }
+};
+
     return (
     <>
       <Navbar />
@@ -301,7 +315,7 @@ function AllLands() {
             style={{
               display: "grid",
               gridTemplateColumns:
-                "repeat(auto-fit,minmax(350px,1fr))",
+                "repeat(auto-fit,minmax(280px,1fr))",
               gap: "25px",
             }}
           >
@@ -411,7 +425,8 @@ function AllLands() {
                       style={favoriteButton}
                       onClick={(e) => {
                         e.stopPropagation();
-                        alert("Favorites feature coming soon.");
+                        addFavorite(land.id);
+                        
                       }}
                     >
                       <FaHeart />
