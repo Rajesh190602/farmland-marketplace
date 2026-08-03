@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link,useSearchParams  } from "react-router-dom";
 import api from "../services/api";
 
 function SearchLands() {
   const [loading, setLoading] = useState(false);
   const [lands, setLands] = useState([]);
+  const [searchParams] = useSearchParams();
 
   const [filters, setFilters] = useState({
     district: "",
@@ -43,12 +44,26 @@ function SearchLands() {
     setLoading(false);
   }
 };
+useEffect(() => {
+  const district = searchParams.get("district");
+
+  if (district) {
+    const updatedFilters = {
+      ...filters,
+      district,
+    };
+
+    setFilters(updatedFilters);
+
+    loadLands(updatedFilters);
+  } else {
+    loadLands();
+  }
+}, []);
 
   
 
-  useEffect(() => {
-    loadLands();
-  }, []);
+ 
 
   const handleChange = (e) => {
     setFilters({
