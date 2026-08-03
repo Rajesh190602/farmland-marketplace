@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+
+from app.database import get_db
 from app.models import (
     User,
     Land,
@@ -7,13 +10,13 @@ from app.models import (
     Conversation,
     Notification,
 )
-from app.database import get_db
 from app.auth import get_current_user
 
 router = APIRouter(
     prefix="/dashboard",
     tags=["Dashboard"]
 )
+
 
 @router.get("/")
 def dashboard(
@@ -28,20 +31,21 @@ def dashboard(
     my_lands = db.query(Land).filter(
         Land.owner_id == current_user
     ).count()
+
     favorites = db.query(Favorite).filter(
-       Favorite.user_id == current_user
+        Favorite.user_id == current_user
     ).count()
 
     chats = db.query(Conversation).filter(
-        (Conversation.buyer_id == current_user) |
-    (Conversation.seller_id == current_user)
-
+        or_(
+            Conversation.buyer_id == current_user,
+            Conversation.farmer_id == current_user
+        )
     ).count()
 
-    notifications = db.query(Notification).filter(        
+    notifications = db.query(Notification).filter(
         Notification.user_id == current_user
     ).count()
-
 
     return {
         "total_users": total_users,
@@ -49,5 +53,5 @@ def dashboard(
         "my_lands": my_lands,
         "favorites": favorites,
         "chats": chats,
-        "notifications": notifications,
+        "notifications": notifications
     }
