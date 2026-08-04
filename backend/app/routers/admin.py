@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_admin
 from app.database import get_db
 from app.models import User, Land
-from app.schemas import LandUpdate
+from app.schemas import LandUpdate,UserUpdate 
 
 router = APIRouter(
     prefix="/admin",
@@ -226,4 +226,57 @@ def get_user_by_id(
         "mobile": user.mobile,
         "role": user.role,
         "total_lands": lands_count
+    }
+@router.put("/users/{user_id}")
+def update_user_admin(
+    user_id: int,
+    updated_user: UserUpdate,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    updates = updated_user.model_dump(exclude_unset=True)
+
+    for key, value in updates.items():
+        setattr(user, key, value)
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "User updated successfully",
+        "user": {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "mobile": user.mobile,
+            "role": user.role
+        }
+    }
+@router.delete("/users/{user_id}")
+def delete_user_admin(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": "User deleted successfully"
     }

@@ -74,6 +74,11 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    mobile: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
 
 class SendOTPRequest(BaseModel):
     email: EmailStr
