@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  FaUsers,
+  FaSeedling,
+  FaUserTie,
+  FaShoppingCart,
+  FaUserShield,
+  FaComments,
+  FaBell,
+  FaUserCog,
+  FaMapMarkedAlt,
+} from "react-icons/fa";
 import api from "../../services/api";
 
 function AdminDashboard() {
@@ -11,6 +22,8 @@ function AdminDashboard() {
     total_farmers: 0,
     total_buyers: 0,
     total_admins: 0,
+    total_chats: 0,
+    total_notifications: 0,
   });
 
   useEffect(() => {
@@ -19,98 +32,213 @@ function AdminDashboard() {
 
   const fetchDashboard = async () => {
     try {
-      // api.js automatically attaches the JWT token
       const response = await api.get("/admin/dashboard");
 
-      console.log("Dashboard Response:", response.data);
-
-      setStats(response.data);
+      setStats({
+        total_users: response.data.total_users || 0,
+        total_lands: response.data.total_lands || 0,
+        total_farmers: response.data.total_farmers || 0,
+        total_buyers: response.data.total_buyers || 0,
+        total_admins: response.data.total_admins || 0,
+        total_chats: response.data.total_chats || 0,
+        total_notifications:
+          response.data.total_notifications || 0,
+      });
     } catch (error) {
-      console.log("Status:", error.response?.status);
-      console.log("Response:", error.response?.data);
-      console.log(
-        "URL:",
-        error.config?.baseURL + error.config?.url
-      );
-
+      console.log(error);
       alert("Failed to load Admin Dashboard");
     }
   };
 
-  const cardStyle = {
-    background: "#ffffff",
+  const cardStyle = (color) => ({
+    background: "#fff",
+    borderRadius: "18px",
     padding: "25px",
-    borderRadius: "12px",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-    width: "220px",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
     textAlign: "center",
-  };
+    borderTop: `6px solid ${color}`,
+    minWidth: "220px",
+    flex: "1",
+  });
+
+  const actionButton = (color) => ({
+    background: color,
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "15px",
+    cursor: "pointer",
+    fontSize: "16px",
+    fontWeight: "bold",
+    width: "250px",
+  });
 
   return (
     <div
       style={{
-        padding: "40px",
-        background: "#f5f5f5",
         minHeight: "100vh",
+        background: "#F5F7FA",
+        padding: "30px",
       }}
     >
-      <h1 style={{ color: "#2E7D32" }}>
-        👑 Admin Dashboard
-      </h1>
+      {/* Header */}
+
+      <div
+        style={{
+          background:
+            "linear-gradient(135deg,#1B5E20,#43A047)",
+          color: "#fff",
+          borderRadius: "20px",
+          padding: "30px",
+          marginBottom: "35px",
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+          }}
+        >
+          👑 Admin Dashboard
+        </h1>
+
+        <p
+          style={{
+            marginTop: "10px",
+            fontSize: "17px",
+          }}
+        >
+          Monitor users, lands and marketplace
+          activities.
+        </p>
+      </div>
+
+      {/* Dashboard Cards */}
+
+      <h2
+        style={{
+          color: "#2E7D32",
+          marginBottom: "20px",
+        }}
+      >
+        Dashboard Overview
+      </h2>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            "repeat(auto-fit,minmax(220px,1fr))",
+          gap: "20px",
+        }}
+      >
+        <div style={cardStyle("#1565C0")}>
+          <FaUsers size={42} color="#1565C0" />
+          <h3>Total Users</h3>
+          <h1>{stats.total_users}</h1>
+        </div>
+
+        <div style={cardStyle("#2E7D32")}>
+          <FaSeedling size={42} color="#2E7D32" />
+          <h3>Total Lands</h3>
+          <h1>{stats.total_lands}</h1>
+        </div>
+
+        <div style={cardStyle("#EF6C00")}>
+          <FaUserTie size={42} color="#EF6C00" />
+          <h3>Farmers</h3>
+          <h1>{stats.total_farmers}</h1>
+        </div>
+
+        <div style={cardStyle("#8E24AA")}>
+          <FaShoppingCart size={42} color="#8E24AA" />
+          <h3>Buyers</h3>
+          <h1>{stats.total_buyers}</h1>
+        </div>
+
+        <div style={cardStyle("#D81B60")}>
+          <FaUserShield size={42} color="#D81B60" />
+          <h3>Admins</h3>
+          <h1>{stats.total_admins}</h1>
+        </div>
+
+        <div style={cardStyle("#00897B")}>
+          <FaComments size={42} color="#00897B" />
+          <h3>Total Chats</h3>
+          <h1>{stats.total_chats}</h1>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+
+      <h2
+        style={{
+          color: "#2E7D32",
+          marginTop: "50px",
+        }}
+      >
+        Quick Actions
+      </h2>
 
       <div
         style={{
           display: "flex",
           flexWrap: "wrap",
           gap: "20px",
-          marginTop: "30px",
+          marginTop: "20px",
         }}
       >
-        <div style={cardStyle}>
-          <h2>👥</h2>
-          <h3>Total Users</h3>
-          <h1>{stats?.total_users ?? 0}</h1>
-        </div>
+        <button
+          style={actionButton("#1976D2")}
+          onClick={() => navigate("/admin/users")}
+        >
+          <FaUserCog /> Manage Users
+        </button>
 
-        <div style={cardStyle}>
-          <h2>🌾</h2>
-          <h3>Total Lands</h3>
-          <h1>{stats?.total_lands ?? 0}</h1>
-        </div>
+        <button
+          style={actionButton("#2E7D32")}
+          onClick={() => navigate("/admin/lands")}
+        >
+          <FaMapMarkedAlt /> Manage Lands
+        </button>
 
-        <div style={cardStyle}>
-          <h2>👨‍🌾</h2>
-          <h3>Farmers</h3>
-          <h1>{stats?.total_farmers ?? 0}</h1>
-        </div>
-
-        <div style={cardStyle}>
-          <h2>🛒</h2>
-          <h3>Buyers</h3>
-          <h1>{stats?.total_buyers ?? 0}</h1>
-        </div>
-
-        <div style={cardStyle}>
-          <h2>👑</h2>
-          <h3>Admins</h3>
-          <h1>{stats?.total_admins ?? 0}</h1>
-        </div>
+        <button
+          style={actionButton("#F9A825")}
+          onClick={() => navigate("/notifications")}
+        >
+          <FaBell /> Notifications
+        </button>
       </div>
 
-      <button
-        onClick={() => navigate("/admin/users")}
+      {/* Recent Activity */}
+
+      <div
         style={{
-          marginTop: "30px",
-          padding: "12px 20px",
-          backgroundColor: "#2E7D32",
-          color: "white",
-          border: "none",
-          borderRadius: "5px",
-          cursor: "pointer",
+          marginTop: "60px",
+          background: "#fff",
+          borderRadius: "18px",
+          padding: "30px",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
         }}
       >
-        👥 Manage Users
-      </button>
+        <h2
+          style={{
+            color: "#2E7D32",
+          }}
+        >
+          📈 Recent Activity
+        </h2>
+
+        <p
+          style={{
+            marginTop: "20px",
+            color: "#666",
+            fontSize: "16px",
+          }}
+        >
+          Recent user registrations, land approvals,
+          notifications and reports will appear here.
+        </p>
+      </div>
     </div>
   );
 }
