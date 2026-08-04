@@ -195,3 +195,35 @@ def get_land_by_id(
         "longitude": land.longitude,
         "image_url": land.image_url
     }
+@router.get("/users/{user_id}")
+def get_user_by_id(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    lands_count = (
+        db.query(Land)
+        .filter(Land.owner_id == user.id)
+        .count()
+    )
+
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "mobile": user.mobile,
+        "role": user.role,
+        "total_lands": lands_count
+    }
