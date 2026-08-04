@@ -15,6 +15,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import Users from "./pages/admin/Users";
 import Profile from "./pages/profile";
 import ChangePassword from "./pages/ChangePassword";
+import TestChat from "./pages/TestChat";
 import Lands from "./pages/admin/Lands";
 import AdminEditLand from "./pages/admin/EditLand"; // Admin Edit Land
 import MyFavorites from "./pages/MyFavorites";
@@ -40,7 +41,7 @@ function App() {
         <Route path="/land/:id" element={<LandDetails />} />
         <Route
           path="/chat/:conversationId"
-          element={<ChatPage />}
+          element={< TestChat/>}
         />
         <Route
           path="/my-chats"

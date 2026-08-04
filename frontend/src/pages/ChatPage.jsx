@@ -1,146 +1,191 @@
-import { useEffect, useRef,useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import Navbar from "../components/Navbar";
 import api from "../services/api";
 
 export default function ChatPage() {
   const { conversationId } = useParams();
+
   const messagesEndRef = useRef(null);
+
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+
   const loadMessages = async () => {
-  try {
-    setLoading(true);
-
-    const res = await api.get(`/chat/messages/${conversationId}`);
-
-    setMessages(res.data);
-
-  } catch (err) {
-    console.error(err);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  
+    try {
+      const res = await api.get(`/chat/messages/${conversationId}`);
+      setMessages(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadMessages();
-  useEffect(() => {
-  messagesEndRef.current?.scrollIntoView({
-    behavior: "smooth",
-  });
-}, [messages]);
 
-    const interval = setInterval(loadMessages, 3000);
+    const interval = setInterval(() => {
+      loadMessages();
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [conversationId]);
-  const sendMessage = async () => {
-  if (!text.trim()) return;
 
-  try {
-    setSending(true);
-
-    await api.post("/chat/send", {
-      conversation_id: Number(conversationId),
-      message: text,
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
     });
+  }, [messages]);
 
-    setText("");
+  const sendMessage = async () => {
+    if (!text.trim()) return;
 
-    await loadMessages();
+    try {
+      setSending(true);
 
-  } catch (err) {
-    console.error(err);
-    alert("Failed to send message.");
-  } finally {
-    setSending(false);
+      await api.post("/chat/send", {
+        conversation_id: Number(conversationId),
+        message: text,
+      });
+
+      setText("");
+
+      await loadMessages();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to send message.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <>
+        <Navbar />
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "80px",
+            fontSize: "24px",
+            color: "#2E7D32",
+            fontWeight: "bold",
+          }}
+        >
+          Loading Chat...
+        </div>
+      </>
+    );
   }
-};
-if (loading) {
-  return (
-    <div
-      style={{
-        textAlign: "center",
-        marginTop: "100px",
-        fontSize: "24px",
-        color: "#2E7D32",
-        fontWeight: "bold",
-      }}
-    >
-      Loading Chat...
-    </div>
-  );
-}
-
-  
 
   return (
-    <div style={{ maxWidth: "700px", margin: "20px auto" }}>
-      <h2>Chat</h2>
+    <>
+      <Navbar />
 
       <div
         style={{
-          height: "400px",
-          overflowY: "auto",
-          border: "1px solid #ccc",
-          padding: "10px",
-          marginBottom: "15px",
+          maxWidth: "800px",
+          margin: "30px auto",
+          padding: "20px",
         }}
       >
-        {messages.map((msg) => (
-          <div key={msg.id} 
-             style={{ 
-              marginBottom: "15px",
-              padding: "10px",
-              borderRadius: "10px",
-              background: "#F5F5F5",
-              border: "1px solid #C8E6C9",
+        <h1 style={{ color: "#2E7D32" }}>
+          💬 Chat
+        </h1>
+
+        <div
+          style={{
+            height: "450px",
+            overflowY: "auto",
+            border: "1px solid #ddd",
+            borderRadius: "12px",
+            padding: "15px",
+            background: "#F8F9FA",
+            marginBottom: "20px",
+          }}
+        >
+          {messages.length === 0 ? (
+            <p style={{ textAlign: "center", color: "#777" }}>
+              No messages yet.
+            </p>
+          ) : (
+            messages.map((msg) => (
+              <div
+                key={msg.id}
+                style={{
+                  background: "#FFFFFF",
+                  border: "1px solid #C8E6C9",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  marginBottom: "15px",
+                }}
+              >
+                <strong>User {msg.sender_id}</strong>
+
+                <p
+                  style={{
+                    margin: "8px 0",
+                  }}
+                >
+                  {msg.message}
+                </p>
+
+                <small style={{ color: "#666" }}>
+                  {new Date(msg.created_at).toLocaleString()}
+                  {" • "}
+                  {msg.is_read ? "✓ Read" : "✓ Sent"}
+                </small>
+              </div>
+            ))
+          )}
+
+          <div ref={messagesEndRef}></div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+          }}
+        >
+          <input
+            type="text"
+            placeholder="Type your message..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                sendMessage();
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #ccc",
+            }}
+          />
+
+          <button
+            onClick={sendMessage}
+            disabled={sending}
+            style={{
+              background: "#2E7D32",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "12px 25px",
+              cursor: sending ? "not-allowed" : "pointer",
+              fontWeight: "bold",
             }}
           >
-            <strong>User {msg.sender_id}</strong>
-            <p style={{ margin: "8px 0" }}> {msg.message}</p>
-            <small style={{ color: "#666" }}>
-              {msg.created_at
-              ? new Date(msg.created_at).toLocaleString()
-               : ""}
-              {" • "}  
-              {msg.is_read ? "✓ Read" : "✓ Sent"}
-            </small>
-
-          </div>
-        ))}
-        <div ref={messagesEndRef}></div>
-      
+            {sending ? "Sending..." : "Send"}
+          </button>
+        </div>
       </div>
-
-      <input
-        type="text"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            sendMessage();
-          }
-        }}
-        placeholder="Type your message..."
-        style={{ width: "80%", padding: "10px" }}
-      />
-
-      <button 
-        onClick={sendMessage}
-        disabled={sending}
-         style={{
-          marginLeft: "10px",
-          padding: "10px 20px",
-          cursor: sending ? "not-allowed" : "pointer",
-        }}
-      >
-        {sending ? "Sending..." : "Send"}
-      </button>
-    </div>
+    </>
   );
 }
