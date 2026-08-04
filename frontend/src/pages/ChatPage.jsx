@@ -13,7 +13,6 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const myUserId = Number(localStorage.getItem("user_id"));
-
   const loadMessages = async () => {
     try {
       const res = await api.get(`/chat/messages/${conversationId}`);
@@ -108,40 +107,44 @@ export default function ChatPage() {
             marginBottom: "20px",
           }}
         >
-          {messages.length === 0 ? (
-            <p style={{ textAlign: "center", color: "#777" }}>
-              No messages yet.
-            </p>
-          ) : (
-            messages.map((msg) => (
-              <div
-                key={msg.id}
-                style={{
-                  background: "#FFFFFF",
-                  border: "1px solid #C8E6C9",
-                  borderRadius: "10px",
-                  padding: "12px",
-                  marginBottom: "15px",
-                }}
-              >
-                <strong>User {msg.sender_id}</strong>
+         {messages.map((msg) => {
+  const isMine = msg.sender_id === myUserId;
 
-                <p
-                  style={{
-                    margin: "8px 0",
-                  }}
-                >
-                  {msg.message}
-                </p>
+  return (
+    <div
+      key={msg.id}
+      style={{
+        display: "flex",
+        justifyContent: isMine ? "flex-end" : "flex-start",
+        marginBottom: "15px",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "70%",
+          background: isMine ? "#DCF8C6" : "#F1F1F1",
+          padding: "12px",
+          borderRadius: "15px",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+        }}
+      >
+        <strong>
+          {isMine ? "You" : `User ${msg.sender_id}`}
+        </strong>
 
-                <small style={{ color: "#666" }}>
-                  {new Date(msg.created_at).toLocaleString()}
-                  {" • "}
-                  {msg.is_read ? "✓ Read" : "✓ Sent"}
-                </small>
-              </div>
-            ))
-          )}
+        <p style={{ margin: "8px 0" }}>
+          {msg.message}
+        </p>
+
+        <small style={{ color: "#666" }}>
+          {new Date(msg.created_at).toLocaleString()}
+          {" • "}
+          {msg.is_read ? "✓✓ Read" : "✓ Sent"}
+        </small>
+      </div>
+    </div>
+  );
+})} 
 
           <div ref={messagesEndRef}></div>
         </div>
