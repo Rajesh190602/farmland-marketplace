@@ -12,6 +12,7 @@ export default function ChatPage() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const myUserId = Number(localStorage.getItem("user_id"));
 
   const loadMessages = async () => {
     try {
