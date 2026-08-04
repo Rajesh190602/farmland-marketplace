@@ -38,6 +38,7 @@ function Login() {
         },
       });
       localStorage.setItem("token", response.data.access_token);
+      localStorage.setItem("user_id", response.data.user_id);
       localStorage.setItem("full_name", response.data.full_name);
       console.log(response.data);
       console.log(localStorage.getItem("full_name"));
