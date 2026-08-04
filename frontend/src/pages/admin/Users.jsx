@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaUsers,
   FaSearch,
@@ -11,6 +12,8 @@ import {
 import api from "../../services/api";
 
 function Users() {
+  const navigate = useNavigate();
+
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [search, setSearch] = useState("");
@@ -21,9 +24,9 @@ function Users() {
   }, []);
 
   useEffect(() => {
-    const result = users.filter((user) => {
-      const keyword = search.toLowerCase();
+    const keyword = search.toLowerCase();
 
+    const result = users.filter((user) => {
       return (
         user.full_name?.toLowerCase().includes(keyword) ||
         user.email?.toLowerCase().includes(keyword)
@@ -53,10 +56,13 @@ function Users() {
     switch (role?.toLowerCase()) {
       case "admin":
         return "#D81B60";
+
       case "farmer":
         return "#2E7D32";
+
       case "buyer":
         return "#1565C0";
+
       default:
         return "#757575";
     }
@@ -66,10 +72,13 @@ function Users() {
     switch (role?.toLowerCase()) {
       case "admin":
         return <FaUserShield />;
+
       case "farmer":
         return <FaUserTie />;
+
       case "buyer":
         return <FaShoppingCart />;
+
       default:
         return <FaUsers />;
     }
@@ -92,7 +101,7 @@ function Users() {
   }
 
   return (
-    <div
+        <div
       style={{
         minHeight: "100vh",
         background: "#F5F7FA",
@@ -108,7 +117,9 @@ function Users() {
           marginBottom: "30px",
         }}
       >
-        <h1 style={{ margin: 0 }}>👥 User Management</h1>
+        <h1 style={{ margin: 0 }}>
+          👥 User Management
+        </h1>
 
         <p style={{ marginTop: "10px" }}>
           Manage all registered users.
@@ -225,8 +236,8 @@ function Users() {
                 {getRoleIcon(user.role)}
                 {user.role}
               </div>
-
-              <button
+                            <button
+                onClick={() => navigate(`/admin/users/${user.id}`)}
                 style={{
                   marginTop: "20px",
                   width: "100%",

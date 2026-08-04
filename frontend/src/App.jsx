@@ -13,6 +13,7 @@ import MyChats from "./pages/MyChats";
 import AdminLayout from "./components/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Users from "./pages/admin/Users";
+import UserDetails from "./pages/admin/UserDetails";
 import Profile from "./pages/profile";
 import ChangePassword from "./pages/ChangePassword";
 import Lands from "./pages/admin/Lands";
@@ -62,10 +63,17 @@ function App() {
         <Route path="/notifications" element={<Notifications />} />
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<AdminDashboard />} />
-          <Route path="users" element={<Users />} />
-          <Route path="lands" element={<Lands />} />
-          <Route path="edit-land/:id" element={<AdminEditLand />} />
+        <Route index element={<AdminDashboard />} />
+        <Route path="users" element={<Users />} />
+       <Route
+          path="users/:id"
+          element={<UserDetails />}
+        />
+        <Route path="lands" element={<Lands />} />
+        <Route
+          path="edit-land/:id"
+          element={<AdminEditLand />}
+        />
         </Route>
 
       </Routes>
