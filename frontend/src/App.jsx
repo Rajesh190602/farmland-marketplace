@@ -14,6 +14,7 @@ import AdminLayout from "./components/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Users from "./pages/admin/Users";
 import UserDetails from "./pages/admin/UserDetails";
+import EditUser from "./pages/admin/EditUser";
 import Profile from "./pages/profile";
 import ChangePassword from "./pages/ChangePassword";
 import Lands from "./pages/admin/Lands";
@@ -68,6 +69,10 @@ function App() {
        <Route
           path="users/:id"
           element={<UserDetails />}
+        />
+        <Route
+          path="users/edit/:id"
+          element={<EditUser />}
         />
         <Route path="lands" element={<Lands />} />
         <Route

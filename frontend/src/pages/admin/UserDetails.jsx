@@ -37,7 +37,25 @@ function UserDetails() {
       setLoading(false);
     }
   };
+const deleteUser = async () => {
+  const confirmDelete = window.confirm(
+    "Are you sure you want to delete this user?"
+  );
 
+  if (!confirmDelete) return;
+
+  try {
+    await api.delete(`/admin/users/${id}`);
+
+    alert("User deleted successfully.");
+
+    navigate("/admin/users");
+  } catch (error) {
+    console.log(error);
+
+    alert("Failed to delete user.");
+  }
+};
   if (loading) {
     return (
       <div
@@ -127,6 +145,7 @@ function UserDetails() {
         }}
       >
         <button
+          onClick={() => navigate(`/admin/users/edit/${id}`)}
           style={{
             flex: 1,
             background: "#F9A825",
@@ -141,6 +160,7 @@ function UserDetails() {
         </button>
 
         <button
+          onClick={deleteUser}
           style={{
             flex: 1,
             background: "#D32F2F",
