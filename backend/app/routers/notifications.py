@@ -24,6 +24,25 @@ def get_notifications(
         .order_by(Notification.created_at.desc())
         .all()
     )
+    return notifications
+
+@router.get("/unread-count")
+def unread_count(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    count = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == current_user,
+            Notification.is_read == False
+        )
+        .count()
+    )
+
+    return {
+        "unread_count": count
+    }
 
     return notifications
 @router.put("/{notification_id}/read")
