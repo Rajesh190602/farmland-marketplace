@@ -41,6 +41,13 @@ function AdminLayout() {
           >
             🌾 Lands
           </Link>
+          <Link
+            to="/admin/pending-lands"
+            style={{ color: "white", textDecoration: "none" }}
+          >
+
+            🟡 Pending Approvals
+          </Link>
 
           <Link
             to="/home"

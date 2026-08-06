@@ -22,6 +22,7 @@ import AdminEditLand from "./pages/admin/EditLand"; // Admin Edit Land
 import MyFavorites from "./pages/MyFavorites";
 import Notifications from "./pages/Notifications";
 import ForgotPassword from "./pages/ForgotPassword";
+import PendingLands from "./pages/admin/PendingLands";
 function App() {
   return (
     <BrowserRouter>
@@ -76,8 +77,13 @@ function App() {
         />
         <Route path="lands" element={<Lands />} />
         <Route
+          path="pending-lands"
+          element={<PendingLands />}
+        />
+        <Route
           path="edit-land/:id"
           element={<AdminEditLand />}
+
         />
         </Route>
 
