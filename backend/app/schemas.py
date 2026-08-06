@@ -47,6 +47,10 @@ class LandUpdate(BaseModel):
     longitude: Optional[float] = None
 
     image_url: Optional[str] = None
+class LandReview(BaseModel):
+    reason: str
+
+
 
 
 # =========================

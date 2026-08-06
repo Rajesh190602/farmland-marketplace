@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_admin
 from app.database import get_db
 from app.models import User, Land
-from app.schemas import LandUpdate,UserUpdate 
+from app.schemas import LandUpdate,UserUpdate,LandReview
 
 router = APIRouter(
     prefix="/admin",
@@ -144,6 +144,82 @@ def get_pending_lands(
         })
 
     return result
+@router.put("/lands/{land_id}/approve")
+def approve_land(
+    land_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    land = db.query(Land).filter(Land.id == land_id).first()
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    land.status = "approved"
+    land.rejection_reason = None
+
+    db.commit()
+    db.refresh(land)
+
+    return {
+        "message": "Land approved successfully",
+        "status": land.status
+    }
+@router.put("/lands/{land_id}/request-changes")
+def request_changes(
+    land_id: int,
+    review: LandReview,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    land = db.query(Land).filter(Land.id == land_id).first()
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    land.status = "changes_requested"
+    land.rejection_reason = review.reason
+
+    db.commit()
+    db.refresh(land)
+
+    return {
+        "message": "Changes requested successfully",
+        "status": land.status,
+        "reason": land.rejection_reason
+    }
+@router.put("/lands/{land_id}/reject")
+def reject_land(
+    land_id: int,
+    review: LandReview,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    land = db.query(Land).filter(Land.id == land_id).first()
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    land.status = "rejected"
+    land.rejection_reason = review.reason
+
+    db.commit()
+    db.refresh(land)
+
+    return {
+        "message": "Land rejected successfully",
+        "status": land.status,
+        "reason": land.rejection_reason
+    }
 
 @router.delete("/lands/{land_id}")
 def delete_land_admin(
