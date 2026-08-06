@@ -159,7 +159,8 @@ class LandResponse(BaseModel):
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-
+    status: str
+    rejection_reason: Optional[str] = None
     owner_id: int
 
     class Config:

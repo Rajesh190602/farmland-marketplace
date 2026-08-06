@@ -40,6 +40,8 @@ def create_land(
         crop_type=land.crop_type,
         latitude=land.latitude,
         longitude=land.longitude,
+        status="pending",
+        rejection_reason=None,
         owner_id=current_user
     )
 
@@ -48,7 +50,7 @@ def create_land(
     db.refresh(new_land)
 
     return {
-        "message": "Land Added Successfully",
+        "message": "Land Added Successfully  and is waiting for admin approval. ",
         "land_id": new_land.id
     }
 
@@ -65,6 +67,7 @@ def get_all_lands(
     db: Session = Depends(get_db),
 ):
     query = db.query(models.Land)
+    query = query.filter(models.Land.status == "approved")
 
     if search:
         query = query.filter(

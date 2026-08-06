@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime,Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
@@ -39,22 +39,20 @@ class Land(Base):
     title = Column(String, nullable=False)
     description = Column(String)
     image_url = Column(String, nullable=True)
-
     price = Column(Float, nullable=False)
     area = Column(Float, nullable=False)
-
     village = Column(String, nullable=False)
     mandal = Column(String, nullable=False)
     district = Column(String, nullable=False)
     state = Column(String, nullable=False)
     pincode = Column(String)
-
     survey_number = Column(String)
-
     soil_type = Column(String)
     water_source = Column(String)
     crop_type = Column(String)
+    status = Column(String, default="pending")
 
+    rejection_reason = Column(Text, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
 
