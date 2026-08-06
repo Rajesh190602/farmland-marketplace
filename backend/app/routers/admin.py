@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import User, Land
+from app.models import User, Land, Notification
 from app.schemas import LandUpdate,UserUpdate,LandReview
 
 router = APIRouter(
@@ -160,7 +160,12 @@ def approve_land(
 
     land.status = "approved"
     land.rejection_reason = None
-
+    notification = Notification(
+        user_id=land.owner_id,
+        title="Land Approved",
+        message=f'Your land "{land.title}" has been approved and is now visible to buyers.'
+    )
+    db.add(notification)
     db.commit()
     db.refresh(land)
 
@@ -185,6 +190,13 @@ def request_changes(
 
     land.status = "changes_requested"
     land.rejection_reason = review.reason
+    notification = Notification(
+        user_id=land.owner_id,
+        title="Changes Requested",
+        message=f'Changes have been requested for your land "{land.title}". Reason: {review.reason}'
+    )
+
+    db.add(notification)
 
     db.commit()
     db.refresh(land)
@@ -211,6 +223,14 @@ def reject_land(
 
     land.status = "rejected"
     land.rejection_reason = review.reason
+    notification = Notification(
+        
+        user_id=land.owner_id,
+        title="Land Rejected",
+        message=f'Your land "{land.title}" has been rejected. Reason: {review.reason}'
+    )
+
+    db.add(notification)
 
     db.commit()
     db.refresh(land)
