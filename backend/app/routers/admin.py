@@ -109,6 +109,41 @@ def get_all_lands(
         })
 
     return result
+@router.get("/lands/pending")
+def get_pending_lands(
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    lands = (
+        db.query(Land)
+        .filter(Land.status == "pending")
+        .all()
+    )
+
+    result = []
+
+    for land in lands:
+
+        owner = (
+            db.query(User)
+            .filter(User.id == land.owner_id)
+            .first()
+        )
+
+        result.append({
+            "id": land.id,
+            "title": land.title,
+            "price": land.price,
+            "area": land.area,
+            "village": land.village,
+            "district": land.district,
+            "status": land.status,
+            "owner_name": owner.full_name if owner else "",
+            "owner_mobile": owner.mobile if owner else "",
+            "image_url": land.image_url,
+        })
+
+    return result
 
 @router.delete("/lands/{land_id}")
 def delete_land_admin(
