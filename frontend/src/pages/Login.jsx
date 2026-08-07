@@ -40,6 +40,7 @@ function Login() {
       localStorage.setItem("token", response.data.access_token);
       localStorage.setItem("user_id", response.data.user_id);
       localStorage.setItem("full_name", response.data.full_name);
+      localStorage.setItem("role", response.data.role);
       console.log(response.data);
       console.log(localStorage.getItem("full_name"));
 
@@ -50,7 +51,11 @@ function Login() {
       }
 
       alert("Login Successful");
-      navigate("/home");
+      if (response.data.role === "admin") {
+        navigate("/admin");
+      }else {
+        navigate("/home");
+      }     
     } catch (error) {
       if (error.response) {
         alert(error.response.data.detail || "Invalid email or password.");
