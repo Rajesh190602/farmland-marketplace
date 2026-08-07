@@ -14,6 +14,10 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
     role = Column(String, default="farmer")
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
 
     lands = relationship(
         "Land",
