@@ -43,9 +43,12 @@ function AdminDashboard() {
     changes_requested: 0,
     total_chats: 0,
   });
+  const [districtData, setDistrictData] = useState([]);
+
 
   useEffect(() => {
     fetchDashboard();
+    fetchDistrictAnalytics();
   }, []);
 
   const fetchDashboard = async () => {
@@ -69,6 +72,20 @@ function AdminDashboard() {
       alert("Failed to load Admin Dashboard");
     }
   };
+  const fetchDistrictAnalytics = async () => {
+  try {
+    const response = await api.get("/admin/district-analytics");
+
+    const data = response.data.map((item) => ({
+      name: item.district,
+      Lands: item.count,
+    }));
+
+    setDistrictData(data);
+  } catch (error) {
+    console.log(error);
+  }
+};
 
   // Download Excel Reports
   const downloadReport = async (type) => {
@@ -361,6 +378,46 @@ function AdminDashboard() {
       </ResponsiveContainer>
     </div>
   </div>
+  {/* District Analytics */}
+
+<div
+  style={{
+    background: "#fff",
+    marginTop: "40px",
+    padding: "30px",
+    borderRadius: "18px",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
+  }}
+>
+  <h2
+    style={{
+      color: "#2E7D32",
+      textAlign: "center",
+      marginBottom: "20px",
+    }}
+  >
+    📍 District-wise Land Analytics
+  </h2>
+
+  <ResponsiveContainer width="100%" height={350}>
+    <BarChart data={districtData}>
+      <CartesianGrid strokeDasharray="3 3" />
+
+      <XAxis dataKey="name" />
+
+      <YAxis />
+
+      <Tooltip />
+
+      <Legend />
+
+      <Bar
+        dataKey="Lands"
+        fill="#1976D2"
+      />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
     {/* Reports */}
 
   <h2
