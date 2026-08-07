@@ -44,11 +44,13 @@ function AdminDashboard() {
     total_chats: 0,
   });
   const [districtData, setDistrictData] = useState([]);
+  const [monthlyData, setMonthlyData] = useState([]);
 
 
   useEffect(() => {
     fetchDashboard();
     fetchDistrictAnalytics();
+    fetchMonthlyGrowth();
   }, []);
 
   const fetchDashboard = async () => {
@@ -86,7 +88,15 @@ function AdminDashboard() {
     console.log(error);
   }
 };
+const fetchMonthlyGrowth = async () => {
+  try {
+    const response = await api.get("/admin/monthly-growth");
 
+    setMonthlyData(response.data);
+  } catch (error) {
+    console.log(error);
+  }
+};
   // Download Excel Reports
   const downloadReport = async (type) => {
     try {
@@ -414,6 +424,49 @@ function AdminDashboard() {
       <Bar
         dataKey="Lands"
         fill="#1976D2"
+      />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
+{/* Monthly Growth Analytics */}
+
+<div
+  style={{
+    background: "#fff",
+    marginTop: "40px",
+    padding: "30px",
+    borderRadius: "18px",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
+  }}
+>
+  <h2
+    style={{
+      color: "#2E7D32",
+      textAlign: "center",
+      marginBottom: "20px",
+    }}
+  >
+    📈 Monthly User Growth
+  </h2>
+
+  <ResponsiveContainer
+    width="100%"
+    height={350}
+  >
+    <BarChart data={monthlyData}>
+      <CartesianGrid strokeDasharray="3 3" />
+
+      <XAxis dataKey="month" />
+
+      <YAxis />
+
+      <Tooltip />
+
+      <Legend />
+
+      <Bar
+        dataKey="users"
+        fill="#43A047"
       />
     </BarChart>
   </ResponsiveContainer>
