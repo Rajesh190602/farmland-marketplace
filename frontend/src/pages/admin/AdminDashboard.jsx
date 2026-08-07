@@ -11,6 +11,19 @@ import {
   FaUserCog,
   FaMapMarkedAlt,
 } from "react-icons/fa";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import api from "../../services/api";
 
 function AdminDashboard() {
@@ -18,12 +31,14 @@ function AdminDashboard() {
 
   const [stats, setStats] = useState({
     total_users: 0,
+    farmers: 0,
+    buyers: 0,
+    admins: 0,
     total_lands: 0,
-    total_farmers: 0,
-    total_buyers: 0,
-    total_admins: 0,
-    total_chats: 0,
-    total_notifications: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    changes_requested: 0,
   });
 
   useEffect(() => {
@@ -32,17 +47,19 @@ function AdminDashboard() {
 
   const fetchDashboard = async () => {
     try {
-      const response = await api.get("/admin/dashboard");
+      const response = await api.get("/admin/analytics");
+      
 
       setStats({
         total_users: response.data.total_users || 0,
+        farmers: response.data.farmers || 0,
+        buyers: response.data.buyers || 0,
+        admins: response.data.admins || 0,
         total_lands: response.data.total_lands || 0,
-        total_farmers: response.data.total_farmers || 0,
-        total_buyers: response.data.total_buyers || 0,
-        total_admins: response.data.total_admins || 0,
-        total_chats: response.data.total_chats || 0,
-        total_notifications:
-          response.data.total_notifications || 0,
+        pending: response.data.pending || 0,
+        approved: response.data.approved || 0,
+        rejected: response.data.rejected || 0,
+        changes_requested: response.data.changes_requested || 0,
       });
     } catch (error) {
       console.log(error);
@@ -72,6 +89,27 @@ function AdminDashboard() {
     fontWeight: "bold",
     width: "250px",
   });
+  const chartData = [
+  { name: "Pending", value: stats.pending },
+  { name: "Approved", value: stats.approved },
+  { name: "Rejected", value: stats.rejected },
+  { name: "Changes Requested", value: stats.changes_requested },
+];
+const barData = [
+  { name: "Users", value: stats.total_users },
+  { name: "Farmers", value: stats.farmers },
+  { name: "Buyers", value: stats.buyers },
+  { name: "Admins", value: stats.admins },
+  { name: "Lands", value: stats.total_lands },
+];
+
+const COLORS = [
+  "#F9A825",
+  "#43A047",
+  "#E53935",
+  "#FB8C00",
+];
+
 
   return (
     <div
@@ -146,27 +184,106 @@ function AdminDashboard() {
         <div style={cardStyle("#EF6C00")}>
           <FaUserTie size={42} color="#EF6C00" />
           <h3>Farmers</h3>
-          <h1>{stats.total_farmers}</h1>
+          <h1>{stats.farmers}</h1>
         </div>
 
         <div style={cardStyle("#8E24AA")}>
           <FaShoppingCart size={42} color="#8E24AA" />
           <h3>Buyers</h3>
-          <h1>{stats.total_buyers}</h1>
+          <h1>{stats.buyers}</h1>
         </div>
 
         <div style={cardStyle("#D81B60")}>
           <FaUserShield size={42} color="#D81B60" />
           <h3>Admins</h3>
-          <h1>{stats.total_admins}</h1>
+          <h1>{stats.admins}</h1>
         </div>
-
+        <div style={cardStyle("#F9A825")}>
+          <h3>🟡 Pending</h3>
+          <h1>{stats.pending}</h1>
+        </div>
+        <div style={cardStyle("#43A047")}>
+          <h3>✅ Approved</h3>
+          <h1>{stats.approved}</h1>
+        </div>
+        <div style={cardStyle("#E53935")}>
+          <h3>❌ Rejected</h3>
+          <h1>{stats.rejected}</h1>
+        </div>
+        <div style={cardStyle("#FB8C00")}>
+          <h3>📝 Changes Requested</h3>
+          <h1>{stats.changes_requested}</h1>
+        </div>
         <div style={cardStyle("#00897B")}>
           <FaComments size={42} color="#00897B" />
           <h3>Total Chats</h3>
           <h1>{stats.total_chats}</h1>
         </div>
       </div>
+      <div
+  style={{
+    background: "#fff",
+    marginTop: "40px",
+    padding: "30px",
+    borderRadius: "18px",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
+  }}
+>
+  <h2 style={{ color: "#2E7D32" }}>
+    📊 Land Status Overview
+  </h2>
+
+  <ResponsiveContainer width="100%" height={350}>
+    <PieChart>
+      <Pie
+        data={chartData}
+        dataKey="value"
+        nameKey="name"
+        outerRadius={120}
+        label
+      >
+        {chartData.map((entry, index) => (
+          <Cell
+            key={index}
+            fill={COLORS[index % COLORS.length]}
+          />
+        ))}
+      </Pie>
+
+      <Tooltip />
+      <Legend />
+    </PieChart>
+  </ResponsiveContainer>
+</div>
+<div
+  style={{
+    background: "#fff",
+    marginTop: "40px",
+    padding: "30px",
+    borderRadius: "18px",
+    boxShadow: "0 6px 18px rgba(0,0,0,.10)",
+  }}
+>
+  <h2 style={{ color: "#2E7D32" }}>
+    📈 Marketplace Statistics
+  </h2>
+
+  <ResponsiveContainer width="100%" height={350}>
+    <BarChart data={barData}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="name" />
+      <YAxis />
+      <Tooltip />
+      <Legend />
+
+      <Bar
+        dataKey="value"
+        fill="#2E7D32"
+      />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
+
 
       {/* Quick Actions */}
 
