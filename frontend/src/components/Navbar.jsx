@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { FaBars, FaTimes } from "react-icons/fa";
+import api from "../services/api";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -8,12 +9,13 @@ function Navbar() {
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 1200);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const userName = "Farmer";
 
 useEffect(() => {
   const handleResize = () => {
-    console.log("Screen Width:", window.innerWidth);
+  console.log("Screen Width:", window.innerWidth);
 
     setIsMobile(window.innerWidth <= 1200);
 
@@ -23,12 +25,26 @@ useEffect(() => {
   };
 
   handleResize();
+  fetchUnreadCount();
+  const interval = setInterval(() => {
+    fetchUnreadCount();
+  }, 30000);
 
   window.addEventListener("resize", handleResize);
+  return () => {
 
-  return () =>
     window.removeEventListener("resize", handleResize);
+    clearInterval(interval);
+  };
 }, []);
+const fetchUnreadCount = async () => {
+  try {
+    const response = await api.get("/notifications/unread-count");
+    setUnreadCount(response.data.unread_count);
+  } catch (error) {
+    console.log(error);
+  }
+};
   const logout = () => {
     localStorage.removeItem("token");
     navigate("/");
@@ -225,14 +241,37 @@ useEffect(() => {
               </NavLink>
 
               <NavLink
-                to="/notifications"
-                style={({ isActive }) => ({
-                  ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
-                })}
-              >
-                🔔 Notifications
-              </NavLink>
+  to="/notifications"
+  style={({ isActive }) => ({
+    ...linkStyle,
+    color: isActive ? "#FFD54F" : "#fff",
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  })}
+>
+  <span>🔔 Notifications</span>
+
+  {unreadCount > 0 && (
+    <span
+      style={{
+        background: "#D32F2F",
+        color: "#fff",
+        borderRadius: "50%",
+        minWidth: "22px",
+        height: "22px",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        fontSize: "12px",
+        fontWeight: "bold",
+      }}
+    >
+      {unreadCount}
+    </span>
+  )}
+</NavLink>
 
               <NavLink
                 to="/profile"
@@ -379,8 +418,28 @@ useEffect(() => {
             <NavLink to="/all-lands" style={mobileLinkStyle}>🔍 Browse</NavLink>
             <NavLink to="/favorites" style={mobileLinkStyle}>❤️ Favorites</NavLink>
             <NavLink to="/my-chats" style={mobileLinkStyle}>💬 Chats</NavLink>
-            <NavLink to="/notifications" style={mobileLinkStyle}>🔔 Notifications</NavLink>
-            <NavLink to="/profile" style={mobileLinkStyle}>👤 Profile</NavLink>
+            <NavLink
+  to="/notifications"
+  style={mobileLinkStyle}
+>
+  🔔 Notifications
+  {unreadCount > 0 && (
+    <span
+      style={{
+        marginLeft: "10px",
+        background: "#D32F2F",
+        color: "#fff",
+        borderRadius: "50%",
+        padding: "2px 8px",
+        fontSize: "12px",
+        fontWeight: "bold",
+      }}
+    >
+      {unreadCount}
+    </span>
+  )}
+</NavLink>
+           <NavLink to="/profile" style={mobileLinkStyle}>👤 Profile</NavLink>
 
             <button
               onClick={logout}

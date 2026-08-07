@@ -44,6 +44,29 @@ def admin_dashboard(
         "total_buyers": total_buyers,
         "total_admins": total_admins
 }
+@router.get("/analytics")
+def admin_analytics(
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    return {
+        "total_users": db.query(User).count(),
+        "farmers": db.query(User).filter(User.role == "farmer").count(),
+        "buyers": db.query(User).filter(User.role == "buyer").count(),
+        "admins": db.query(User).filter(User.role == "admin").count(),
+
+        "total_lands": db.query(Land).count(),
+
+        "pending": db.query(Land).filter(Land.status == "pending").count(),
+
+        "approved": db.query(Land).filter(Land.status == "approved").count(),
+
+        "rejected": db.query(Land).filter(Land.status == "rejected").count(),
+
+        "changes_requested": db.query(Land).filter(
+            Land.status == "changes_requested"
+        ).count(),
+    }
 @router.get("/users")
 def get_all_users(
     db: Session = Depends(get_db),
