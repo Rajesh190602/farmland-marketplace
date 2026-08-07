@@ -113,18 +113,46 @@ def get_all_users(
             for user in users
         ],
     }
-
 @router.get("/lands")
 def get_all_lands(
+    search: str = Query(default=""),
+    status: str = Query(default=""),
+    district: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    lands = db.query(Land).all()
+    query = db.query(Land)
+
+    if search:
+        query = query.filter(
+            (Land.title.ilike(f"%{search}%")) |
+            (Land.village.ilike(f"%{search}%")) |
+            (Land.mandal.ilike(f"%{search}%")) |
+            (Land.district.ilike(f"%{search}%")) |
+            (Land.survey_number.ilike(f"%{search}%"))
+        )
+
+    if status:
+        query = query.filter(Land.status == status)
+
+    if district:
+        query = query.filter(Land.district.ilike(district))
+
+    total = query.count()
+
+    lands = (
+        query
+        .order_by(Land.id.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
 
     result = []
 
     for land in lands:
-
         owner = (
             db.query(User)
             .filter(User.id == land.owner_id)
@@ -137,31 +165,33 @@ def get_all_lands(
             "description": land.description,
             "price": land.price,
             "area": land.area,
-
             "village": land.village,
             "mandal": land.mandal,
             "district": land.district,
             "state": land.state,
             "pincode": land.pincode,
-
             "survey_number": land.survey_number,
-
             "soil_type": land.soil_type,
             "water_source": land.water_source,
             "crop_type": land.crop_type,
-
             "latitude": land.latitude,
             "longitude": land.longitude,
-
+            "status": land.status,
             "image_url": land.image_url,
-
             "owner_id": land.owner_id,
             "owner_name": owner.full_name if owner else "Unknown",
             "owner_email": owner.email if owner else "",
-            "owner_mobile": owner.mobile if owner else ""
+            "owner_mobile": owner.mobile if owner else "",
         })
 
-    return result
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "lands": result,
+    }
+
+
 @router.get("/lands/pending")
 def get_pending_lands(
     db: Session = Depends(get_db),
