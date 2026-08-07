@@ -5,7 +5,8 @@ from app.auth import get_current_admin
 from app.database import get_db
 from app.models import User, Land, Notification
 from app.schemas import LandUpdate,UserUpdate,LandReview
-from sqlalchemy import func
+from sqlalchemy import func,extract
+from app.models import User
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"]
@@ -455,4 +456,34 @@ def district_analytics(
             "count": count
         }
         for district, count in results
+    ]
+@router.get("/monthly-growth")
+def monthly_growth(
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    results = (
+        db.query(
+            extract("month", User.created_at).label("month"),
+            func.count(User.id).label("users")
+        )
+        .group_by(extract("month", User.created_at))
+        .order_by(extract("month", User.created_at))
+        .all()
+    )
+
+    months = [
+        "",
+        "Jan", "Feb", "Mar", "Apr",
+        "May", "Jun", "Jul", "Aug",
+        "Sep", "Oct", "Nov", "Dec"
+    ]
+
+    return [
+        {
+            "month": months[int(month)],
+            "users": users
+        }
+        for month, users in results
+        if month is not None
     ]
