@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends,HTTPException
+from fastapi import APIRouter, Depends,HTTPException,Query
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
@@ -70,21 +70,50 @@ def admin_analytics(
     }
 @router.get("/users")
 def get_all_users(
+    search: str = Query(default=""),
+    role: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(get_current_admin),
 ):
-    users = db.query(User).all()
+    query = db.query(User)
 
-    return [
-        {
-            "id": user.id,
-            "full_name": user.full_name,
-            "email": user.email,
-            "mobile": user.mobile,
-            "role": user.role
-        }
-        for user in users
-    ] 
+    if search:
+        query = query.filter(
+            (User.full_name.ilike(f"%{search}%")) |
+            (User.email.ilike(f"%{search}%"))
+        )
+
+    if role:
+        query = query.filter(User.role == role)
+
+    total = query.count()
+
+    users = (
+        query
+        .order_by(User.id.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "users": [
+            {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "mobile": user.mobile,
+                "role": user.role,
+            }
+            for user in users
+        ],
+    }
+
 @router.get("/lands")
 def get_all_lands(
     db: Session = Depends(get_db),
