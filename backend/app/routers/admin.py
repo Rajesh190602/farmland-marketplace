@@ -5,7 +5,7 @@ from app.auth import get_current_admin
 from app.database import get_db
 from app.models import User, Land, Notification
 from app.schemas import LandUpdate,UserUpdate,LandReview
-
+from sqlalchemy import func
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"]
@@ -434,3 +434,25 @@ def delete_user_admin(
     return {
         "message": "User deleted successfully"
     }
+@router.get("/district-analytics")
+def district_analytics(
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    results = (
+        db.query(
+            Land.district,
+            func.count(Land.id).label("count")
+        )
+        .group_by(Land.district)
+        .order_by(func.count(Land.id).desc())
+        .all()
+    )
+
+    return [
+        {
+            "district": district,
+            "count": count
+        }
+        for district, count in results
+    ]
