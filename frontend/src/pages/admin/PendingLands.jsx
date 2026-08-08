@@ -19,9 +19,11 @@ function PendingLands() {
 
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const LIMIT = 10;
 
+  // Search with debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchPendingLands();
@@ -30,39 +32,49 @@ function PendingLands() {
     return () => clearTimeout(timer);
   }, [page, search]);
 
+  // Fetch pending lands
   const fetchPendingLands = async () => {
     try {
-      if (lands.length === 0) {
+      // Full-screen loading ONLY during the first page load
+      if (initialLoad) {
         setLoading(true);
       } else {
+        // For search, pagination and refresh, don't hide the page
         setSearchLoading(true);
       }
 
-      const response = await api.get(
-        "/admin/lands/pending",
-        {
-          params: {
-            search: search.trim(),
-            page,
-            limit: LIMIT,
-          },
-        }
-      );
+      const response = await api.get("/admin/lands/pending", {
+        params: {
+          search: search.trim(),
+          page: page,
+          limit: LIMIT,
+        },
+      });
 
       console.log(
         "Pending Lands API Response:",
         response.data
       );
 
-      if (Array.isArray(response.data.lands)) {
-        setLands(response.data.lands);
+      const data = response.data;
+
+      // New backend response:
+      // {
+      //   total: number,
+      //   page: number,
+      //   limit: number,
+      //   lands: []
+      // }
+
+      if (Array.isArray(data.lands)) {
+        setLands(data.lands);
       } else {
         setLands([]);
       }
 
       setTotal(
-        typeof response.data.total === "number"
-          ? response.data.total
+        typeof data.total === "number"
+          ? data.total
           : 0
       );
     } catch (error) {
@@ -74,41 +86,54 @@ function PendingLands() {
       setLands([]);
       setTotal(0);
 
-      alert("Failed to load pending lands");
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load pending lands"
+      );
     } finally {
       setLoading(false);
       setSearchLoading(false);
+      setInitialLoad(false);
     }
   };
 
+  // Total pages
   const totalPages = Math.max(
     1,
     Math.ceil(total / LIMIT)
   );
 
+  // Search
   const handleSearchChange = (event) => {
-    setPage(1);
     setSearch(event.target.value);
+
+    // Always return to page 1 when search changes
+    setPage(1);
   };
 
+  // Previous page
   const handlePreviousPage = () => {
     if (page > 1) {
       setPage((currentPage) => currentPage - 1);
     }
   };
 
+  // Next page
   const handleNextPage = () => {
     if (page < totalPages) {
       setPage((currentPage) => currentPage + 1);
     }
   };
 
+  // Approve land
   const approveLand = async (id) => {
     const confirmed = window.confirm(
       "Are you sure you want to approve this land?"
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     try {
       const response = await api.put(
@@ -120,7 +145,8 @@ function PendingLands() {
           "Land approved successfully"
       );
 
-      fetchPendingLands();
+      // Reload pending lands
+      await fetchPendingLands();
     } catch (error) {
       console.error(
         "Approval failed:",
@@ -134,6 +160,7 @@ function PendingLands() {
     }
   };
 
+  // Request changes
   const requestChanges = async (id) => {
     const reason = window.prompt(
       "Enter reason for requesting changes:"
@@ -156,7 +183,7 @@ function PendingLands() {
           "Changes requested successfully"
       );
 
-      fetchPendingLands();
+      await fetchPendingLands();
     } catch (error) {
       console.error(
         "Request changes failed:",
@@ -170,6 +197,7 @@ function PendingLands() {
     }
   };
 
+  // Reject land
   const rejectLand = async (id) => {
     const reason = window.prompt(
       "Enter reason for rejection:"
@@ -192,7 +220,7 @@ function PendingLands() {
           "Land rejected successfully"
       );
 
-      fetchPendingLands();
+      await fetchPendingLands();
     } catch (error) {
       console.error(
         "Reject failed:",
@@ -206,6 +234,7 @@ function PendingLands() {
     }
   };
 
+  // First page loading
   if (loading) {
     return (
       <div
@@ -265,7 +294,7 @@ function PendingLands() {
         </p>
       </div>
 
-      {/* Search + Refresh */}
+      {/* Search and Refresh */}
 
       <div
         style={{
@@ -285,6 +314,8 @@ function PendingLands() {
             flexWrap: "wrap",
           }}
         >
+          {/* Search */}
+
           <div
             style={{
               flex: 1,
@@ -317,6 +348,7 @@ function PendingLands() {
             {searchLoading && (
               <span
                 style={{
+                  marginLeft: "10px",
                   fontSize: "12px",
                   color: "#1976D2",
                   whiteSpace: "nowrap",
@@ -326,6 +358,8 @@ function PendingLands() {
               </span>
             )}
           </div>
+
+          {/* Refresh */}
 
           <button
             onClick={fetchPendingLands}
@@ -360,7 +394,11 @@ function PendingLands() {
             "0 5px 15px rgba(0,0,0,0.08)",
         }}
       >
-        <h3 style={{ margin: 0 }}>
+        <h3
+          style={{
+            margin: 0,
+          }}
+        >
           Pending Lands: {total}
         </h3>
 
@@ -370,11 +408,12 @@ function PendingLands() {
             color: "#777",
           }}
         >
-          Showing {lands.length} lands on page {page}
+          Showing {lands.length} lands on page{" "}
+          {page}
         </p>
       </div>
 
-      {/* Lands */}
+      {/* No results */}
 
       {lands.length === 0 ? (
         <div
@@ -389,10 +428,25 @@ function PendingLands() {
         >
           <h2>No Pending Lands</h2>
 
-          <p style={{ color: "#777" }}>
-            There are currently no lands waiting
-            for approval.
-          </p>
+          {search.trim() ? (
+            <p
+              style={{
+                color: "#777",
+              }}
+            >
+              No pending lands found for "
+              {search}".
+            </p>
+          ) : (
+            <p
+              style={{
+                color: "#777",
+              }}
+            >
+              There are currently no lands waiting
+              for approval.
+            </p>
+          )}
         </div>
       ) : (
         <div
@@ -420,7 +474,9 @@ function PendingLands() {
               land.image_url !== "string" ? (
                 <img
                   src={land.image_url}
-                  alt={land.title || "Land"}
+                  alt={
+                    land.title || "Land"
+                  }
                   style={{
                     width: "100%",
                     height: "220px",
@@ -434,7 +490,7 @@ function PendingLands() {
                   style={{
                     width: "100%",
                     height: "220px",
-                    background: "#eee",
+                    background: "#EEEEEE",
                     borderRadius: "10px",
                     display: "flex",
                     alignItems: "center",
@@ -447,128 +503,272 @@ function PendingLands() {
                 </div>
               )}
 
+              {/* Land title */}
+
               <h2>
-                {land.title || "Untitled Land"}
+                {land.title ||
+                  "Untitled Land"}
               </h2>
 
+              {/* Description */}
+
+              {land.description && (
+                <p>
+                  <strong>
+                    Description:
+                  </strong>{" "}
+                  {land.description}
+                </p>
+              )}
+
+              {/* Owner */}
+
               <p>
-                <strong>Owner:</strong>{" "}
-                {land.owner_name || "Unknown"}
+                <strong>
+                  Owner:
+                </strong>{" "}
+                {land.owner_name ||
+                  "Unknown"}
               </p>
 
               <p>
-                <strong>Email:</strong>{" "}
-                {land.owner_email || "N/A"}
+                <strong>
+                  Email:
+                </strong>{" "}
+                {land.owner_email ||
+                  "N/A"}
               </p>
 
               <p>
-                <strong>Mobile:</strong>{" "}
-                {land.owner_mobile || "N/A"}
+                <strong>
+                  Mobile:
+                </strong>{" "}
+                {land.owner_mobile ||
+                  "N/A"}
+              </p>
+
+              {/* Location */}
+
+              <p>
+                <strong>
+                  Village:
+                </strong>{" "}
+                {land.village ||
+                  "N/A"}
               </p>
 
               <p>
-                <strong>Village:</strong>{" "}
-                {land.village || "N/A"}
+                <strong>
+                  Mandal:
+                </strong>{" "}
+                {land.mandal ||
+                  "N/A"}
               </p>
 
               <p>
-                <strong>Mandal:</strong>{" "}
-                {land.mandal || "N/A"}
+                <strong>
+                  District:
+                </strong>{" "}
+                {land.district ||
+                  "N/A"}
               </p>
 
               <p>
-                <strong>District:</strong>{" "}
-                {land.district || "N/A"}
+                <strong>
+                  State:
+                </strong>{" "}
+                {land.state ||
+                  "N/A"}
               </p>
 
               <p>
-                <strong>Survey Number:</strong>{" "}
-                {land.survey_number || "N/A"}
+                <strong>
+                  Pincode:
+                </strong>{" "}
+                {land.pincode ||
+                  "N/A"}
+              </p>
+
+              {/* Land details */}
+
+              <p>
+                <strong>
+                  Survey Number:
+                </strong>{" "}
+                {land.survey_number ||
+                  "N/A"}
               </p>
 
               <p>
-                <strong>Area:</strong>{" "}
+                <strong>
+                  Soil Type:
+                </strong>{" "}
+                {land.soil_type ||
+                  "N/A"}
+              </p>
+
+              <p>
+                <strong>
+                  Water Source:
+                </strong>{" "}
+                {land.water_source ||
+                  "N/A"}
+              </p>
+
+              <p>
+                <strong>
+                  Crop:
+                </strong>{" "}
+                {land.crop_type ||
+                  "N/A"}
+              </p>
+
+              <p>
+                <strong>
+                  Area:
+                </strong>{" "}
                 {land.area || 0} Acres
               </p>
 
               <p>
-                <strong>Price:</strong>{" "}
+                <strong>
+                  Price:
+                </strong>{" "}
                 ₹ {land.price || 0}
               </p>
 
+              {/* Status */}
+
               <p>
-                <strong>Crop:</strong>{" "}
-                {land.crop_type || "N/A"}
+                <strong>
+                  Status:
+                </strong>{" "}
+                <span
+                  style={{
+                    display:
+                      "inline-block",
+                    background:
+                      "#FB8C00",
+                    color: "#fff",
+                    padding:
+                      "5px 10px",
+                    borderRadius:
+                      "20px",
+                    textTransform:
+                      "capitalize",
+                    fontWeight:
+                      "bold",
+                  }}
+                >
+                  {land.status ||
+                    "pending"}
+                </span>
               </p>
+
+              {/* Actions */}
 
               <div
                 style={{
                   display: "flex",
-                  flexDirection: "column",
+                  flexDirection:
+                    "column",
                   gap: "10px",
                   marginTop: "20px",
                 }}
               >
+                {/* Approve */}
+
                 <button
                   onClick={() =>
-                    approveLand(land.id)
+                    approveLand(
+                      land.id
+                    )
                   }
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    display:
+                      "flex",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
                     gap: "8px",
-                    background: "#2E7D32",
+                    background:
+                      "#2E7D32",
                     color: "#fff",
                     border: "none",
                     padding: "12px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontWeight: "bold",
+                    borderRadius:
+                      "8px",
+                    cursor:
+                      "pointer",
+                    fontWeight:
+                      "bold",
                   }}
                 >
                   <FaCheck />
                   Approve
                 </button>
 
+                {/* Request changes */}
+
                 <button
                   onClick={() =>
-                    requestChanges(land.id)
+                    requestChanges(
+                      land.id
+                    )
                   }
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    display:
+                      "flex",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
                     gap: "8px",
-                    background: "#FB8C00",
+                    background:
+                      "#FB8C00",
                     color: "#fff",
                     border: "none",
                     padding: "12px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontWeight: "bold",
+                    borderRadius:
+                      "8px",
+                    cursor:
+                      "pointer",
+                    fontWeight:
+                      "bold",
                   }}
                 >
                   <FaEdit />
                   Request Changes
                 </button>
 
+                {/* Reject */}
+
                 <button
                   onClick={() =>
-                    rejectLand(land.id)
+                    rejectLand(
+                      land.id
+                    )
                   }
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    display:
+                      "flex",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
                     gap: "8px",
-                    background: "#D32F2F",
+                    background:
+                      "#D32F2F",
                     color: "#fff",
                     border: "none",
                     padding: "12px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    fontWeight: "bold",
+                    borderRadius:
+                      "8px",
+                    cursor:
+                      "pointer",
+                    fontWeight:
+                      "bold",
                   }}
                 >
                   <FaTimes />
@@ -598,19 +798,27 @@ function PendingLands() {
               "0 5px 15px rgba(0,0,0,0.08)",
           }}
         >
+          {/* Previous */}
+
           <button
-            onClick={handlePreviousPage}
+            onClick={
+              handlePreviousPage
+            }
             disabled={page === 1}
             style={{
-              display: "flex",
-              alignItems: "center",
+              display:
+                "flex",
+              alignItems:
+                "center",
               gap: "8px",
-              padding: "10px 18px",
+              padding:
+                "10px 18px",
               border: "none",
-              borderRadius: "8px",
+              borderRadius:
+                "8px",
               background:
                 page === 1
-                  ? "#ddd"
+                  ? "#DDD"
                   : "#1976D2",
               color:
                 page === 1
@@ -620,47 +828,69 @@ function PendingLands() {
                 page === 1
                   ? "not-allowed"
                   : "pointer",
-              fontWeight: "bold",
+              fontWeight:
+                "bold",
             }}
           >
             <FaChevronLeft />
             Previous
           </button>
 
+          {/* Page information */}
+
           <div
             style={{
-              fontWeight: "bold",
+              fontWeight:
+                "bold",
               color: "#333",
-              minWidth: "130px",
-              textAlign: "center",
+              minWidth:
+                "130px",
+              textAlign:
+                "center",
             }}
           >
-            Page {page} of {totalPages}
+            Page {page} of{" "}
+            {totalPages}
           </div>
 
+          {/* Next */}
+
           <button
-            onClick={handleNextPage}
-            disabled={page >= totalPages}
+            onClick={
+              handleNextPage
+            }
+            disabled={
+              page >=
+              totalPages
+            }
             style={{
-              display: "flex",
-              alignItems: "center",
+              display:
+                "flex",
+              alignItems:
+                "center",
               gap: "8px",
-              padding: "10px 18px",
+              padding:
+                "10px 18px",
               border: "none",
-              borderRadius: "8px",
+              borderRadius:
+                "8px",
               background:
-                page >= totalPages
-                  ? "#ddd"
+                page >=
+                totalPages
+                  ? "#DDD"
                   : "#1976D2",
               color:
-                page >= totalPages
+                page >=
+                totalPages
                   ? "#777"
                   : "#fff",
               cursor:
-                page >= totalPages
+                page >=
+                totalPages
                   ? "not-allowed"
                   : "pointer",
-              fontWeight: "bold",
+              fontWeight:
+                "bold",
             }}
           >
             Next
