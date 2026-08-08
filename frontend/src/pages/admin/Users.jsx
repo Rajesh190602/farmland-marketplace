@@ -18,7 +18,7 @@ function Users() {
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const [searchLoading, setSearchLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
 
@@ -34,12 +34,19 @@ function Users() {
    * - page changes
    */
   useEffect(() => {
-    fetchUsers();
+  const timer = setTimeout(() => {
+    fetchUsers();    
+  }, 400);
+  return () => clearTimeout(timer);
   }, [page, search, role]);
-
   const fetchUsers = async () => {
-    try {
+  try {
+    if (users.length === 0) {
       setLoading(true);
+    } else {
+      setSearchLoading(true);
+    }
+  
 
       const response = await api.get("/admin/users", {
         params: {
@@ -83,6 +90,7 @@ function Users() {
       alert("Failed to load users");
     } finally {
       setLoading(false);
+      setSearchLoading(false);
     }
   };
 
@@ -275,6 +283,18 @@ function Users() {
             }}
           >
             <FaSearch color="#777" />
+            {searchLoading && (
+              <span             
+                style={{
+                  marginLeft: "10px",
+                  fontSize: "12px",
+                  color: "#1976D2",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Searching...
+              </span>
+            )} 
 
             <input
               type="text"
