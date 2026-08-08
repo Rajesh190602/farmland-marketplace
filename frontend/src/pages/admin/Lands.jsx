@@ -1,23 +1,110 @@
 import { useEffect, useState } from "react";
-import api from "../../services/api";
 import { useNavigate } from "react-router-dom";
+import {
+  FaSearch,
+  FaSyncAlt,
+  FaChevronLeft,
+  FaChevronRight,
+} from "react-icons/fa";
+import api from "../../services/api";
 
 function Lands() {
   const [lands, setLands] = useState([]);
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [district, setDistrict] = useState("");
+
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
+
   const navigate = useNavigate();
 
+  const LIMIT = 10;
+
   useEffect(() => {
-    fetchLands();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchLands();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [page, search, status, district]);
 
   const fetchLands = async () => {
     try {
-      const response = await api.get("/admin/lands");
-      setLands(response.data);
+      if (lands.length === 0) {
+        setLoading(true);
+      } else {
+        setSearchLoading(true);
+      }
+
+      const response = await api.get("/admin/lands", {
+        params: {
+          search: search.trim(),
+          status,
+          district,
+          page,
+          limit: LIMIT,
+        },
+      });
+
+      console.log("Lands API Response:", response.data);
+
+      if (Array.isArray(response.data.lands)) {
+        setLands(response.data.lands);
+      } else {
+        setLands([]);
+      }
+
+      setTotal(
+        typeof response.data.total === "number"
+          ? response.data.total
+          : 0
+      );
     } catch (error) {
-      console.log(error);
+      console.error("Failed to load lands:", error);
+
+      setLands([]);
+      setTotal(0);
+
       alert("Failed to load lands");
+    } finally {
+      setLoading(false);
+      setSearchLoading(false);
+    }
+  };
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(total / LIMIT)
+  );
+
+  const handleSearchChange = (event) => {
+    setPage(1);
+    setSearch(event.target.value);
+  };
+
+  const handleStatusChange = (event) => {
+    setPage(1);
+    setStatus(event.target.value);
+  };
+
+  const handleDistrictChange = (event) => {
+    setPage(1);
+    setDistrict(event.target.value);
+  };
+
+  const handlePreviousPage = () => {
+    if (page > 1) {
+      setPage((currentPage) => currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (page < totalPages) {
+      setPage((currentPage) => currentPage + 1);
     }
   };
 
@@ -35,139 +122,529 @@ function Lands() {
 
       fetchLands();
     } catch (error) {
-      console.log(error);
+      console.error("Failed to delete land:", error);
+
       alert("Failed to delete land");
     }
   };
-const filteredLands = lands.filter((land) =>
-  land.title.toLowerCase().includes(search.toLowerCase()) ||
-  land.owner_name.toLowerCase().includes(search.toLowerCase()) ||
-  land.village.toLowerCase().includes(search.toLowerCase()) ||
-  land.district.toLowerCase().includes(search.toLowerCase()) ||
-  (land.crop_type || "").toLowerCase().includes(search.toLowerCase())
-);
 
-  return (
-    <div style={{ padding: "30px" }}>
-      <h1>🌾 Land Management</h1>
-      <input
-  type="text"
-  placeholder="Search by title, owner, village, district or crop..."
-  value={search}
-  onChange={(e) => setSearch(e.target.value)}
-  style={{
-    width: "350px",
-    padding: "10px",
-    margin: "20px 0",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-    fontSize: "16px",
-  }}
-/>
+  const getStatusColor = (landStatus) => {
+    switch (landStatus?.toLowerCase()) {
+      case "approved":
+        return "#2E7D32";
 
-      <table
-        border="1"
-        cellPadding="10"
+      case "pending":
+        return "#F9A825";
+
+      case "rejected":
+        return "#D32F2F";
+
+      default:
+        return "#757575";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div
         style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          marginTop: "20px",
+          minHeight: "60vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          fontSize: "24px",
+          color: "#2E7D32",
+          fontWeight: "bold",
         }}
       >
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Image</th>
-            <th>Owner</th>
-            <th>Email</th>
-            <th>Mobile</th>
-            <th>Title</th>
-            <th>Village</th>
-            <th>District</th>
-            <th>Area</th>
-            <th>Price</th>
-            <th>Crop</th>
-            <th>Action</th>
-          </tr>
-        </thead>
+        Loading Lands...
+      </div>
+    );
+  }
 
-        <tbody>
-            {filteredLands.map((land) => (
-          
-            <tr key={land.id}>
-              <td>{land.id}</td>
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#F5F7FA",
+        padding: "30px",
+      }}
+    >
+      {/* Header */}
 
-              <td>
-                {land.image_url ? (
-                  <img
-                    src={land.image_url}
-                    alt={land.title}
-                    width="80"
-                    height="60"
-                    style={{
-                      objectFit: "cover",
-                      borderRadius: "5px",
-                    }}
-                  />
-                ) : (
-                  "No Image"
-                )}
-              </td>
+      <div
+        style={{
+          background:
+            "linear-gradient(135deg,#2E7D32,#66BB6A)",
+          color: "#fff",
+          padding: "25px",
+          borderRadius: "18px",
+          marginBottom: "30px",
+          boxShadow:
+            "0 6px 18px rgba(0,0,0,0.10)",
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+            fontSize: "30px",
+          }}
+        >
+          🌾 Land Management
+        </h1>
 
-              <td>{land.owner_name}</td>
+        <p
+          style={{
+            marginTop: "10px",
+            marginBottom: 0,
+          }}
+        >
+          Manage all farmland listings.
+        </p>
+      </div>
 
-              <td>{land.owner_email}</td>
+      {/* Search and Filters */}
 
-              <td>{land.owner_mobile}</td>
+      <div
+        style={{
+          background: "#fff",
+          padding: "20px",
+          borderRadius: "15px",
+          boxShadow:
+            "0 5px 15px rgba(0,0,0,0.08)",
+          marginBottom: "25px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "15px",
+            alignItems: "center",
+          }}
+        >
+          {/* Search */}
 
-              <td>{land.title}</td>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              background: "#F5F7FA",
+              border: "1px solid #ddd",
+              borderRadius: "10px",
+              padding: "12px",
+              flex: 1,
+              minWidth: "280px",
+            }}
+          >
+            <FaSearch color="#777" />
 
-              <td>{land.village}</td>
-
-              <td>{land.district}</td>
-
-              <td>{land.area} Acres</td>
-
-              <td>₹ {land.price}</td>
-
-              <td>{land.crop_type}</td>
-
-              <td>
-                <button
-                  onClick={() => navigate(`/admin/edit-land/${land.id}`)}
-                  style={{
-                   backgroundColor: "#1976D2",
-                   color: "white",
-                   border: "none",
-                   padding: "8px 12px",
-                   marginRight: "10px",
-                   borderRadius: "5px",
-                   cursor: "pointer",
-                 }}
-              >
-                Edit
-            </button>
-
-           <button
-             onClick={() => deleteLand(land.id)}
-             style={{
-               backgroundColor: "#d32f2f",
-               color: "white",
-               border: "none",
-               padding: "8px 12px",
-               borderRadius: "5px",
-               cursor: "pointer",
+            <input
+              type="text"
+              placeholder="Search title, owner, village, mandal, district, survey number..."
+              value={search}
+              onChange={handleSearchChange}
+              style={{
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                marginLeft: "10px",
+                width: "100%",
+                fontSize: "15px",
               }}
-             >
-               Delete
-            </button>
-          </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            />
+
+            {searchLoading && (
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "#1976D2",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Searching...
+              </span>
+            )}
+          </div>
+
+          {/* Status */}
+
+          <select
+            value={status}
+            onChange={handleStatusChange}
+            style={{
+              padding: "13px",
+              borderRadius: "10px",
+              border: "1px solid #ccc",
+              background: "#fff",
+              fontSize: "15px",
+              minWidth: "160px",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+
+          {/* District */}
+
+          <input
+            type="text"
+            placeholder="District"
+            value={district}
+            onChange={handleDistrictChange}
+            style={{
+              padding: "12px",
+              borderRadius: "10px",
+              border: "1px solid #ccc",
+              minWidth: "160px",
+              fontSize: "15px",
+            }}
+          />
+
+          {/* Refresh */}
+
+          <button
+            onClick={fetchLands}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              background: "#2E7D32",
+              color: "#fff",
+              border: "none",
+              padding: "13px 20px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            <FaSyncAlt />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Summary */}
+
+      <div
+        style={{
+          background: "#fff",
+          padding: "20px",
+          borderRadius: "15px",
+          marginBottom: "25px",
+          boxShadow:
+            "0 5px 15px rgba(0,0,0,0.08)",
+        }}
+      >
+        <h3 style={{ margin: 0 }}>
+          Total Lands: {total}
+        </h3>
+
+        <p
+          style={{
+            marginBottom: 0,
+            color: "#666",
+          }}
+        >
+          Showing {lands.length} lands on page {page}
+        </p>
+      </div>
+
+      {/* No results */}
+
+      {lands.length === 0 ? (
+        <div
+          style={{
+            background: "#fff",
+            padding: "50px 30px",
+            borderRadius: "15px",
+            textAlign: "center",
+            boxShadow:
+              "0 5px 15px rgba(0,0,0,0.08)",
+          }}
+        >
+          <h2>No Lands Found</h2>
+
+          <p style={{ color: "#777" }}>
+            Try changing your search or filters.
+          </p>
+        </div>
+      ) : (
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: "15px",
+            overflowX: "auto",
+            boxShadow:
+              "0 5px 15px rgba(0,0,0,0.08)",
+          }}
+        >
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              minWidth: "1400px",
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  background: "#E8F5E9",
+                }}
+              >
+                <th style={thStyle}>ID</th>
+                <th style={thStyle}>Image</th>
+                <th style={thStyle}>Owner</th>
+                <th style={thStyle}>Email</th>
+                <th style={thStyle}>Mobile</th>
+                <th style={thStyle}>Title</th>
+                <th style={thStyle}>Village</th>
+                <th style={thStyle}>Mandal</th>
+                <th style={thStyle}>District</th>
+                <th style={thStyle}>Area</th>
+                <th style={thStyle}>Price</th>
+                <th style={thStyle}>Crop</th>
+                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {lands.map((land) => (
+                <tr key={land.id}>
+                  <td style={tdStyle}>
+                    {land.id}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.image_url ? (
+                      <img
+                        src={land.image_url}
+                        alt={land.title}
+                        width="80"
+                        height="60"
+                        style={{
+                          objectFit: "cover",
+                          borderRadius: "5px",
+                        }}
+                      />
+                    ) : (
+                      "No Image"
+                    )}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.owner_name || "Unknown"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.owner_email || "N/A"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.owner_mobile || "N/A"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.title || "N/A"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.village || "N/A"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.mandal || "N/A"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.district || "N/A"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.area || 0} Acres
+                  </td>
+
+                  <td style={tdStyle}>
+                    ₹ {land.price || 0}
+                  </td>
+
+                  <td style={tdStyle}>
+                    {land.crop_type || "N/A"}
+                  </td>
+
+                  <td style={tdStyle}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "6px 10px",
+                        borderRadius: "20px",
+                        background:
+                          getStatusColor(
+                            land.status
+                          ),
+                        color: "#fff",
+                        fontWeight: "bold",
+                        textTransform:
+                          "capitalize",
+                      }}
+                    >
+                      {land.status || "Unknown"}
+                    </span>
+                  </td>
+
+                  <td style={tdStyle}>
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/admin/edit-land/${land.id}`
+                        )
+                      }
+                      style={{
+                        backgroundColor:
+                          "#1976D2",
+                        color: "white",
+                        border: "none",
+                        padding: "8px 12px",
+                        marginRight: "8px",
+                        borderRadius: "5px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        deleteLand(land.id)
+                      }
+                      style={{
+                        backgroundColor:
+                          "#d32f2f",
+                        color: "white",
+                        border: "none",
+                        padding: "8px 12px",
+                        borderRadius: "5px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+
+      {total > 0 && (
+        <div
+          style={{
+            marginTop: "30px",
+            background: "#fff",
+            padding: "18px",
+            borderRadius: "15px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "20px",
+            flexWrap: "wrap",
+            boxShadow:
+              "0 5px 15px rgba(0,0,0,0.08)",
+          }}
+        >
+          <button
+            onClick={handlePreviousPage}
+            disabled={page === 1}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 18px",
+              border: "none",
+              borderRadius: "8px",
+              background:
+                page === 1
+                  ? "#ddd"
+                  : "#1976D2",
+              color:
+                page === 1
+                  ? "#777"
+                  : "#fff",
+              cursor:
+                page === 1
+                  ? "not-allowed"
+                  : "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            <FaChevronLeft />
+            Previous
+          </button>
+
+          <div
+            style={{
+              fontWeight: "bold",
+              color: "#333",
+              minWidth: "130px",
+              textAlign: "center",
+            }}
+          >
+            Page {page} of {totalPages}
+          </div>
+
+          <button
+            onClick={handleNextPage}
+            disabled={page >= totalPages}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 18px",
+              border: "none",
+              borderRadius: "8px",
+              background:
+                page >= totalPages
+                  ? "#ddd"
+                  : "#1976D2",
+              color:
+                page >= totalPages
+                  ? "#777"
+                  : "#fff",
+              cursor:
+                page >= totalPages
+                  ? "not-allowed"
+                  : "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            Next
+            <FaChevronRight />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
+const thStyle = {
+  padding: "12px",
+  borderBottom: "1px solid #ddd",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle = {
+  padding: "12px",
+  borderBottom: "1px solid #eee",
+  verticalAlign: "middle",
+};
 
 export default Lands;
