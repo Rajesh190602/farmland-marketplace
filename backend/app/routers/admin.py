@@ -194,12 +194,36 @@ def get_all_lands(
 
 @router.get("/lands/pending")
 def get_pending_lands(
+    search: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    lands = (
+    query = (
         db.query(Land)
         .filter(Land.status == "pending")
+    )
+
+    # Search pending lands
+    if search:
+        query = query.filter(
+            (Land.title.ilike(f"%{search}%")) |
+            (Land.village.ilike(f"%{search}%")) |
+            (Land.mandal.ilike(f"%{search}%")) |
+            (Land.district.ilike(f"%{search}%")) |
+            (Land.survey_number.ilike(f"%{search}%"))
+        )
+
+    # Total matching pending lands
+    total = query.count()
+
+    # Pagination
+    lands = (
+        query
+        .order_by(Land.id.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
         .all()
     )
 
@@ -216,17 +240,34 @@ def get_pending_lands(
         result.append({
             "id": land.id,
             "title": land.title,
+            "description": land.description,
             "price": land.price,
             "area": land.area,
             "village": land.village,
+            "mandal": land.mandal,
             "district": land.district,
+            "state": land.state,
+            "pincode": land.pincode,
+            "survey_number": land.survey_number,
+            "soil_type": land.soil_type,
+            "water_source": land.water_source,
+            "crop_type": land.crop_type,
+            "latitude": land.latitude,
+            "longitude": land.longitude,
             "status": land.status,
-            "owner_name": owner.full_name if owner else "",
-            "owner_mobile": owner.mobile if owner else "",
             "image_url": land.image_url,
+            "owner_id": land.owner_id,
+            "owner_name": owner.full_name if owner else "",
+            "owner_email": owner.email if owner else "",
+            "owner_mobile": owner.mobile if owner else "",
         })
 
-    return result
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "lands": result,
+    }
 @router.put("/lands/{land_id}/approve")
 def approve_land(
     land_id: int,
