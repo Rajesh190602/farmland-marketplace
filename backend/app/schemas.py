@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List,Literal
 class ProfileUpdate(BaseModel):
     full_name: str
     mobile: str
@@ -62,6 +62,7 @@ class UserCreate(BaseModel):
     mobile: str
     email: EmailStr
     password: str
+    role: Literal["farmer", "buyer"] = "farmer"
 
 
 class UserLogin(BaseModel):

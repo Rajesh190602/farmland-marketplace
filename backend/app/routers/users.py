@@ -12,6 +12,7 @@ from app.schemas import ChangePassword
 from app.auth import verify_password, get_password_hash
 from app.models import User, EmailVerification
 from pydantic import BaseModel, EmailStr
+from typing import Optional, List, Literal
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -107,7 +108,8 @@ def register(
         full_name=user.full_name,
         mobile=user.mobile,
         email=user.email,
-        password=hash_password(user.password)
+        password=hash_password(user.password),
+        role=user.role
     )
 
     db.add(new_user)
