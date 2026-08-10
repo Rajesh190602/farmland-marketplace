@@ -168,15 +168,21 @@ def search_lands(
 @router.get("/{land_id}")
 def get_land(land_id: int, db: Session = Depends(get_db)):
 
-    land = db.query(Land).filter(Land.id == land_id).first()
-
+    land = (
+        db.query(Land)
+        .filter(
+            Land.id == land_id,
+            Land.status == "approved"
+        )
+        .first()
+    )
     if not land:
         raise HTTPException(
             status_code=404,
             detail="Land not found"
         )
 
-    owner = db.query(User).filter(User.id == land.owner_id).first()
+    owner =( db.query(User).filter(User.id == land.owner_id).first() )
 
     return {
         "id": land.id,
