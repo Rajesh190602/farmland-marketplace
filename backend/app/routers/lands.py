@@ -22,6 +22,20 @@ def create_land(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # Only farmers can create land listings
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    if user.role != "farmer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only farmers can add land"
+        )
 
     new_land = Land(
         title=land.title,
@@ -50,7 +64,7 @@ def create_land(
     db.refresh(new_land)
 
     return {
-        "message": "Land Added Successfully  and is waiting for admin approval. ",
+        "message": "Land Added Successfully and is waiting for admin approval.",
         "land_id": new_land.id
     }
 
