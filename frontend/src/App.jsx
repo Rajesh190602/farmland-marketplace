@@ -29,7 +29,7 @@ import AdminEditLand from "./pages/admin/EditLand";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
-
+import FarmerRoute from "./components/FarmerRoute";
 function App() {
   return (
     <BrowserRouter>
@@ -63,18 +63,18 @@ function App() {
         <Route
           path="/add-land"
           element={
-            <ProtectedRoute>
+            <FarmerRoute>
               <AddLand />
-            </ProtectedRoute>
+            </FarmerRoute>
           }
         />
 
         <Route
           path="/my-lands"
           element={
-            <ProtectedRoute>
+            <FarmerRoute>
               <MyLands />
-            </ProtectedRoute>
+            </FarmerRoute>
           }
         />
 
