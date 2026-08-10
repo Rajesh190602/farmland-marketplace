@@ -126,7 +126,9 @@ def search_lands(
     max_area: float | None = Query(None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Land)
+    query = db.query(Land).filter(
+        Land.status == "approved"
+    )
 
     if district:
         query = query.filter(Land.district.ilike(f"%{district}%"))
