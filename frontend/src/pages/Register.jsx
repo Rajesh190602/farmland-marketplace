@@ -7,6 +7,7 @@ import {
   FaLock,
   FaEye,
   FaEyeSlash,
+  FaUserTag,
 } from "react-icons/fa";
 import api from "../services/api";
 
@@ -22,6 +23,7 @@ function Register() {
     mobile: "",
     email: "",
     password: "",
+    role: "farmer",
   });
 
   // ===============================
@@ -72,7 +74,8 @@ function Register() {
       [name]: value,
     }));
   };
-    // ===============================
+
+  // ===============================
   // Countdown Timer
   // ===============================
 
@@ -164,9 +167,11 @@ function Register() {
       setOtp(["", "", "", "", "", ""]);
 
       setTimer(60);
-
     } catch (error) {
-      alert(error.response?.data?.detail || "Unable to send OTP");
+      alert(
+        error.response?.data?.detail ||
+          "Unable to send OTP"
+      );
     } finally {
       setLoading(false);
     }
@@ -193,9 +198,11 @@ function Register() {
       alert(response.data.message);
 
       setOtpVerified(true);
-
     } catch (error) {
-      alert(error.response?.data?.detail || "OTP Verification Failed");
+      alert(
+        error.response?.data?.detail ||
+          "OTP Verification Failed"
+      );
     } finally {
       setLoading(false);
     }
@@ -213,8 +220,18 @@ function Register() {
       return;
     }
 
+    if (!formData.full_name.trim()) {
+      alert("Please enter your full name.");
+      return;
+    }
+
     if (formData.mobile.length !== 10) {
       alert("Please enter a valid mobile number.");
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      alert("Please enter your email.");
       return;
     }
 
@@ -223,24 +240,63 @@ function Register() {
       return;
     }
 
+    if (
+      !["farmer", "buyer"].includes(formData.role)
+    ) {
+      alert("Please select Farmer or Buyer.");
+      return;
+    }
+
     try {
       setLoading(true);
 
-      await api.post("/users/register", formData);
+      const registrationData = {
+        full_name: formData.full_name.trim(),
+        mobile: formData.mobile,
+        email: formData.email.trim(),
+        password: formData.password,
+        role: formData.role,
+      };
 
-      alert("Registration Successful!");
+      console.log(
+        "Registration data:",
+        {
+          ...registrationData,
+          password: "********",
+        }
+      );
+
+      await api.post(
+        "/users/register",
+        registrationData
+      );
+
+      alert(
+        `${
+          formData.role === "buyer"
+            ? "Buyer"
+            : "Farmer"
+        } account created successfully!`
+      );
 
       navigate("/");
-
     } catch (error) {
-      alert(error.response?.data?.detail || "Registration Failed");
+      console.error(
+        "Registration error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Registration Failed"
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-        <div
+    <div
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -255,7 +311,12 @@ function Register() {
 
         {/* Heading */}
 
-        <div style={{ textAlign: "center", marginBottom: "30px" }}>
+        <div
+          style={{
+            textAlign: "center",
+            marginBottom: "30px",
+          }}
+        >
           <h1
             style={{
               color: "#2E7D32",
@@ -271,18 +332,119 @@ function Register() {
               fontSize: "16px",
             }}
           >
-            Create your Farmer Account
+            Create your account
           </p>
         </div>
 
         <form onSubmit={register}>
 
           {/* ===========================
+              Account Type
+          ============================ */}
+
+          <div
+            style={{
+              marginBottom: "20px",
+            }}
+          >
+            <label
+              style={{
+                display: "block",
+                fontWeight: "bold",
+                color: "#333",
+                marginBottom: "10px",
+              }}
+            >
+              Account Type
+            </label>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+              }}
+            >
+              {/* Farmer */}
+
+              <label
+                style={{
+                  flex: 1,
+                  border:
+                    formData.role === "farmer"
+                      ? "2px solid #2E7D32"
+                      : "1px solid #ccc",
+                  background:
+                    formData.role === "farmer"
+                      ? "#E8F5E9"
+                      : "#fff",
+                  borderRadius: "10px",
+                  padding: "14px",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  fontWeight: "bold",
+                  color: "#2E7D32",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value="farmer"
+                  checked={
+                    formData.role === "farmer"
+                  }
+                  onChange={handleChange}
+                  style={{
+                    marginRight: "8px",
+                  }}
+                />
+
+                🌾 Farmer
+              </label>
+
+              {/* Buyer */}
+
+              <label
+                style={{
+                  flex: 1,
+                  border:
+                    formData.role === "buyer"
+                      ? "2px solid #1976D2"
+                      : "1px solid #ccc",
+                  background:
+                    formData.role === "buyer"
+                      ? "#E3F2FD"
+                      : "#fff",
+                  borderRadius: "10px",
+                  padding: "14px",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  fontWeight: "bold",
+                  color: "#1976D2",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value="buyer"
+                  checked={
+                    formData.role === "buyer"
+                  }
+                  onChange={handleChange}
+                  style={{
+                    marginRight: "8px",
+                  }}
+                />
+
+                🛒 Buyer
+              </label>
+            </div>
+          </div>
+
+          {/* ===========================
               Full Name
           ============================ */}
 
           <div style={inputWrapper}>
-
             <FaUser style={iconStyle} />
 
             <input
@@ -294,7 +456,6 @@ function Register() {
               required
               style={modernInput}
             />
-
           </div>
 
           {/* ===========================
@@ -302,7 +463,6 @@ function Register() {
           ============================ */}
 
           <div style={inputWrapper}>
-
             <FaPhone style={iconStyle} />
 
             <input
@@ -311,7 +471,11 @@ function Register() {
               placeholder="10-digit Mobile Number"
               value={formData.mobile}
               onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "");
+                const value =
+                  e.target.value.replace(
+                    /\D/g,
+                    ""
+                  );
 
                 if (value.length <= 10) {
                   setFormData((prev) => ({
@@ -323,7 +487,6 @@ function Register() {
               required
               style={modernInput}
             />
-
           </div>
 
           {/* ===========================
@@ -331,7 +494,6 @@ function Register() {
           ============================ */}
 
           <div style={inputWrapper}>
-
             <FaEnvelope style={iconStyle} />
 
             <input
@@ -349,17 +511,19 @@ function Register() {
                   : "#FFFFFF",
               }}
             />
-
           </div>
-                    {/* ===========================
+
+          {/* ===========================
               Send OTP Button
           ============================ */}
 
           <button
             type="button"
             onClick={sendOTP}
-            disabled={loading || (otpSent && timer > 0)}
-           
+            disabled={
+              loading ||
+              (otpSent && timer > 0)
+            }
             style={blueButton}
           >
             {loading
@@ -382,11 +546,19 @@ function Register() {
                 fontSize: "16px",
               }}
             >
-              <p style={{ marginBottom: "8px" }}>
+              <p
+                style={{
+                  marginBottom: "8px",
+                }}
+              >
                 OTP sent to
               </p>
 
-              <strong style={{ color: "#2E7D32" }}>
+              <strong
+                style={{
+                  color: "#2E7D32",
+                }}
+              >
                 {formData.email}
               </strong>
 
@@ -401,9 +573,15 @@ function Register() {
                 {timer > 0 ? (
                   <>
                     Resend in{" "}
-                    {String(Math.floor(timer / 60)).padStart(2, "0")}
+                    {String(
+                      Math.floor(
+                        timer / 60
+                      )
+                    ).padStart(2, "0")}
                     :
-                    {String(timer % 60).padStart(2, "0")}
+                    {String(
+                      timer % 60
+                    ).padStart(2, "0")}
                   </>
                 ) : (
                   <button
@@ -452,19 +630,28 @@ function Register() {
                   marginBottom: "25px",
                 }}
               >
-                              {otp.map((digit, index) => (
+                {otp.map((digit, index) => (
                   <input
                     key={index}
-                    ref={(el) => (otpRefs.current[index] = el)}
+                    ref={(el) =>
+                      (otpRefs.current[index] =
+                        el)
+                    }
                     type="text"
                     inputMode="numeric"
                     maxLength={1}
                     value={digit}
                     onChange={(e) =>
-                      handleOTPChange(e.target.value, index)
+                      handleOTPChange(
+                        e.target.value,
+                        index
+                      )
                     }
                     onKeyDown={(e) =>
-                      handleOTPKeyDown(e, index)
+                      handleOTPKeyDown(
+                        e,
+                        index
+                      )
                     }
                     onPaste={handlePaste}
                     style={otpBox}
@@ -491,7 +678,6 @@ function Register() {
 
           {otpVerified && (
             <div style={successBox}>
-
               <div
                 style={{
                   fontSize: "50px",
@@ -516,33 +702,43 @@ function Register() {
                   color: "#2E7D32",
                 }}
               >
-                You can now create your account.
+                You can now create your{" "}
+                {formData.role === "buyer"
+                  ? "Buyer"
+                  : "Farmer"}{" "}
+                account.
               </div>
-
             </div>
           )}
-                    {/* ===========================
+
+          {/* ===========================
               Password
           ============================ */}
 
           <div style={inputWrapper}>
-
             <FaLock style={iconStyle} />
 
             <input
-              type={showPassword ? "text" : "password"}
+              type={
+                showPassword
+                  ? "text"
+                  : "password"
+              }
               name="password"
               placeholder="Password (Minimum 8 characters)"
               value={formData.password}
               onChange={handleChange}
               required
+              minLength={8}
               style={modernInput}
             />
 
             <span
               style={eyeStyle}
               onClick={() =>
-                setShowPassword(!showPassword)
+                setShowPassword(
+                  !showPassword
+                )
               }
             >
               {showPassword ? (
@@ -551,7 +747,6 @@ function Register() {
                 <FaEye />
               )}
             </span>
-
           </div>
 
           {/* ===========================
@@ -564,7 +759,9 @@ function Register() {
             style={{
               ...greenButton,
               opacity:
-                otpVerified && !loading ? 1 : 0.6,
+                otpVerified && !loading
+                  ? 1
+                  : 0.6,
               cursor:
                 otpVerified && !loading
                   ? "pointer"
@@ -573,9 +770,12 @@ function Register() {
           >
             {loading
               ? "Creating Account..."
-              : "Create Account"}
+              : `Create ${
+                  formData.role === "buyer"
+                    ? "Buyer"
+                    : "Farmer"
+                } Account`}
           </button>
-
         </form>
 
         {/* ===========================
@@ -603,12 +803,12 @@ function Register() {
             Login
           </Link>
         </div>
-
       </div>
     </div>
   );
 }
-  // =====================================
+
+// =====================================
 // Styles
 // =====================================
 
@@ -618,8 +818,9 @@ const cardStyle = {
   background: "#ffffff",
   borderRadius: "18px",
   padding: "35px",
-   padding: window.innerWidth < 480 ? "20px" : "35px",
-  boxShadow: "0 15px 40px rgba(0,0,0,0.15)",
+  boxSizing: "border-box",
+  boxShadow:
+    "0 15px 40px rgba(0,0,0,0.15)",
 };
 
 const inputWrapper = {
@@ -631,7 +832,8 @@ const inputWrapper = {
   borderRadius: "10px",
   padding: "0 15px",
   marginBottom: "18px",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+  boxShadow:
+    "0 2px 8px rgba(0,0,0,0.06)",
 };
 
 const modernInput = {
@@ -713,8 +915,8 @@ const greenButton = {
   fontSize: "17px",
   fontWeight: "bold",
   transition: "0.3s",
-  boxShadow: "0 5px 15px rgba(46,125,50,0.3)",
+  boxShadow:
+    "0 5px 15px rgba(46,125,50,0.3)",
 };
+
 export default Register;
-
-
