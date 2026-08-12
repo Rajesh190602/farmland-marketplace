@@ -296,7 +296,7 @@ function LandDetails() {
         }}
       >
         <a
-          href={`https://www.google.com/maps?q=${land.latitude},${land.longitude}`}
+          href={`https://www.google.com/maps/dir/?api=1&destination=${land.latitude},${land.longitude}`}
           target="_blank"
           rel="noopener noreferrer"
           style={{
@@ -309,7 +309,8 @@ function LandDetails() {
             fontWeight: "bold",
           }}
         >
-          📍 Open in Google Maps
+          🧭 Get Directions
+            
         </a>
       </div>
     </>
