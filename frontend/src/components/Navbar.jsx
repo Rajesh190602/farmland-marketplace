@@ -37,6 +37,23 @@ useEffect(() => {
     clearInterval(interval);
   };
 }, []);
+useEffect(() => {
+  const handleNotificationsUpdated = () => {
+    fetchUnreadCount();
+  };
+
+  window.addEventListener(
+    "notificationsUpdated",
+    handleNotificationsUpdated
+  );
+
+  return () => {
+    window.removeEventListener(
+      "notificationsUpdated",
+      handleNotificationsUpdated
+    );
+  };
+}, []);
 const fetchUnreadCount = async () => {
   try {
     const response = await api.get("/notifications/unread-count");
