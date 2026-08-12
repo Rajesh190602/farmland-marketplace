@@ -545,6 +545,7 @@ def district_analytics(
             Land.district,
             func.count(Land.id).label("count")
         )
+        .filter(Land.status == "approved")
         .group_by(Land.district)
         .order_by(func.count(Land.id).desc())
         .all()
@@ -564,11 +565,18 @@ def monthly_growth(
 ):
     results = (
         db.query(
+            extract("year", User.created_at).label("year"),
             extract("month", User.created_at).label("month"),
             func.count(User.id).label("users")
         )
-        .group_by(extract("month", User.created_at))
-        .order_by(extract("month", User.created_at))
+        .group_by(
+            extract("year", User.created_at),
+            extract("month", User.created_at)
+        )
+        .order_by(
+            extract("year", User.created_at),
+            extract("month", User.created_at)
+        )
         .all()
     )
 
@@ -581,9 +589,9 @@ def monthly_growth(
 
     return [
         {
-            "month": months[int(month)],
+            "month": f"{months[int(month)]} {int(year)}",
             "users": users
         }
-        for month, users in results
-        if month is not None
+        for year, month, users in results
+        if year is not None and month is not None
     ]
