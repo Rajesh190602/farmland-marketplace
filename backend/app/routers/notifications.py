@@ -1,18 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+
 from app.database import get_db
 from app.models import Notification
 from app.auth import get_current_user
-class NotificationCreate(BaseModel):
-    user_id: int
-    title: str
-    message: str
+
 
 router = APIRouter(
     prefix="/notifications",
     tags=["Notifications"]
 )
+
+
+# ==========================
+# Get My Notifications
+# ==========================
+
 @router.get("/")
 def get_notifications(
     db: Session = Depends(get_db),
@@ -20,11 +23,21 @@ def get_notifications(
 ):
     notifications = (
         db.query(Notification)
-        .filter(Notification.user_id == current_user)
-        .order_by(Notification.created_at.desc())
+        .filter(
+            Notification.user_id == current_user
+        )
+        .order_by(
+            Notification.created_at.desc()
+        )
         .all()
     )
+
     return notifications
+
+
+# ==========================
+# Get Unread Notification Count
+# ==========================
 
 @router.get("/unread-count")
 def unread_count(
@@ -44,16 +57,17 @@ def unread_count(
         "unread_count": count
     }
 
-    return notifications
+
+# ==========================
+# Mark Notification As Read
+# ==========================
+
 @router.put("/{notification_id}/read")
 def mark_as_read(
     notification_id: int,
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    print("Current User ID:", current_user)
-    print("Notification ID:", notification_id)
-
     notification = (
         db.query(Notification)
         .filter(
@@ -64,12 +78,25 @@ def mark_as_read(
     )
 
     if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Notification not found"
+        )
 
     notification.is_read = True
-    db.commit()
 
-    return {"message": "Notification marked as read"}
+    db.commit()
+    db.refresh(notification)
+
+    return {
+        "message": "Notification marked as read"
+    }
+
+
+# ==========================
+# Delete Notification
+# ==========================
+
 @router.delete("/{notification_id}")
 def delete_notification(
     notification_id: int,
@@ -94,23 +121,6 @@ def delete_notification(
     db.delete(notification)
     db.commit()
 
-    return {"message": "Notification deleted successfully"}
-@router.post("/")
-def create_notification(
-    notification: NotificationCreate,
-    db: Session = Depends(get_db)
-):
-    new_notification = Notification(
-        user_id=notification.user_id,
-        title=notification.title,
-        message=notification.message
-    )
-
-    db.add(new_notification)
-    db.commit()
-    db.refresh(new_notification)
-
     return {
-        "message": "Notification created successfully",
-        "notification": new_notification
+        "message": "Notification deleted successfully"
     }
