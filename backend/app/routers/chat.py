@@ -13,11 +13,16 @@ from app.models import (
 )
 from app.schemas import ConversationCreate, MessageCreate
 
+
 router = APIRouter(
     prefix="/chat",
     tags=["Chat"]
 )
 
+
+# ==========================
+# Start Chat
+# ==========================
 
 @router.post("/start")
 def start_chat(
@@ -25,15 +30,40 @@ def start_chat(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    # Check land exists
-    land = db.query(Land).filter(
-        Land.id == data.land_id
-    ).first()
+    # Get current user
+    buyer = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not buyer:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # Only buyers can start marketplace chats
+    if buyer.role != "buyer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only buyers can start a chat"
+        )
+
+    # Only approved lands can be contacted
+    land = (
+        db.query(Land)
+        .filter(
+            Land.id == data.land_id,
+            Land.status == "approved"
+        )
+        .first()
+    )
 
     if not land:
         raise HTTPException(
             status_code=404,
-            detail="Land not found"
+            detail="Approved land not found"
         )
 
     # Prevent chatting with own land
@@ -44,11 +74,15 @@ def start_chat(
         )
 
     # Check existing conversation
-    conversation = db.query(Conversation).filter(
-        Conversation.land_id == land.id,
-        Conversation.buyer_id == current_user,
-        Conversation.farmer_id == land.owner_id
-    ).first()
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.land_id == land.id,
+            Conversation.buyer_id == current_user,
+            Conversation.farmer_id == land.owner_id
+        )
+        .first()
+    )
 
     if conversation:
         return {
@@ -67,16 +101,14 @@ def start_chat(
     db.commit()
     db.refresh(conversation)
 
-    # Get buyer details
-    buyer = db.query(User).filter(
-        User.id == current_user
-    ).first()
-
     # Create notification for farmer
     notification = Notification(
         user_id=land.owner_id,
         title="💬 New Chat",
-        message=f"{buyer.full_name} started a conversation about your land '{land.title}'."
+        message=(
+            f"{buyer.full_name} started a conversation "
+            f"about your land '{land.title}'."
+        )
     )
 
     db.add(notification)
@@ -87,15 +119,24 @@ def start_chat(
         "message": "Conversation created successfully"
     }
 
+
+# ==========================
+# Send Message
+# ==========================
+
 @router.post("/send")
 def send_message(
     data: MessageCreate,
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    conversation = db.query(Conversation).filter(
-        Conversation.id == data.conversation_id
-    ).first()
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id == data.conversation_id
+        )
+        .first()
+    )
 
     if not conversation:
         raise HTTPException(
@@ -103,17 +144,28 @@ def send_message(
             detail="Conversation not found"
         )
 
-    if current_user not in [conversation.buyer_id, conversation.farmer_id]:
+    # Only conversation participants can send messages
+    if current_user not in [
+        conversation.buyer_id,
+        conversation.farmer_id
+    ]:
         raise HTTPException(
             status_code=403,
             detail="You are not part of this conversation"
+        )
+
+    # Prevent empty messages
+    if not data.message or not data.message.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty"
         )
 
     # Save message
     message = Message(
         conversation_id=conversation.id,
         sender_id=current_user,
-        message=data.message
+        message=data.message.strip()
     )
 
     db.add(message)
@@ -121,9 +173,11 @@ def send_message(
     db.refresh(message)
 
     # Get sender details
-    sender = db.query(User).filter(
-        User.id == current_user
-    ).first()
+    sender = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
 
     # Decide receiver
     if current_user == conversation.buyer_id:
@@ -135,7 +189,10 @@ def send_message(
     notification = Notification(
         user_id=receiver_id,
         title="💬 New Message",
-        message=f"{sender.full_name} sent you a new message."
+        message=(
+            f"{sender.full_name if sender else 'User'} "
+            "sent you a new message."
+        )
     )
 
     db.add(notification)
@@ -147,6 +204,9 @@ def send_message(
     }
 
 
+# ==========================
+# Get Messages
+# ==========================
 
 @router.get("/messages/{conversation_id}")
 def get_messages(
@@ -154,9 +214,13 @@ def get_messages(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    conversation = db.query(Conversation).filter(
-        Conversation.id == conversation_id
-    ).first()
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id == conversation_id
+        )
+        .first()
+    )
 
     if not conversation:
         raise HTTPException(
@@ -164,7 +228,11 @@ def get_messages(
             detail="Conversation not found"
         )
 
-    if current_user not in [conversation.buyer_id, conversation.farmer_id]:
+    # Only participants can read messages
+    if current_user not in [
+        conversation.buyer_id,
+        conversation.farmer_id
+    ]:
         raise HTTPException(
             status_code=403,
             detail="Access denied"
@@ -172,13 +240,19 @@ def get_messages(
 
     messages = (
         db.query(Message)
-        .filter(Message.conversation_id == conversation_id)
+        .filter(
+            Message.conversation_id == conversation_id
+        )
         .order_by(Message.created_at.asc())
         .all()
     )
 
     return messages
 
+
+# ==========================
+# My Conversations
+# ==========================
 
 @router.get("/my-conversations")
 def my_conversations(
@@ -202,17 +276,29 @@ def my_conversations(
     for conversation in conversations:
 
         if conversation.buyer_id == current_user:
-            other_user = db.query(User).filter(
-                User.id == conversation.farmer_id
-            ).first()
+            other_user = (
+                db.query(User)
+                .filter(
+                    User.id == conversation.farmer_id
+                )
+                .first()
+            )
         else:
-            other_user = db.query(User).filter(
-                User.id == conversation.buyer_id
-            ).first()
+            other_user = (
+                db.query(User)
+                .filter(
+                    User.id == conversation.buyer_id
+                )
+                .first()
+            )
 
-        land = db.query(Land).filter(
-            Land.id == conversation.land_id
-        ).first()
+        land = (
+            db.query(Land)
+            .filter(
+                Land.id == conversation.land_id
+            )
+            .first()
+        )
 
         last_message = (
             db.query(Message)
@@ -226,10 +312,20 @@ def my_conversations(
         result.append({
             "conversation_id": conversation.id,
             "land_title": land.title if land else "",
-            "other_user": other_user.full_name if other_user else "",
-            "last_message": last_message.message if last_message else "",
+            "other_user": (
+                other_user.full_name
+                if other_user
+                else ""
+            ),
+            "last_message": (
+                last_message.message
+                if last_message
+                else ""
+            ),
             "last_message_time": (
-                last_message.created_at if last_message else None
+                last_message.created_at
+                if last_message
+                else None
             )
         })
 
