@@ -20,24 +20,30 @@ import Notifications from "./pages/Notifications";
 
 import AdminLayout from "./components/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminLands from "./pages/admin/AdminLands";
 import Users from "./pages/admin/Users";
 import UserDetails from "./pages/admin/UserDetails";
 import EditUser from "./pages/admin/EditUser";
-import Lands from "./pages/admin/Lands";
 import PendingLands from "./pages/admin/PendingLands";
 import AdminEditLand from "./pages/admin/EditLand";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import FarmerRoute from "./components/FarmerRoute";
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* Public Routes */}
+        {/* =====================================================
+            Public Routes
+        ===================================================== */}
 
-        <Route path="/" element={<Login />} />
+        <Route
+          path="/"
+          element={<Login />}
+        />
 
         <Route
           path="/register"
@@ -49,7 +55,10 @@ function App() {
           element={<ForgotPassword />}
         />
 
-        {/* Farmer Routes */}
+
+        {/* =====================================================
+            Farmer / Protected Routes
+        ===================================================== */}
 
         <Route
           path="/home"
@@ -167,7 +176,11 @@ function App() {
             </ProtectedRoute>
           }
         />
-                {/* Admin Routes */}
+
+
+        {/* =====================================================
+            Admin Routes
+        ===================================================== */}
 
         <Route
           path="/admin"
@@ -177,40 +190,49 @@ function App() {
             </AdminRoute>
           }
         >
+
+          {/* /admin */}
           <Route
             index
             element={<AdminDashboard />}
           />
 
+          {/* /admin/users */}
           <Route
             path="users"
             element={<Users />}
           />
 
+          {/* /admin/users/:id */}
           <Route
             path="users/:id"
             element={<UserDetails />}
           />
 
+          {/* /admin/users/edit/:id */}
           <Route
             path="users/edit/:id"
             element={<EditUser />}
           />
 
+          {/* /admin/lands */}
           <Route
             path="lands"
-            element={<Lands />}
+            element={<AdminLands />}
           />
 
+          {/* /admin/pending-lands */}
           <Route
             path="pending-lands"
             element={<PendingLands />}
           />
 
+          {/* /admin/edit-land/:id */}
           <Route
             path="edit-land/:id"
             element={<AdminEditLand />}
           />
+
         </Route>
 
       </Routes>

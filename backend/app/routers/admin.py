@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import User, Land, Notification
+from app.models import User, Land, Notification,LandImage
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from sqlalchemy import func,extract
 from app.models import User
@@ -138,7 +138,9 @@ def get_all_lands(
         query = query.filter(Land.status == status)
 
     if district:
-        query = query.filter(Land.district.ilike(district))
+        query = query.filter(
+            Land.district.ilike(f"%{district}%")
+        )
 
     total = query.count()
 
@@ -153,6 +155,7 @@ def get_all_lands(
     result = []
 
     for land in lands:
+
         owner = (
             db.query(User)
             .filter(User.id == land.owner_id)
@@ -177,7 +180,20 @@ def get_all_lands(
             "latitude": land.latitude,
             "longitude": land.longitude,
             "status": land.status,
+            "rejection_reason": land.rejection_reason,
+
+            # Existing single image
             "image_url": land.image_url,
+
+            # New multiple-image gallery
+            "images": [
+                {
+                    "id": image.id,
+                    "image_url": image.image_url
+                }
+                for image in land.images
+            ],
+
             "owner_id": land.owner_id,
             "owner_name": owner.full_name if owner else "Unknown",
             "owner_email": owner.email if owner else "",
@@ -190,6 +206,7 @@ def get_all_lands(
         "limit": limit,
         "lands": result,
     }
+
 
 
 @router.get("/lands/pending")
@@ -423,13 +440,23 @@ def get_land_by_id(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = db.query(Land).filter(Land.id == land_id).first()
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
 
     if not land:
         raise HTTPException(
             status_code=404,
             detail="Land not found"
         )
+
+    owner = (
+        db.query(User)
+        .filter(User.id == land.owner_id)
+        .first()
+    )
 
     return {
         "id": land.id,
@@ -448,39 +475,23 @@ def get_land_by_id(
         "crop_type": land.crop_type,
         "latitude": land.latitude,
         "longitude": land.longitude,
-        "image_url": land.image_url
-    }
-@router.get("/users/{user_id}")
-def get_user_by_id(
-    user_id: int,
-    db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
-):
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
+        "status": land.status,
+        "rejection_reason": land.rejection_reason,
 
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
+        "image_url": land.image_url,
 
-    lands_count = (
-        db.query(Land)
-        .filter(Land.owner_id == user.id)
-        .count()
-    )
+        "images": [
+            {
+                "id": image.id,
+                "image_url": image.image_url
+            }
+            for image in land.images
+        ],
 
-    return {
-        "id": user.id,
-        "full_name": user.full_name,
-        "email": user.email,
-        "mobile": user.mobile,
-        "role": user.role,
-        "total_lands": lands_count
+        "owner_id": land.owner_id,
+        "owner_name": owner.full_name if owner else "Unknown",
+        "owner_email": owner.email if owner else "",
+        "owner_mobile": owner.mobile if owner else "",
     }
 @router.put("/users/{user_id}")
 def update_user_admin(
