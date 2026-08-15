@@ -6,6 +6,7 @@ import api from "../services/api";
 function EditLand() {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -23,87 +24,218 @@ function EditLand() {
     soil_type: "",
     water_source: "",
     crop_type: "",
+    latitude: null,
+    longitude: null,
+    image_url: "",
   });
+
+  // =========================================================
+  // Load existing land
+  // =========================================================
 
   useEffect(() => {
     loadLand();
-  }, []);
+  }, [id]);
+
   const loadLand = async () => {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const response = await api.get(`/lands/${id}`);
+      const response = await api.get(`/lands/${id}`);
 
-    setLand(response.data);
+      setLand({
+        title: response.data.title || "",
+        description: response.data.description || "",
+        price: response.data.price ?? "",
+        area: response.data.area ?? "",
+        village: response.data.village || "",
+        mandal: response.data.mandal || "",
+        district: response.data.district || "",
+        state: response.data.state || "",
+        pincode: response.data.pincode || "",
+        survey_number: response.data.survey_number || "",
+        soil_type: response.data.soil_type || "",
+        water_source: response.data.water_source || "",
+        crop_type: response.data.crop_type || "",
+        latitude: response.data.latitude ?? null,
+        longitude: response.data.longitude ?? null,
+        image_url: response.data.image_url || "",
+      });
+    } catch (error) {
+      console.error("Failed to load land:", error);
 
-  } catch (error) {
-    console.log(error);
-    alert("Failed to load land details.");
-    navigate("/my-lands");
-  } finally {
-    setLoading(false);
-  }
-};
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load land details."
+      );
 
-  
+      navigate("/my-lands");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================================================
+  // Handle input changes
+  // =========================================================
 
   const handleChange = (e) => {
-    setLand({
-      ...land,
+    setLand((previous) => ({
+      ...previous,
       [e.target.name]: e.target.value,
-    });
+    }));
   };
-  if (!land.title.trim()) {
-  alert("Title is required.");
-  return;
-}
 
-if (Number(land.price) <= 0) {
-  alert("Enter a valid price.");
-  return;
-}
-
-if (Number(land.area) <= 0) {
-  alert("Enter a valid area.");
-  return;
-}
+  // =========================================================
+  // Update Land
+  // =========================================================
 
   const updateLand = async (e) => {
     e.preventDefault();
 
+    // Validation MUST be inside submit handler
+    if (!land.title.trim()) {
+      alert("Title is required.");
+      return;
+    }
+
+    if (!land.description.trim()) {
+      alert("Description is required.");
+      return;
+    }
+
+    if (Number(land.price) <= 0) {
+      alert("Enter a valid price.");
+      return;
+    }
+
+    if (Number(land.area) <= 0) {
+      alert("Enter a valid area.");
+      return;
+    }
+
+    if (!land.village.trim()) {
+      alert("Village is required.");
+      return;
+    }
+
+    if (!land.mandal.trim()) {
+      alert("Mandal is required.");
+      return;
+    }
+
+    if (!land.district.trim()) {
+      alert("District is required.");
+      return;
+    }
+
+    if (!land.state.trim()) {
+      alert("State is required.");
+      return;
+    }
+
+    if (!land.pincode.trim()) {
+      alert("Pincode is required.");
+      return;
+    }
+
+    if (!land.survey_number.trim()) {
+      alert("Survey Number is required.");
+      return;
+    }
+
+    if (!land.soil_type.trim()) {
+      alert("Soil Type is required.");
+      return;
+    }
+
+    if (!land.water_source.trim()) {
+      alert("Water Source is required.");
+      return;
+    }
+
+    if (!land.crop_type.trim()) {
+      alert("Crop Type is required.");
+      return;
+    }
+
     try {
       setUpdating(true);
+
       await api.put(`/lands/${id}`, {
-        title: land.title,
-        description: land.description,
+        title: land.title.trim(),
+        description: land.description.trim(),
         price: Number(land.price),
         area: Number(land.area),
-        village: land.village,
-        mandal: land.mandal,
-        district: land.district,
-        state: land.state,
-        pincode: land.pincode,
-        survey_number: land.survey_number,
-        soil_type: land.soil_type,
-        water_source: land.water_source,
-        crop_type: land.crop_type,
+
+        village: land.village.trim(),
+        mandal: land.mandal.trim(),
+        district: land.district.trim(),
+        state: land.state.trim(),
+        pincode: land.pincode.trim(),
+
+        survey_number: land.survey_number.trim(),
+
+        soil_type: land.soil_type.trim(),
+        water_source: land.water_source.trim(),
+        crop_type: land.crop_type.trim(),
+
+        latitude: land.latitude,
+        longitude: land.longitude,
+        image_url: land.image_url || null,
       });
 
       alert("Land updated successfully!");
 
       navigate("/my-lands");
-    }  catch (error) {
-    console.log(error);
+    } catch (error) {
+      console.error("Update land error:", error);
 
-    if (error.response) {
-      alert(error.response.data.detail || "Update failed");
-    } else {
-      alert("Server Error");
+      const detail = error.response?.data?.detail;
+
+      if (typeof detail === "string") {
+        alert(detail);
+      } else if (Array.isArray(detail)) {
+        alert(
+          detail
+            .map((item) => item?.msg || JSON.stringify(item))
+            .join("\n")
+        );
+      } else {
+        alert("Failed to update land.");
+      }
+    } finally {
+      setUpdating(false);
     }
-  } finally {
-    setUpdating(false);
+  };
+
+  // =========================================================
+  // Loading screen
+  // =========================================================
+
+  if (loading) {
+    return (
+      <>
+        <Navbar />
+
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "80px",
+            fontSize: "22px",
+            color: "#2E7D32",
+            fontWeight: "bold",
+          }}
+        >
+          Loading Land Details...
+        </div>
+      </>
+    );
   }
-};
+
+  // =========================================================
+  // Edit page
+  // =========================================================
 
   return (
     <>
@@ -122,7 +254,6 @@ if (Number(land.area) <= 0) {
         <h1>Edit Land</h1>
 
         <form onSubmit={updateLand}>
-
           <input
             type="text"
             name="title"
@@ -131,7 +262,8 @@ if (Number(land.area) <= 0) {
             placeholder="Title"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <textarea
             name="description"
@@ -140,7 +272,8 @@ if (Number(land.area) <= 0) {
             placeholder="Description"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="number"
@@ -150,7 +283,8 @@ if (Number(land.area) <= 0) {
             placeholder="Price"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="number"
@@ -160,7 +294,8 @@ if (Number(land.area) <= 0) {
             placeholder="Area"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -170,7 +305,8 @@ if (Number(land.area) <= 0) {
             placeholder="Village"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -180,7 +316,8 @@ if (Number(land.area) <= 0) {
             placeholder="Mandal"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -190,7 +327,8 @@ if (Number(land.area) <= 0) {
             placeholder="District"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -200,7 +338,8 @@ if (Number(land.area) <= 0) {
             placeholder="State"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -210,7 +349,8 @@ if (Number(land.area) <= 0) {
             placeholder="Pincode"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -220,7 +360,8 @@ if (Number(land.area) <= 0) {
             placeholder="Survey Number"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -230,7 +371,8 @@ if (Number(land.area) <= 0) {
             placeholder="Soil Type"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -240,7 +382,8 @@ if (Number(land.area) <= 0) {
             placeholder="Water Source"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
           <input
             type="text"
@@ -250,11 +393,18 @@ if (Number(land.area) <= 0) {
             placeholder="Crop Type"
             required
           />
-          <br /><br />
+          <br />
+          <br />
 
-          <div style={{ display: "flex", gap: "10px" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+            }}
+          >
             <button
               type="submit"
+              disabled={updating}
               style={{
                 flex: 1,
                 background: "#2E7D32",
@@ -262,15 +412,21 @@ if (Number(land.area) <= 0) {
                 border: "none",
                 padding: "12px",
                 borderRadius: "5px",
-                cursor: "pointer",
+                cursor: updating
+                  ? "not-allowed"
+                  : "pointer",
+                opacity: updating ? 0.6 : 1,
               }}
             >
-              Update Land
+              {updating
+                ? "Updating..."
+                : "Update Land"}
             </button>
 
             <button
               type="button"
               onClick={() => navigate("/my-lands")}
+              disabled={updating}
               style={{
                 flex: 1,
                 background: "#757575",
@@ -284,7 +440,6 @@ if (Number(land.area) <= 0) {
               Cancel
             </button>
           </div>
-
         </form>
       </div>
     </>
