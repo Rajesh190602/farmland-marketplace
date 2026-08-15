@@ -56,6 +56,44 @@ function MyLands() {
       [landId]: files,
     }));
   };
+  const getErrorMessage = (error, fallback) => {
+  const detail = error.response?.data?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+
+        return (
+          item?.msg ||
+          item?.message ||
+          JSON.stringify(item)
+        );
+      })
+      .join("\n");
+  }
+
+  if (detail && typeof detail === "object") {
+    return (
+      detail.message ||
+      detail.msg ||
+      JSON.stringify(detail)
+    );
+  }
+
+  if (typeof error.response?.data === "string") {
+    return error.response.data;
+  }
+
+  return fallback;
+};
+
 
   // =========================================================
   // Upload multiple images
@@ -100,14 +138,17 @@ function MyLands() {
 
       // Refresh lands
       await fetchMyLands();
-    } catch (error) {
-      console.log(error);
-
-      alert(
-        error.response?.data?.detail ||
+    } 
+    catch (error) {
+      console.error("Image upload error:", error);  
+      alert(        
+        getErrorMessage(
+          error,
           "Failed to upload land images."
+        )
       );
-    } finally {
+    }
+    finally {
       setUploadingId(null);
     }
   };

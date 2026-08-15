@@ -17,6 +17,15 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // IMPORTANT:
+    // When sending FormData, do NOT force application/json.
+    // The browser/Axios will automatically set:
+    // multipart/form-data; boundary=...
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+      delete config.headers["content-type"];
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -31,7 +40,6 @@ api.interceptors.response.use(
       localStorage.removeItem("token");
       localStorage.removeItem("user");
 
-      // Prevent redirect loop if already on login page
       if (window.location.pathname !== "/login") {
         alert("Your session has expired. Please login again.");
         window.location.href = "/login";
