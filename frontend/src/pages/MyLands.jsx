@@ -7,9 +7,16 @@ function MyLands() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
+
   const [lands, setLands] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState({});
+  const [galleryImages, setGalleryImages] = useState({});
+
   const navigate = useNavigate();
+
+  // =========================================================
+  // Load My Lands
+  // =========================================================
 
   useEffect(() => {
     fetchMyLands();
@@ -21,21 +28,120 @@ function MyLands() {
 
       const response = await api.get("/lands/my/lands");
 
-      setLands(response.data);
+      const myLands = response.data;
+
+      setLands(myLands);
+
+      // Load gallery images for every land
+      await loadGalleryImages(myLands);
     } catch (error) {
-      console.log(error);
-      alert("Failed to load your lands.");
+      console.error("Failed to load lands:", error);
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load your lands."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   // =========================================================
-  // Select multiple images
+  // Load Gallery Images
+  // =========================================================
+
+  const loadGalleryImages = async (landList) => {
+    try {
+      const imageResults = await Promise.all(
+        landList.map(async (land) => {
+          try {
+            const response = await api.get(
+              `/lands/${land.id}/images`
+            );
+
+            return {
+              landId: land.id,
+              images: response.data || [],
+            };
+          } catch (error) {
+            console.error(
+              `Failed to load images for land ${land.id}:`,
+              error
+            );
+
+            return {
+              landId: land.id,
+              images: [],
+            };
+          }
+        })
+      );
+
+      const imageMap = {};
+
+      imageResults.forEach((result) => {
+        imageMap[result.landId] = result.images;
+      });
+
+      setGalleryImages(imageMap);
+    } catch (error) {
+      console.error(
+        "Failed to load land gallery images:",
+        error
+      );
+    }
+  };
+
+  // =========================================================
+  // Error Message Helper
+  // =========================================================
+
+  const getErrorMessage = (error, fallbackMessage) => {
+    const detail = error.response?.data?.detail;
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item) => {
+          if (typeof item === "string") {
+            return item;
+          }
+
+          return (
+            item?.msg ||
+            item?.message ||
+            JSON.stringify(item)
+          );
+        })
+        .join("\n");
+    }
+
+    if (detail && typeof detail === "object") {
+      return (
+        detail.message ||
+        detail.msg ||
+        JSON.stringify(detail)
+      );
+    }
+
+    if (typeof error.response?.data === "string") {
+      return error.response.data;
+    }
+
+    return fallbackMessage;
+  };
+
+  // =========================================================
+  // Select Multiple Images
   // =========================================================
 
   const handleImageSelection = (landId, event) => {
-    const files = Array.from(event.target.files || []);
+    const files = Array.from(
+      event.target.files || []
+    );
 
     if (files.length === 0) {
       return;
@@ -43,11 +149,17 @@ function MyLands() {
 
     // Validate image files
     const invalidFile = files.find(
-      (file) => !file.type.startsWith("image/")
+      (file) =>
+        !file.type ||
+        !file.type.startsWith("image/")
     );
 
     if (invalidFile) {
-      alert(`${invalidFile.name} is not a valid image file.`);
+      alert(
+        `${invalidFile.name} is not a valid image file.`
+      );
+
+      event.target.value = "";
       return;
     }
 
@@ -56,47 +168,9 @@ function MyLands() {
       [landId]: files,
     }));
   };
-  const getErrorMessage = (error, fallback) => {
-  const detail = error.response?.data?.detail;
-
-  if (typeof detail === "string") {
-    return detail;
-  }
-
-  if (Array.isArray(detail)) {
-    return detail
-      .map((item) => {
-        if (typeof item === "string") {
-          return item;
-        }
-
-        return (
-          item?.msg ||
-          item?.message ||
-          JSON.stringify(item)
-        );
-      })
-      .join("\n");
-  }
-
-  if (detail && typeof detail === "object") {
-    return (
-      detail.message ||
-      detail.msg ||
-      JSON.stringify(detail)
-    );
-  }
-
-  if (typeof error.response?.data === "string") {
-    return error.response.data;
-  }
-
-  return fallback;
-};
-
 
   // =========================================================
-  // Upload multiple images
+  // Upload Multiple Images
   // =========================================================
 
   const uploadLandImages = async (landId) => {
@@ -121,7 +195,13 @@ function MyLands() {
         formData
       );
 
-      console.log("Land images uploaded:", response.data);
+      console.log(
+        "Land images uploaded:",
+        response.data
+      );
+
+      const uploadedImages =
+        response.data?.images || [];
 
       alert(
         `${files.length} image${
@@ -129,26 +209,48 @@ function MyLands() {
         } uploaded successfully.`
       );
 
-      // Clear selected files for this land
+      // Immediately update gallery on the page
+      setGalleryImages((previous) => ({
+        ...previous,
+        [landId]: [
+          ...(previous[landId] || []),
+          ...uploadedImages,
+        ],
+      }));
+
+      // Clear selected files
       setSelectedFiles((previous) => {
-        const updated = { ...previous };
+        const updated = {
+          ...previous,
+        };
+
         delete updated[landId];
+
         return updated;
       });
 
-      // Refresh lands
-      await fetchMyLands();
-    } 
-    catch (error) {
-      console.error("Image upload error:", error);  
-      alert(        
+      // Reset the file input
+      const fileInput =
+        document.getElementById(
+          `land-images-${landId}`
+        );
+
+      if (fileInput) {
+        fileInput.value = "";
+      }
+    } catch (error) {
+      console.error(
+        "Image upload error:",
+        error
+      );
+
+      alert(
         getErrorMessage(
           error,
           "Failed to upload land images."
         )
       );
-    }
-    finally {
+    } finally {
       setUploadingId(null);
     }
   };
@@ -158,7 +260,11 @@ function MyLands() {
   // =========================================================
 
   const deleteLand = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this land?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this land?"
+      )
+    ) {
       return;
     }
 
@@ -169,13 +275,43 @@ function MyLands() {
 
       alert("Land deleted successfully.");
 
-      fetchMyLands();
+      // Remove deleted land from UI immediately
+      setLands((previous) =>
+        previous.filter(
+          (land) => land.id !== id
+        )
+      );
+
+      setGalleryImages((previous) => {
+        const updated = {
+          ...previous,
+        };
+
+        delete updated[id];
+
+        return updated;
+      });
+
+      setSelectedFiles((previous) => {
+        const updated = {
+          ...previous,
+        };
+
+        delete updated[id];
+
+        return updated;
+      });
     } catch (error) {
-      console.log(error);
+      console.error(
+        "Delete land error:",
+        error
+      );
 
       alert(
-        error.response?.data?.detail ||
+        getErrorMessage(
+          error,
           "Failed to delete land."
+        )
       );
     } finally {
       setDeletingId(null);
@@ -229,7 +365,11 @@ function MyLands() {
           minHeight: "100vh",
         }}
       >
-        <h1 style={{ color: "#2E7D32" }}>
+        <h1
+          style={{
+            color: "#2E7D32",
+          }}
+        >
           🌾 My Lands
         </h1>
 
@@ -252,7 +392,11 @@ function MyLands() {
           <h2>No lands found.</h2>
         ) : (
           lands.map((land) => {
-            const filesForLand = selectedFiles[land.id] || [];
+            const filesForLand =
+              selectedFiles[land.id] || [];
+
+            const imagesForLand =
+              galleryImages[land.id] || [];
 
             return (
               <div
@@ -268,74 +412,188 @@ function MyLands() {
               >
                 <h2>{land.title}</h2>
 
+                {/* =================================================
+                    Existing Main Image
+                ================================================= */}
+
                 {land.image_url && (
-                  <img
-                    src={land.image_url}
-                    alt={land.title}
+                  <div
                     style={{
-                      width: "100%",
-                      maxHeight: "250px",
-                      objectFit: "cover",
-                      borderRadius: "10px",
-                      marginBottom: "15px",
+                      marginBottom: "20px",
                     }}
-                  />
+                  >
+                    <h3
+                      style={{
+                        color: "#2E7D32",
+                      }}
+                    >
+                      Main Image
+                    </h3>
+
+                    <img
+                      src={land.image_url}
+                      alt={land.title}
+                      style={{
+                        width: "100%",
+                        maxHeight: "250px",
+                        objectFit: "cover",
+                        borderRadius: "10px",
+                      }}
+                    />
+                  </div>
                 )}
 
+                {/* =================================================
+                    Gallery Images
+                ================================================= */}
+
+                {imagesForLand.length > 0 && (
+                  <div
+                    style={{
+                      marginBottom: "25px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        color: "#2E7D32",
+                      }}
+                    >
+                      📷 Land Gallery (
+                      {imagesForLand.length})
+                    </h3>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fill, minmax(180px, 1fr))",
+                        gap: "12px",
+                      }}
+                    >
+                      {imagesForLand.map(
+                        (image) => (
+                          <div
+                            key={image.id}
+                            style={{
+                              background: "#f5f5f5",
+                              borderRadius: "10px",
+                              overflow: "hidden",
+                              border:
+                                "1px solid #ddd",
+                            }}
+                          >
+                            <img
+                              src={
+                                image.image_url
+                              }
+                              alt={`${land.title} land`}
+                              style={{
+                                width: "100%",
+                                height: "180px",
+                                objectFit:
+                                  "cover",
+                                display: "block",
+                              }}
+                            />
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!land.image_url &&
+                  imagesForLand.length === 0 && (
+                    <p
+                      style={{
+                        color: "#777",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      No land images uploaded
+                      yet.
+                    </p>
+                  )}
+
+                {/* =================================================
+                    Land Details
+                ================================================= */}
+
                 <p>
-                  <strong>Description:</strong>{" "}
+                  <strong>
+                    Description:
+                  </strong>{" "}
                   {land.description}
                 </p>
 
                 <p>
-                  <strong>Price:</strong> ₹{land.price}
+                  <strong>Price:</strong> ₹
+                  {land.price}
                 </p>
 
                 <p>
-                  <strong>Area:</strong> {land.area} Acres
+                  <strong>Area:</strong>{" "}
+                  {land.area} Acres
                 </p>
 
                 <p>
-                  <strong>Village:</strong>{" "}
+                  <strong>
+                    Village:
+                  </strong>{" "}
                   {land.village}
                 </p>
 
                 <p>
-                  <strong>Mandal:</strong>{" "}
+                  <strong>
+                    Mandal:
+                  </strong>{" "}
                   {land.mandal}
                 </p>
 
                 <p>
-                  <strong>District:</strong>{" "}
+                  <strong>
+                    District:
+                  </strong>{" "}
                   {land.district}
                 </p>
 
                 <p>
-                  <strong>State:</strong> {land.state}
+                  <strong>State:</strong>{" "}
+                  {land.state}
                 </p>
 
                 <p>
-                  <strong>Pincode:</strong>{" "}
+                  <strong>
+                    Pincode:
+                  </strong>{" "}
                   {land.pincode}
                 </p>
 
                 <p>
-                  <strong>Survey No:</strong>{" "}
+                  <strong>
+                    Survey No:
+                  </strong>{" "}
                   {land.survey_number}
                 </p>
 
                 <p>
-                  <strong>Soil Type:</strong>{" "}
+                  <strong>
+                    Soil Type:
+                  </strong>{" "}
                   {land.soil_type}
                 </p>
 
                 <p>
-                  <strong>Water Source:</strong>{" "}
+                  <strong>
+                    Water Source:
+                  </strong>{" "}
                   {land.water_source}
                 </p>
 
                 <p>
-                  <strong>Crop Type:</strong>{" "}
+                  <strong>
+                    Crop Type:
+                  </strong>{" "}
                   {land.crop_type}
                 </p>
 
@@ -348,7 +606,8 @@ function MyLands() {
                     marginTop: "25px",
                     padding: "20px",
                     background: "#F8FFF8",
-                    border: "1px solid #C8E6C9",
+                    border:
+                      "1px solid #C8E6C9",
                     borderRadius: "10px",
                   }}
                 >
@@ -358,7 +617,7 @@ function MyLands() {
                       marginTop: 0,
                     }}
                   >
-                    📷 Land Image Gallery
+                    📷 Upload Land Images
                   </h3>
 
                   <p
@@ -366,10 +625,12 @@ function MyLands() {
                       color: "#555",
                     }}
                   >
-                    Select multiple images of this land.
+                    Select multiple images of
+                    this land.
                   </p>
 
                   <input
+                    id={`land-images-${land.id}`}
                     type="file"
                     accept="image/*"
                     multiple
@@ -380,14 +641,16 @@ function MyLands() {
                       )
                     }
                     disabled={
-                      uploadingId === land.id
+                      uploadingId ===
+                      land.id
                     }
                   />
 
-                  {filesForLand.length > 0 && (
+                  {filesForLand.length >
+                    0 && (
                     <div
                       style={{
-                        marginTop: "12px",
+                        marginTop: "15px",
                       }}
                     >
                       <p>
@@ -397,15 +660,61 @@ function MyLands() {
                         {filesForLand.length}
                       </p>
 
-                      <ul>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(120px, 1fr))",
+                          gap: "10px",
+                          marginTop: "10px",
+                        }}
+                      >
                         {filesForLand.map(
                           (file, index) => (
-                            <li key={`${file.name}-${index}`}>
-                              {file.name}
-                            </li>
+                            <div
+                              key={`${file.name}-${index}`}
+                              style={{
+                                border:
+                                  "1px solid #ddd",
+                                borderRadius:
+                                  "8px",
+                                padding:
+                                  "5px",
+                                overflow:
+                                  "hidden",
+                              }}
+                            >
+                              <img
+                                src={URL.createObjectURL(
+                                  file
+                                )}
+                                alt={file.name}
+                                style={{
+                                  width: "100%",
+                                  height: "100px",
+                                  objectFit:
+                                    "cover",
+                                  borderRadius:
+                                    "5px",
+                                }}
+                              />
+
+                              <p
+                                style={{
+                                  fontSize:
+                                    "12px",
+                                  margin:
+                                    "5px 0 0",
+                                  wordBreak:
+                                    "break-word",
+                                }}
+                              >
+                                {file.name}
+                              </p>
+                            </div>
                           )
                         )}
-                      </ul>
+                      </div>
 
                       <button
                         type="button"
@@ -415,29 +724,40 @@ function MyLands() {
                           )
                         }
                         disabled={
-                          uploadingId === land.id
+                          uploadingId ===
+                          land.id
                         }
                         style={{
                           backgroundColor:
                             "#2E7D32",
                           color: "white",
                           border: "none",
-                          padding: "10px 20px",
+                          padding:
+                            "10px 20px",
                           borderRadius: "5px",
                           cursor:
-                            uploadingId === land.id
+                            uploadingId ===
+                            land.id
                               ? "not-allowed"
                               : "pointer",
                           opacity:
-                            uploadingId === land.id
+                            uploadingId ===
+                            land.id
                               ? 0.6
                               : 1,
-                          marginTop: "10px",
+                          marginTop:
+                            "15px",
                         }}
                       >
-                        {uploadingId === land.id
+                        {uploadingId ===
+                        land.id
                           ? "Uploading Images..."
-                          : "📤 Upload Images"}
+                          : `📤 Upload ${filesForLand.length} Image${
+                              filesForLand.length >
+                              1
+                                ? "s"
+                                : ""
+                            }`}
                       </button>
                     </div>
                   )}
@@ -460,10 +780,12 @@ function MyLands() {
                       editLand(land.id)
                     }
                     style={{
-                      backgroundColor: "green",
+                      backgroundColor:
+                        "green",
                       color: "white",
                       border: "none",
-                      padding: "10px 20px",
+                      padding:
+                        "10px 20px",
                       borderRadius: "5px",
                       cursor: "pointer",
                     }}
@@ -476,20 +798,24 @@ function MyLands() {
                       deleteLand(land.id)
                     }
                     disabled={
-                      deletingId === land.id
+                      deletingId ===
+                      land.id
                     }
                     style={{
                       backgroundColor: "red",
                       color: "white",
                       border: "none",
-                      padding: "10px 20px",
+                      padding:
+                        "10px 20px",
                       borderRadius: "5px",
                       cursor:
-                        deletingId === land.id
+                        deletingId ===
+                        land.id
                           ? "not-allowed"
                           : "pointer",
                       opacity:
-                        deletingId === land.id
+                        deletingId ===
+                        land.id
                           ? 0.6
                           : 1,
                     }}
