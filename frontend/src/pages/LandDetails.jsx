@@ -12,7 +12,7 @@ function LandDetails() {
   const [deletingImageId, setDeletingImageId] = useState(null);
 
   // Logged-in user's ID
-  const currentUserId = Number(localStorage.getItem("user_id"));
+  const currentUserId = Number(sessionStorage.getItem("user_id"));
 
   useEffect(() => {
     fetchLand();

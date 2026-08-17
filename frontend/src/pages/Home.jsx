@@ -27,7 +27,7 @@ function Home() {
     notifications: 0,
   });
   const userName =
-  localStorage.getItem("full_name") || "Farmer";
+   sessionStorage.getItem("full_name") || "Farmer";
   const [featuredLands, setFeaturedLands] = useState([]);
 
   useEffect(() => {

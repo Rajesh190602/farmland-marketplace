@@ -42,7 +42,7 @@ function ChangePassword() {
 
     alert(response.data.message);
 
-    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     localStorage.removeItem("user");
 
     alert("Please login again with your new password.");

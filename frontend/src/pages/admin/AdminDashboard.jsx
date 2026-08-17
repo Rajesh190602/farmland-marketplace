@@ -100,7 +100,7 @@ const fetchMonthlyGrowth = async () => {
   // Download Excel Reports
   const downloadReport = async (type) => {
     try {
-      const token = localStorage.getItem("token");
+      const token =sessionStorage.getItem("token");
 
       const response = await api.get(`/reports/${type}`, {
         responseType: "blob",
