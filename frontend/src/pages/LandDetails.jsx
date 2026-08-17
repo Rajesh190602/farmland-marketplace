@@ -11,6 +11,9 @@ function LandDetails() {
   const [land, setLand] = useState(null);
   const [deletingImageId, setDeletingImageId] = useState(null);
 
+  // Logged-in user's ID
+  const currentUserId = Number(localStorage.getItem("user_id"));
+
   useEffect(() => {
     fetchLand();
   }, [id]);
@@ -77,7 +80,7 @@ function LandDetails() {
 
       alert("Image deleted successfully.");
 
-      // Refresh land data
+      // Reload land data after deletion
       await fetchLand();
     } catch (error) {
       console.error(error);
@@ -147,6 +150,10 @@ function LandDetails() {
     );
   }
 
+  // Only the owner should see the image deletion buttons.
+  const isLandOwner =
+    currentUserId === Number(land.owner_id);
+
   return (
     <>
       <Navbar />
@@ -161,7 +168,6 @@ function LandDetails() {
           boxShadow: "0 10px 30px rgba(0,0,0,.15)",
         }}
       >
-
         {/* =====================================================
             Primary Land Image
         ====================================================== */}
@@ -184,6 +190,10 @@ function LandDetails() {
             paddingBottom: "10px",
           }}
         >
+          {/* =====================================================
+              Land Title
+          ====================================================== */}
+
           <h1
             style={{
               margin: 0,
@@ -193,6 +203,10 @@ function LandDetails() {
           >
             🌾 {land.title}
           </h1>
+
+          {/* =====================================================
+              Price
+          ====================================================== */}
 
           <div
             style={{
@@ -208,6 +222,10 @@ function LandDetails() {
           >
             💰 ₹ {land.price}
           </div>
+
+          {/* =====================================================
+              Land Badges
+          ====================================================== */}
 
           <div
             style={{
@@ -288,35 +306,38 @@ function LandDetails() {
                       }}
                     />
 
-                    <button
-                      onClick={() =>
-                        deleteImage(image.id)
-                      }
-                      disabled={
-                        deletingImageId === image.id
-                      }
-                      style={{
-                        width: "100%",
-                        marginTop: "10px",
-                        padding: "10px",
-                        background:
+                    {/* Delete button ONLY for land owner */}
+                    {isLandOwner && (
+                      <button
+                        onClick={() =>
+                          deleteImage(image.id)
+                        }
+                        disabled={
                           deletingImageId === image.id
-                            ? "#999"
-                            : "#D32F2F",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "6px",
-                        cursor:
-                          deletingImageId === image.id
-                            ? "not-allowed"
-                            : "pointer",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {deletingImageId === image.id
-                        ? "Deleting..."
-                        : "🗑️ Delete Image"}
-                    </button>
+                        }
+                        style={{
+                          width: "100%",
+                          marginTop: "10px",
+                          padding: "10px",
+                          background:
+                            deletingImageId === image.id
+                              ? "#999"
+                              : "#D32F2F",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor:
+                            deletingImageId === image.id
+                              ? "not-allowed"
+                              : "pointer",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {deletingImageId === image.id
+                          ? "Deleting..."
+                          : "🗑️ Delete Image"}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -531,6 +552,7 @@ function LandDetails() {
                 gap: "15px",
               }}
             >
+              {/* Call */}
               <a
                 href={`tel:${land.owner_mobile}`}
                 style={{
@@ -545,6 +567,7 @@ function LandDetails() {
                 📞 Call
               </a>
 
+              {/* WhatsApp */}
               <a
                 href={`https://wa.me/91${land.owner_mobile}`}
                 target="_blank"
@@ -561,6 +584,7 @@ function LandDetails() {
                 💬 WhatsApp
               </a>
 
+              {/* Chat */}
               <button
                 onClick={startChat}
                 style={{
@@ -576,6 +600,7 @@ function LandDetails() {
                 💬 Chat
               </button>
 
+              {/* Favorite */}
               <button
                 onClick={addFavorite}
                 style={{
@@ -591,6 +616,7 @@ function LandDetails() {
                 ❤️ Favorite
               </button>
 
+              {/* Share */}
               <button
                 onClick={() => {
                   if (navigator.share) {
