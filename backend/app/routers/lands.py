@@ -6,6 +6,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Land, User
 from app.schemas import LandCreate
+from app.utils.activity_log import create_activity_log
 from typing import Optional
 
 
@@ -14,6 +15,10 @@ router = APIRouter(
     tags=["Lands"]
 )
 
+
+# ==========================
+# Create Land
+# ==========================
 
 # ==========================
 # Create Land
@@ -40,6 +45,7 @@ def create_land(
             detail="Only farmers can add land"
         )
 
+    # Create new land
     new_land = Land(
         title=land.title,
         description=land.description,
@@ -63,14 +69,30 @@ def create_land(
     )
 
     db.add(new_land)
+
+    # Generate the land ID before creating the activity log
+    db.flush()
+
+    # Create activity log
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="CREATE_LAND",
+        description=f'Created land "{new_land.title}"',
+        target_type="LAND",
+        target_id=new_land.id,
+    )
+
+    # Save both land and activity log together
     db.commit()
+
+    # Refresh land after commit
     db.refresh(new_land)
 
     return {
         "message": "Land Added Successfully and is waiting for admin approval.",
         "land_id": new_land.id
     }
-
 
 # ==========================
 # Get All Approved Lands
