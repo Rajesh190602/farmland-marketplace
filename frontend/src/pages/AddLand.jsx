@@ -46,134 +46,180 @@ function AddLand() {
     setSelectedImage(file);
     setPreview(URL.createObjectURL(file));
   };
- const uploadImage = async () => {
-  if (!selectedImage) return "";
 
-  try {
-    setUploading(true);
+  const uploadImage = async () => {
+    if (!selectedImage) return "";
 
-    const imageData = new FormData();
-    imageData.append("file", selectedImage);
+    try {
+      setUploading(true);
 
-    const response = await api.post(
-      "/upload/",
-      imageData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      const imageData = new FormData();
+      imageData.append("file", selectedImage);
+
+      const response = await api.post(
+        "/upload/",
+        imageData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      console.log(
+        "Cloudinary Response:",
+        response.data
+      );
+
+      return response.data.url;
+    } catch (error) {
+      console.error(error);
+
+      if (error.response) {
+        alert(
+          error.response.data.detail ||
+            "Image upload failed."
+        );
+      } else {
+        alert("Image upload failed.");
       }
-    );
 
-    setUploading(false);
+      return "";
+    } finally {
+      setUploading(false);
+    }
+  };
 
-    console.log("Cloudinary Response:", response.data);
+  const addLand = async (e) => {
+    e.preventDefault();
 
-    return response.data.url;
+    // ==========================
+    // Validation
+    // ==========================
 
-  } catch (error) {
-
-    console.error(error);
-
-    setUploading(false);
-
-    if (error.response) {
-      alert(error.response.data.detail);
-    } else {
-      alert("Image upload failed");
+    if (!formData.title.trim()) {
+      alert("Please enter the land title.");
+      return;
     }
 
-    return "";
-  }
-};
-const addLand = async (e) => {
-  e.preventDefault();
-
-  // Validation
-  if (!formData.title.trim()) {
-    alert("Please enter the land title.");
-    return;
-  }
-
-  if (Number(formData.price) <= 0) {
-    alert("Enter a valid land price.");
-    return;
-  }
-
-  if (Number(formData.area) <= 0) {
-    alert("Enter a valid land area.");
-    return;
-  }
-
-  if (!latitude || !longitude) {
-    alert("Please select the land location on the map.");
-    return;
-  }
-
-  try {
-    setAddingLand(true);
-
-    let imageUrl = "";
-
-    if (selectedImage) {
-      imageUrl = await uploadImage();
+    if (Number(formData.price) <= 0) {
+      alert("Enter a valid land price.");
+      return;
     }
 
-    console.log("Latitude:", latitude);
-    console.log("Longitude:", longitude);
-
-    await api.post("/lands", {
-      ...formData,
-      image_url: imageUrl,
-      price: Number(formData.price),
-      area: Number(formData.area),
-      latitude,
-      longitude,
-    });
-
-    alert("Land Added Successfully!");
-
-    // Clear form
-    setFormData({
-      title: "",
-      description: "",
-      image_url: "",
-      price: "",
-      area: "",
-      village: "",
-      mandal: "",
-      district: "",
-      state: "",
-      pincode: "",
-      survey_number: "",
-      soil_type: "",
-      water_source: "",
-      crop_type: "",
-    });
-
-    setSelectedImage(null);
-    setPreview("");
-    setLatitude(null);
-    setLongitude(null);
-
-    navigate("/my-lands");
-
-  } catch (error) {
-    console.log(error);
-
-    if (error.response) {
-      alert(error.response.data.detail);
-    } else {
-      alert("Server Error");
+    if (Number(formData.area) <= 0) {
+      alert("Enter a valid land area.");
+      return;
     }
-  } finally {
-    setAddingLand(false);
-  }
-};
 
+    if (!latitude || !longitude) {
+      alert(
+        "Please select the land location on the map."
+      );
+      return;
+    }
 
+    try {
+      setAddingLand(true);
 
-  
+      let imageUrl = "";
+
+      // ==========================
+      // Upload Image
+      // ==========================
+
+      if (selectedImage) {
+        imageUrl = await uploadImage();
+
+        // Stop if image upload failed
+        if (!imageUrl) {
+          setAddingLand(false);
+          return;
+        }
+      }
+
+      console.log("Latitude:", latitude);
+      console.log("Longitude:", longitude);
+
+      // ==========================
+      // Create Land
+      // ==========================
+
+      const response = await api.post("/lands", {
+        ...formData,
+        image_url: imageUrl,
+        price: Number(formData.price),
+        area: Number(formData.area),
+        latitude,
+        longitude,
+      });
+
+      console.log(
+        "Land creation response:",
+        response.data
+      );
+
+      // ==========================
+      // SUCCESS MESSAGE
+      // ==========================
+
+      const successMessage =
+        response.data?.message ||
+        "Land added successfully and is waiting for admin approval.";
+
+      alert(
+        `✅ ${successMessage}\n\n⏳ Your land will become visible to buyers after admin approval.`
+      );
+
+      // ==========================
+      // Clear Form
+      // ==========================
+
+      setFormData({
+        title: "",
+        description: "",
+        image_url: "",
+        price: "",
+        area: "",
+        village: "",
+        mandal: "",
+        district: "",
+        state: "",
+        pincode: "",
+        survey_number: "",
+        soil_type: "",
+        water_source: "",
+        crop_type: "",
+      });
+
+      setSelectedImage(null);
+      setPreview("");
+      setLatitude(null);
+      setLongitude(null);
+
+      // ==========================
+      // Go To My Lands
+      // ==========================
+
+      navigate("/my-lands");
+    } catch (error) {
+      console.error(
+        "Add land error:",
+        error
+      );
+
+      if (error.response) {
+        alert(
+          error.response.data.detail ||
+            "Failed to add land."
+        );
+      } else {
+        alert("Server Error.");
+      }
+    } finally {
+      setAddingLand(false);
+    }
+  };
 
   return (
     <>
@@ -190,45 +236,47 @@ const addLand = async (e) => {
         }}
       >
         <h1>Add New Land</h1>
+
         <h3>Upload Land Image</h3>
 
-<input
-  type="file"
-  accept="image/*"
-  onChange={handleImageChange}
-/>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+        />
 
-<br /><br />
+        <br />
+        <br />
 
-{preview && (
-  <img
-    src={preview}
-    alt="Preview"
-    width="300"
-    style={{
-      borderRadius: "10px",
-      border: "1px solid #ccc",
-      marginBottom: "20px",
-    }}
-  />
-)}
+        {preview && (
+          <img
+            src={preview}
+            alt="Preview"
+            width="300"
+            style={{
+              borderRadius: "10px",
+              border: "1px solid #ccc",
+              marginBottom: "20px",
+            }}
+          />
+        )}
 
-{uploading && (
-  <p>Uploading Image...</p>
-)}
+        {uploading && (
+          <p>Uploading Image...</p>
+        )}
 
-<br />
-<LocationPicker
-  latitude={latitude}
-  longitude={longitude}
-  setLatitude={setLatitude}
-  setLongitude={setLongitude}
-/>
+        <br />
 
-<br />
+        <LocationPicker
+          latitude={latitude}
+          longitude={longitude}
+          setLatitude={setLatitude}
+          setLongitude={setLongitude}
+        />
+
+        <br />
 
         <form onSubmit={addLand}>
-
           <input
             type="text"
             name="title"
@@ -237,7 +285,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <textarea
             name="description"
@@ -246,7 +296,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="number"
@@ -256,7 +308,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="number"
@@ -266,7 +320,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -276,7 +332,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -286,7 +344,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -296,7 +356,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -306,7 +368,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -316,7 +380,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -326,7 +392,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -336,7 +404,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -346,7 +416,9 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <input
             type="text"
@@ -356,11 +428,15 @@ const addLand = async (e) => {
             onChange={handleChange}
             required
           />
-          <br /><br />
+
+          <br />
+          <br />
 
           <button
             type="submit"
-            disabled={addingLand || uploading}
+            disabled={
+              addingLand || uploading
+            }
             style={{
               width: "100%",
               padding: "12px",
@@ -368,20 +444,27 @@ const addLand = async (e) => {
               color: "white",
               border: "none",
               borderRadius: "5px",
-              cursor: "pointer",
+              cursor:
+                addingLand || uploading
+                  ? "not-allowed"
+                  : "pointer",
               fontSize: "16px",
+              opacity:
+                addingLand || uploading
+                  ? 0.7
+                  : 1,
             }}
           >
-            {addingLand
-              ? "Adding Land..."
-              : uploading
+            {uploading
               ? "Uploading Image..."
+              : addingLand
+              ? "Adding Land..."
               : "Add Land"}
           </button>
-
         </form>
       </div>
     </>
   );
 }
+
 export default AddLand;
