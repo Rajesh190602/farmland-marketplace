@@ -11,16 +11,14 @@ const api = axios.create({
 // Attach JWT token to every request
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // IMPORTANT:
-    // When sending FormData, do NOT force application/json.
-    // The browser/Axios will automatically set:
-    // multipart/form-data; boundary=...
+    // When sending FormData, allow Axios/browser
+    // to automatically set multipart/form-data boundary.
     if (config.data instanceof FormData) {
       delete config.headers["Content-Type"];
       delete config.headers["content-type"];
@@ -35,14 +33,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If token is invalid or expired
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("user_id");
+      sessionStorage.removeItem("full_name");
+      sessionStorage.removeItem("role");
 
-      if (window.location.pathname !== "/login") {
-        alert("Your session has expired. Please login again.");
-        window.location.href = "/login";
+      if (window.location.pathname !== "/") {
+        alert(
+          "Your session has expired. Please login again."
+        );
+
+        window.location.href = "/";
       }
     }
 

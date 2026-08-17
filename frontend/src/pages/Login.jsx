@@ -6,10 +6,15 @@ import "./Login.css";
 function Login() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(
+    () => localStorage.getItem("email") || ""
+  );
+
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] =
+    useState(false);
+  const [rememberMe, setRememberMe] =
+    useState(() => !!localStorage.getItem("email"));
   const [loading, setLoading] = useState(false);
 
   const login = async (e) => {
@@ -29,20 +34,53 @@ function Login() {
       setLoading(true);
 
       const formData = new URLSearchParams();
+
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await api.post("/users/login", formData, {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-      });
-      localStorage.setItem("token", response.data.access_token);
-      localStorage.setItem("user_id", response.data.user_id);
-      localStorage.setItem("full_name", response.data.full_name);
-      localStorage.setItem("role", response.data.role);
-      console.log(response.data);
-      console.log(localStorage.getItem("full_name"));
+      const response = await api.post(
+        "/users/login",
+        formData,
+        {
+          headers: {
+            "Content-Type":
+              "application/x-www-form-urlencoded",
+          },
+        }
+      );
+
+      console.log("Login response:", response.data);
+
+      // =====================================================
+      // Store authentication in SESSION storage
+      // This keeps each browser tab independent.
+      // =====================================================
+
+      sessionStorage.setItem(
+        "token",
+        response.data.access_token
+      );
+
+      sessionStorage.setItem(
+        "user_id",
+        response.data.user_id
+      );
+
+      sessionStorage.setItem(
+        "full_name",
+        response.data.full_name
+      );
+
+      sessionStorage.setItem(
+        "role",
+        response.data.role
+      );
+
+      // =====================================================
+      // Remember Me
+      // Only email is stored permanently.
+      // Authentication is NOT stored in localStorage.
+      // =====================================================
 
       if (rememberMe) {
         localStorage.setItem("email", email);
@@ -51,14 +89,20 @@ function Login() {
       }
 
       alert("Login Successful");
+
       if (response.data.role === "admin") {
         navigate("/admin");
-      }else {
+      } else {
         navigate("/home");
-      }     
+      }
     } catch (error) {
+      console.error("Login error:", error);
+
       if (error.response) {
-        alert(error.response.data.detail || "Invalid email or password.");
+        alert(
+          error.response.data.detail ||
+            "Invalid email or password."
+        );
       } else {
         alert("Unable to connect to server.");
       }
@@ -71,6 +115,7 @@ function Login() {
     <div className="login-page">
       <div className="login-card">
         <h2>🌾 Farmland Marketplace</h2>
+
         <p>Login to your account</p>
 
         <form onSubmit={login}>
@@ -78,25 +123,39 @@ function Login() {
             type="email"
             placeholder="Email Address"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) =>
+              setEmail(e.target.value)
+            }
             required
           />
 
           <div className="password-box">
             <input
-              type={showPassword ? "text" : "password"}
+              type={
+                showPassword
+                  ? "text"
+                  : "password"
+              }
               placeholder="Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
               required
             />
 
             <button
               type="button"
               className="eye-btn"
-              onClick={() => setShowPassword(!showPassword)}
+              onClick={() =>
+                setShowPassword(
+                  !showPassword
+                )
+              }
             >
-              {showPassword ? "🙈" : "👁"}
+              {showPassword
+                ? "🙈"
+                : "👁"}
             </button>
           </div>
 
@@ -105,8 +164,13 @@ function Login() {
               <input
                 type="checkbox"
                 checked={rememberMe}
-                onChange={() => setRememberMe(!rememberMe)}
+                onChange={() =>
+                  setRememberMe(
+                    !rememberMe
+                  )
+                }
               />
+
               Remember Me
             </label>
 
@@ -120,13 +184,18 @@ function Login() {
             className="login-btn"
             disabled={loading}
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading
+              ? "Logging in..."
+              : "Login"}
           </button>
         </form>
 
         <p className="register-link">
           Don't have an account?
-          <Link to="/register"> Register</Link>
+          <Link to="/register">
+            {" "}
+            Register
+          </Link>
         </p>
       </div>
     </div>
