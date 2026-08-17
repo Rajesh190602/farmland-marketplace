@@ -5,6 +5,7 @@ from app.auth import get_current_admin
 from app.database import get_db
 from app.models import User, Land, Notification,LandImage
 from app.schemas import LandUpdate,UserUpdate,LandReview
+from app.utils.activity_log import create_activity_log
 from sqlalchemy import func,extract
 from app.models import User
 router = APIRouter(
@@ -285,13 +286,21 @@ def get_pending_lands(
         "limit": limit,
         "lands": result,
     }
+# ==========================
+# Approve Land
+# ==========================
+
 @router.put("/lands/{land_id}/approve")
 def approve_land(
     land_id: int,
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = db.query(Land).filter(Land.id == land_id).first()
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
 
     if not land:
         raise HTTPException(
@@ -301,12 +310,30 @@ def approve_land(
 
     land.status = "approved"
     land.rejection_reason = None
+
+    # Notify land owner
     notification = Notification(
         user_id=land.owner_id,
         title="Land Approved",
-        message=f'Your land "{land.title}" has been approved and is now visible to buyers.'
+        message=(
+            f'Your land "{land.title}" has been approved '
+            "and is now visible to buyers."
+        )
     )
+
     db.add(notification)
+
+    # Activity log
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="APPROVE_LAND",
+        description=f'Approved land "{land.title}"',
+        target_type="LAND",
+        target_id=land.id,
+    )
+
+    # Save land update, notification and activity log together
     db.commit()
     db.refresh(land)
 
@@ -314,6 +341,10 @@ def approve_land(
         "message": "Land approved successfully",
         "status": land.status
     }
+# ==========================
+# Request Changes
+# ==========================
+
 @router.put("/lands/{land_id}/request-changes")
 def request_changes(
     land_id: int,
@@ -321,7 +352,11 @@ def request_changes(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = db.query(Land).filter(Land.id == land_id).first()
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
 
     if not land:
         raise HTTPException(
@@ -331,14 +366,33 @@ def request_changes(
 
     land.status = "changes_requested"
     land.rejection_reason = review.reason
+
+    # Notify land owner
     notification = Notification(
         user_id=land.owner_id,
         title="Changes Requested",
-        message=f'Changes have been requested for your land "{land.title}". Reason: {review.reason}'
+        message=(
+            f'Changes have been requested for your land '
+            f'"{land.title}". Reason: {review.reason}'
+        )
     )
 
     db.add(notification)
 
+    # Activity log
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="REQUEST_CHANGES",
+        description=(
+            f'Requested changes for land "{land.title}". '
+            f"Reason: {review.reason}"
+        ),
+        target_type="LAND",
+        target_id=land.id,
+    )
+
+    # Save land update, notification and activity log together
     db.commit()
     db.refresh(land)
 
@@ -347,6 +401,10 @@ def request_changes(
         "status": land.status,
         "reason": land.rejection_reason
     }
+# ==========================
+# Reject Land
+# ==========================
+
 @router.put("/lands/{land_id}/reject")
 def reject_land(
     land_id: int,
@@ -354,7 +412,11 @@ def reject_land(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = db.query(Land).filter(Land.id == land_id).first()
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
 
     if not land:
         raise HTTPException(
@@ -364,15 +426,33 @@ def reject_land(
 
     land.status = "rejected"
     land.rejection_reason = review.reason
+
+    # Notify land owner
     notification = Notification(
-        
         user_id=land.owner_id,
         title="Land Rejected",
-        message=f'Your land "{land.title}" has been rejected. Reason: {review.reason}'
+        message=(
+            f'Your land "{land.title}" has been rejected. '
+            f"Reason: {review.reason}"
+        )
     )
 
     db.add(notification)
 
+    # Activity log
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="REJECT_LAND",
+        description=(
+            f'Rejected land "{land.title}". '
+            f"Reason: {review.reason}"
+        ),
+        target_type="LAND",
+        target_id=land.id,
+    )
+
+    # Save land update, notification and activity log together
     db.commit()
     db.refresh(land)
 
@@ -381,6 +461,7 @@ def reject_land(
         "status": land.status,
         "reason": land.rejection_reason
     }
+
 
 @router.delete("/lands/{land_id}")
 def delete_land_admin(
