@@ -350,6 +350,10 @@ def get_land(
 # Update Land
 # ==========================
 
+# ==========================
+# Update Land
+# ==========================
+
 @router.put("/{land_id}")
 def update_land(
     land_id: int,
@@ -376,6 +380,10 @@ def update_land(
             detail="You are not allowed to update this land"
         )
 
+    # Keep the original land title for the activity log
+    #land_title = existing_land.title
+
+    # Update land fields
     existing_land.title = land.title
     existing_land.description = land.description
     existing_land.price = land.price
@@ -393,6 +401,17 @@ def update_land(
     existing_land.latitude = land.latitude
     existing_land.longitude = land.longitude
 
+    # Create activity log
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="UPDATE_LAND",
+        description=f'Updated land "{existing_land.title}"',
+        target_type="LAND",
+        target_id=existing_land.id,
+    )
+
+    # Save land update and activity log together
     db.commit()
     db.refresh(existing_land)
 
@@ -402,6 +421,9 @@ def update_land(
     }
 
 
+# ==========================
+# Delete Land
+# ==========================
 # ==========================
 # Delete Land
 # ==========================
@@ -431,7 +453,23 @@ def delete_land(
             detail="You are not allowed to delete this land"
         )
 
+    # Save information before deleting the land
+    land_title = land.title
+
+    # Create activity log BEFORE deleting the land
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="DELETE_LAND",
+        description=f'Deleted land "{land_title}"',
+        target_type="LAND",
+        target_id=land_id,
+    )
+
+    # Delete land
     db.delete(land)
+
+    # Save deletion and activity log together
     db.commit()
 
     return {
