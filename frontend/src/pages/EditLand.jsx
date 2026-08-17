@@ -93,7 +93,10 @@ function EditLand() {
   const updateLand = async (e) => {
     e.preventDefault();
 
-    // Validation MUST be inside submit handler
+    // =======================================================
+    // Validation
+    // =======================================================
+
     if (!land.title.trim()) {
       alert("Title is required.");
       return;
@@ -159,10 +162,14 @@ function EditLand() {
       return;
     }
 
+    // =======================================================
+    // Submit
+    // =======================================================
+
     try {
       setUpdating(true);
 
-      await api.put(`/lands/${id}`, {
+      const response = await api.put(`/lands/${id}`, {
         title: land.title.trim(),
         description: land.description.trim(),
         price: Number(land.price),
@@ -185,7 +192,19 @@ function EditLand() {
         image_url: land.image_url || null,
       });
 
-      alert("Land updated successfully!");
+      // =======================================================
+      // Backend decides whether re-approval is required
+      // =======================================================
+
+      if (response.data.approval_required === true) {
+        alert(
+          "Land updated successfully!\n\n" +
+          "Your changes require admin approval.\n" +
+          "The land is now waiting for admin review."
+        );
+      } else {
+        alert("Land updated successfully!");
+      }
 
       navigate("/my-lands");
     } catch (error) {
@@ -198,7 +217,10 @@ function EditLand() {
       } else if (Array.isArray(detail)) {
         alert(
           detail
-            .map((item) => item?.msg || JSON.stringify(item))
+            .map(
+              (item) =>
+                item?.msg || JSON.stringify(item)
+            )
             .join("\n")
         );
       } else {
