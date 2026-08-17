@@ -13,7 +13,7 @@ from app.auth import verify_password, get_password_hash
 from app.models import User, EmailVerification
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Literal
-
+from app.utils.activity_log import create_activity_log
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -128,16 +128,20 @@ def register(
 # ==========================
 # Login User
 # ==========================
+# ==========================
+# Login User
+# ==========================
+
 @router.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-
     print("=" * 60)
     print("LOGIN ATTEMPT")
     print("Email:", form_data.username)
 
+    # Find user by email
     db_user = (
         db.query(User)
         .filter(User.email == form_data.username)
@@ -146,12 +150,14 @@ def login(
 
     print("Database User:", db_user)
 
+    # Check user exists
     if db_user is None:
         raise HTTPException(
             status_code=400,
             detail="Invalid email or password"
         )
 
+    # Verify password
     password_ok = verify_password(
         form_data.password,
         db_user.password
@@ -165,11 +171,37 @@ def login(
             detail="Invalid email or password"
         )
 
+    # Create JWT access token
     access_token = create_access_token(
         {
             "user_id": db_user.id
         }
     )
+
+    # =====================================================
+    # Activity Log
+    # =====================================================
+
+    if db_user.role == "admin":
+        login_description = "Admin logged in"
+    elif db_user.role == "farmer":
+        login_description = "Farmer logged in"
+    elif db_user.role == "buyer":
+        login_description = "Buyer logged in"
+    else:
+        login_description = "User logged in"
+
+    create_activity_log(
+        db=db,
+        user_id=db_user.id,
+        action="LOGIN",
+        description=login_description,
+        target_type="USER",
+        target_id=db_user.id,
+    )
+
+    # Save activity log
+    db.commit()
 
     print("Login Successful")
     print("=" * 60)
@@ -180,9 +212,7 @@ def login(
         "user_id": db_user.id,
         "full_name": db_user.full_name,
         "role": db_user.role,
-        
     }
-from app.auth import get_current_user
 
 @router.get("/me")
 def get_me(
