@@ -276,7 +276,75 @@ def get_my_lands(
         }
         for land in lands
     ]
+# ==========================
+# Get My Land By ID
+# ==========================
 
+@router.get("/my/{land_id}")
+def get_my_land_by_id(
+    land_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    land = (
+        db.query(Land)
+        .filter(
+            Land.id == land_id,
+            Land.owner_id == current_user
+        )
+        .first()
+    )
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found or you are not the owner"
+        )
+
+    owner = (
+        db.query(User)
+        .filter(User.id == land.owner_id)
+        .first()
+    )
+
+    return {
+        "id": land.id,
+        "title": land.title,
+        "description": land.description,
+        "image_url": land.image_url,
+        "price": land.price,
+        "area": land.area,
+
+        "village": land.village,
+        "mandal": land.mandal,
+        "district": land.district,
+        "state": land.state,
+        "pincode": land.pincode,
+
+        "survey_number": land.survey_number,
+        "soil_type": land.soil_type,
+        "water_source": land.water_source,
+        "crop_type": land.crop_type,
+
+        "latitude": land.latitude,
+        "longitude": land.longitude,
+
+        "status": land.status,
+        "rejection_reason": land.rejection_reason,
+
+        "images": [
+            {
+                "id": image.id,
+                "image_url": image.image_url
+            }
+            for image in land.images
+        ],
+
+        "owner_id": land.owner_id,
+        "owner_name": owner.full_name if owner else "",
+        "owner_email": owner.email if owner else "",
+        "owner_mobile": owner.mobile if owner else ""
+    }
 
 # ==========================
 # Get Land By ID
