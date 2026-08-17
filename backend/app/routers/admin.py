@@ -462,6 +462,9 @@ def reject_land(
         "reason": land.rejection_reason
     }
 
+# ==========================
+# Admin Delete Land
+# ==========================
 
 @router.delete("/lands/{land_id}")
 def delete_land_admin(
@@ -469,7 +472,11 @@ def delete_land_admin(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = db.query(Land).filter(Land.id == land_id).first()
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
 
     if not land:
         raise HTTPException(
@@ -477,12 +484,29 @@ def delete_land_admin(
             detail="Land not found"
         )
 
+    land_title = land.title
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="ADMIN_DELETE_LAND",
+        description=f'Admin deleted land "{land_title}"',
+        target_type="LAND",
+        target_id=land_id,
+    )
+
     db.delete(land)
+
     db.commit()
 
     return {
         "message": "Land deleted successfully"
     }
+
+# ==========================
+# Admin Update Land
+# ==========================
+
 @router.put("/lands/{land_id}")
 def update_land_admin(
     land_id: int,
@@ -490,7 +514,11 @@ def update_land_admin(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = db.query(Land).filter(Land.id == land_id).first()
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
 
     if not land:
         raise HTTPException(
@@ -502,6 +530,15 @@ def update_land_admin(
 
     for key, value in updates.items():
         setattr(land, key, value)
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="ADMIN_UPDATE_LAND",
+        description=f'Admin updated land "{land.title}"',
+        target_type="LAND",
+        target_id=land.id,
+    )
 
     db.commit()
     db.refresh(land)
@@ -574,6 +611,10 @@ def get_land_by_id(
         "owner_email": owner.email if owner else "",
         "owner_mobile": owner.mobile if owner else "",
     }
+# ==========================
+# Admin Update User
+# ==========================
+
 @router.put("/users/{user_id}")
 def update_user_admin(
     user_id: int,
@@ -581,7 +622,11 @@ def update_user_admin(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
 
     if not user:
         raise HTTPException(
@@ -593,6 +638,15 @@ def update_user_admin(
 
     for key, value in updates.items():
         setattr(user, key, value)
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="UPDATE_USER",
+        description=f'Updated user "{user.full_name}"',
+        target_type="USER",
+        target_id=user.id,
+    )
 
     db.commit()
     db.refresh(user)
@@ -607,13 +661,21 @@ def update_user_admin(
             "role": user.role
         }
     }
+# ==========================
+# Admin Delete User
+# ==========================
+
 @router.delete("/users/{user_id}")
 def delete_user_admin(
     user_id: int,
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
 
     if not user:
         raise HTTPException(
@@ -621,7 +683,19 @@ def delete_user_admin(
             detail="User not found"
         )
 
+    user_name = user.full_name
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="DELETE_USER",
+        description=f'Deleted user "{user_name}"',
+        target_type="USER",
+        target_id=user_id,
+    )
+
     db.delete(user)
+
     db.commit()
 
     return {

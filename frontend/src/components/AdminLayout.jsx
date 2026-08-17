@@ -24,7 +24,10 @@ function AdminLayout() {
             marginTop: "20px",
           }}
         >
-          <Link to="/admin" style={{ color: "white", textDecoration: "none" }}>
+          <Link
+            to="/admin"
+            style={{ color: "white", textDecoration: "none" }}
+          >
             📊 Dashboard
           </Link>
 
@@ -41,12 +44,20 @@ function AdminLayout() {
           >
             🌾 Lands
           </Link>
+
           <Link
             to="/admin/pending-lands"
             style={{ color: "white", textDecoration: "none" }}
           >
-
             🟡 Pending Approvals
+          </Link>
+
+          {/* Activity Logs */}
+          <Link
+            to="/admin/activity-logs"
+            style={{ color: "white", textDecoration: "none" }}
+          >
+            📋 Activity Logs
           </Link>
 
           <Link

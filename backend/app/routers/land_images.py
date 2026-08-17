@@ -1,19 +1,13 @@
-from typing import Annotated
-
-from fastapi import (
-    APIRouter,
-    Depends,
-    UploadFile,
-    File,
-    HTTPException,
-)
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
+from typing import List
 
 import cloudinary.uploader
 
 from app import models
 from app.auth import get_current_user
 from app.database import get_db
+from app.utils.activity_log import create_activity_log
 
 
 router = APIRouter(
@@ -29,11 +23,10 @@ router = APIRouter(
 @router.post("/{land_id}/images")
 async def upload_land_images(
     land_id: int,
-    files: Annotated[list[UploadFile], File(...)],
+    files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user),
+    current_user: int = Depends(get_current_user)
 ):
-    # Find land
     land = (
         db.query(models.Land)
         .filter(models.Land.id == land_id)
@@ -46,35 +39,35 @@ async def upload_land_images(
             detail="Land not found"
         )
 
-    # Only the land owner can upload images
+    # Only owner can upload images
     if land.owner_id != current_user:
         raise HTTPException(
             status_code=403,
             detail="You are not allowed to upload images for this land"
         )
 
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail="Please select at least one image"
+        )
+
     uploaded_images = []
 
-    for file in files:
+    try:
+        for file in files:
 
-        # Validate image file
-        if (
-            not file.content_type
-            or not file.content_type.startswith("image/")
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"{file.filename} is not a valid image file"
-            )
+            if not file.content_type or not file.content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{file.filename} is not a valid image file"
+                )
 
-        try:
-            # Upload image to Cloudinary
             result = cloudinary.uploader.upload(
                 file.file,
                 folder=f"farmland-marketplace/lands/{land_id}"
             )
 
-            # Save Cloudinary URL in database
             image = models.LandImage(
                 image_url=result["secure_url"],
                 land_id=land_id
@@ -88,15 +81,32 @@ async def upload_land_images(
                 "image_url": image.image_url
             })
 
-        except Exception as e:
-            db.rollback()
+        # Activity log
+        create_activity_log(
+            db=db,
+            user_id=current_user,
+            action="UPLOAD_IMAGES",
+            description=(
+                f'Uploaded {len(uploaded_images)} image(s) '
+                f'for land "{land.title}"'
+            ),
+            target_type="LAND",
+            target_id=land.id,
+        )
 
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to upload {file.filename}: {str(e)}"
-            )
+        db.commit()
 
-    db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as e:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload land images: {str(e)}"
+        )
 
     return {
         "message": "Land images uploaded successfully",
@@ -112,9 +122,8 @@ async def upload_land_images(
 @router.get("/{land_id}/images")
 def get_land_images(
     land_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
-    # Check whether land exists
     land = (
         db.query(models.Land)
         .filter(models.Land.id == land_id)
@@ -152,9 +161,8 @@ def delete_land_image(
     land_id: int,
     image_id: int,
     db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user),
+    current_user: int = Depends(get_current_user)
 ):
-    # Find land
     land = (
         db.query(models.Land)
         .filter(models.Land.id == land_id)
@@ -174,7 +182,6 @@ def delete_land_image(
             detail="You are not allowed to delete images for this land"
         )
 
-    # Find image belonging to this land
     image = (
         db.query(models.LandImage)
         .filter(
@@ -190,7 +197,21 @@ def delete_land_image(
             detail="Image not found"
         )
 
+    # Delete database record
     db.delete(image)
+
+    # Activity log
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="DELETE_IMAGE",
+        description=(
+            f'Deleted image {image_id} from land "{land.title}"'
+        ),
+        target_type="LAND",
+        target_id=land.id,
+    )
+
     db.commit()
 
     return {
