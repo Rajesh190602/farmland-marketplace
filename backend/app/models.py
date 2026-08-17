@@ -34,6 +34,11 @@ class User(Base):
     "Notification",
     cascade="all, delete-orphan"
 )
+    activity_logs = relationship(
+    "ActivityLog",
+    back_populates="user",
+    cascade="all, delete-orphan"
+)
 
 class Land(Base):
     __tablename__ = "lands"
@@ -195,3 +200,48 @@ class Notification(Base):
     )
 
     user = relationship("User")
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
+    action = Column(
+        String,
+        nullable=False
+    )
+
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    target_type = Column(
+        String,
+        nullable=True
+    )
+
+    target_id = Column(
+        Integer,
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    user = relationship(
+        "User",
+        back_populates="activity_logs"
+    )
+    
