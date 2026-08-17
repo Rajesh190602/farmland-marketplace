@@ -2,7 +2,12 @@ import { Link, Outlet } from "react-router-dom";
 
 function AdminLayout() {
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
+    <div
+      style={{
+        display: "flex",
+        minHeight: "100vh",
+      }}
+    >
       {/* Sidebar */}
       <div
         style={{
@@ -24,30 +29,46 @@ function AdminLayout() {
             marginTop: "20px",
           }}
         >
+          {/* Dashboard */}
           <Link
             to="/admin"
-            style={{ color: "white", textDecoration: "none" }}
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
           >
             📊 Dashboard
           </Link>
 
+          {/* Users */}
           <Link
             to="/admin/users"
-            style={{ color: "white", textDecoration: "none" }}
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
           >
             👥 Users
           </Link>
 
+          {/* Lands */}
           <Link
             to="/admin/lands"
-            style={{ color: "white", textDecoration: "none" }}
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
           >
             🌾 Lands
           </Link>
 
+          {/* Pending Approvals */}
           <Link
             to="/admin/pending-lands"
-            style={{ color: "white", textDecoration: "none" }}
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
           >
             🟡 Pending Approvals
           </Link>
@@ -55,21 +76,28 @@ function AdminLayout() {
           {/* Activity Logs */}
           <Link
             to="/admin/activity-logs"
-            style={{ color: "white", textDecoration: "none" }}
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
           >
             📋 Activity Logs
           </Link>
 
+          {/* Home */}
           <Link
             to="/home"
-            style={{ color: "white", textDecoration: "none" }}
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
           >
             🏠 Home
           </Link>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Main Content */}
       <div
         style={{
           flex: 1,
