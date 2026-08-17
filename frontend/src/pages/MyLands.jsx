@@ -6,6 +6,7 @@ import api from "../services/api";
 function MyLands() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
+  const [deletingImageId, setDeletingImageId] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
 
   const [lands, setLands] = useState([]);
@@ -139,9 +140,7 @@ function MyLands() {
   // =========================================================
 
   const handleImageSelection = (landId, event) => {
-    const files = Array.from(
-      event.target.files || []
-    );
+    const files = Array.from(event.target.files || []);
 
     if (files.length === 0) {
       return;
@@ -252,6 +251,54 @@ function MyLands() {
       );
     } finally {
       setUploadingId(null);
+    }
+  };
+
+  // =========================================================
+  // Delete Individual Image
+  // =========================================================
+
+  const deleteImage = async (landId, imageId) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this image?"
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      setDeletingImageId(imageId);
+
+      await api.delete(
+        `/lands/${landId}/images/${imageId}`
+      );
+
+      alert("Image deleted successfully.");
+
+      // Remove only the deleted image from the gallery
+      setGalleryImages((previous) => ({
+        ...previous,
+        [landId]: (
+          previous[landId] || []
+        ).filter(
+          (image) => image.id !== imageId
+        ),
+      }));
+    } catch (error) {
+      console.error(
+        "Delete image error:",
+        error
+      );
+
+      alert(
+        getErrorMessage(
+          error,
+          "Failed to delete image."
+        )
+      );
+    } finally {
+      setDeletingImageId(null);
     }
   };
 
@@ -483,18 +530,56 @@ function MyLands() {
                             }}
                           >
                             <img
-                              src={
-                                image.image_url
-                              }
+                              src={image.image_url}
                               alt={`${land.title} land`}
                               style={{
                                 width: "100%",
                                 height: "180px",
-                                objectFit:
-                                  "cover",
+                                objectFit: "cover",
                                 display: "block",
                               }}
                             />
+
+                            {/* =====================================
+                                Delete Individual Image
+                            ====================================== */}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteImage(
+                                  land.id,
+                                  image.id
+                                )
+                              }
+                              disabled={
+                                deletingImageId ===
+                                image.id
+                              }
+                              style={{
+                                width: "100%",
+                                marginTop: "8px",
+                                backgroundColor:
+                                  deletingImageId ===
+                                  image.id
+                                    ? "#999"
+                                    : "#D32F2F",
+                                color: "white",
+                                border: "none",
+                                padding: "9px",
+                                cursor:
+                                  deletingImageId ===
+                                  image.id
+                                    ? "not-allowed"
+                                    : "pointer",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {deletingImageId ===
+                              image.id
+                                ? "Deleting..."
+                                : "🗑️ Delete Image"}
+                            </button>
                           </div>
                         )
                       )}
@@ -510,8 +595,7 @@ function MyLands() {
                         fontStyle: "italic",
                       }}
                     >
-                      No land images uploaded
-                      yet.
+                      No land images uploaded yet.
                     </p>
                   )}
 
@@ -537,23 +621,17 @@ function MyLands() {
                 </p>
 
                 <p>
-                  <strong>
-                    Village:
-                  </strong>{" "}
+                  <strong>Village:</strong>{" "}
                   {land.village}
                 </p>
 
                 <p>
-                  <strong>
-                    Mandal:
-                  </strong>{" "}
+                  <strong>Mandal:</strong>{" "}
                   {land.mandal}
                 </p>
 
                 <p>
-                  <strong>
-                    District:
-                  </strong>{" "}
+                  <strong>District:</strong>{" "}
                   {land.district}
                 </p>
 
@@ -563,37 +641,27 @@ function MyLands() {
                 </p>
 
                 <p>
-                  <strong>
-                    Pincode:
-                  </strong>{" "}
+                  <strong>Pincode:</strong>{" "}
                   {land.pincode}
                 </p>
 
                 <p>
-                  <strong>
-                    Survey No:
-                  </strong>{" "}
+                  <strong>Survey No:</strong>{" "}
                   {land.survey_number}
                 </p>
 
                 <p>
-                  <strong>
-                    Soil Type:
-                  </strong>{" "}
+                  <strong>Soil Type:</strong>{" "}
                   {land.soil_type}
                 </p>
 
                 <p>
-                  <strong>
-                    Water Source:
-                  </strong>{" "}
+                  <strong>Water Source:</strong>{" "}
                   {land.water_source}
                 </p>
 
                 <p>
-                  <strong>
-                    Crop Type:
-                  </strong>{" "}
+                  <strong>Crop Type:</strong>{" "}
                   {land.crop_type}
                 </p>
 
@@ -646,8 +714,7 @@ function MyLands() {
                     }
                   />
 
-                  {filesForLand.length >
-                    0 && (
+                  {filesForLand.length > 0 && (
                     <div
                       style={{
                         marginTop: "15px",
@@ -764,7 +831,7 @@ function MyLands() {
                 </div>
 
                 {/* =================================================
-                    Edit / Delete
+                    Edit / Delete Entire Land
                 ================================================= */}
 
                 <div
