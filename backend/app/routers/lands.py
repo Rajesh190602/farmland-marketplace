@@ -349,7 +349,6 @@ def get_land(
 # ==========================
 # Update Land
 # ==========================
-
 # ==========================
 # Update Land
 # ==========================
@@ -380,10 +379,24 @@ def update_land(
             detail="You are not allowed to update this land"
         )
 
-    # Keep the original land title for the activity log
-    #land_title = existing_land.title
+    # =====================================================
+    # CHECK IF ADMIN RE-APPROVAL IS REQUIRED
+    #
+    # Only these four fields require re-approval:
+    # Village, Mandal, District, Survey Number
+    # =====================================================
 
-    # Update land fields
+    approval_required = (
+        existing_land.village != land.village
+        or existing_land.mandal != land.mandal
+        or existing_land.district != land.district
+        or existing_land.survey_number != land.survey_number
+    )
+
+    # =====================================================
+    # UPDATE LAND FIELDS
+    # =====================================================
+
     existing_land.title = land.title
     existing_land.description = land.description
     existing_land.price = land.price
@@ -401,7 +414,24 @@ def update_land(
     existing_land.latitude = land.latitude
     existing_land.longitude = land.longitude
 
-    # Create activity log
+    # =====================================================
+    # ADMIN RE-APPROVAL WORKFLOW
+    # =====================================================
+
+    if approval_required:
+        existing_land.status = "pending"
+        existing_land.rejection_reason = None
+
+        success_message = (
+            "Land updated successfully and is waiting for admin approval."
+        )
+    else:
+        success_message = "Land updated successfully."
+
+    # =====================================================
+    # ACTIVITY LOG
+    # =====================================================
+
     create_activity_log(
         db=db,
         user_id=current_user,
@@ -411,14 +441,21 @@ def update_land(
         target_id=existing_land.id,
     )
 
-    # Save land update and activity log together
+    # =====================================================
+    # SAVE
+    # =====================================================
+
     db.commit()
     db.refresh(existing_land)
 
     return {
-        "message": "Land Updated Successfully",
+        "message": success_message,
+        "status": existing_land.status,
+        "approval_required": approval_required,
         "land": existing_land
     }
+
+
 
 
 # ==========================
