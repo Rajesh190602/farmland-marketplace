@@ -41,7 +41,7 @@ function EditLand() {
     try {
       setLoading(true);
 
-      const response = await api.get(`/lands/${id}`);
+      const response = await api.get(`/lands/my/${id}`);
 
       setLand({
         title: response.data.title || "",
