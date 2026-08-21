@@ -2,6 +2,7 @@ from sqlalchemy import or_, desc
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+
 from app.database import get_db
 from app.auth import get_current_user
 from app.models import (
@@ -30,7 +31,6 @@ def start_chat(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    # Get current user
     buyer = (
         db.query(User)
         .filter(User.id == current_user)
@@ -43,14 +43,12 @@ def start_chat(
             detail="User not found"
         )
 
-    # Only buyers can start marketplace chats
     if buyer.role != "buyer":
         raise HTTPException(
             status_code=403,
             detail="Only buyers can start a chat"
         )
 
-    # Only approved lands can be contacted
     land = (
         db.query(Land)
         .filter(
@@ -66,14 +64,12 @@ def start_chat(
             detail="Approved land not found"
         )
 
-    # Prevent chatting with own land
     if land.owner_id == current_user:
         raise HTTPException(
             status_code=400,
             detail="You cannot chat with yourself."
         )
 
-    # Check existing conversation
     conversation = (
         db.query(Conversation)
         .filter(
@@ -90,7 +86,6 @@ def start_chat(
             "message": "Conversation already exists"
         }
 
-    # Create conversation
     conversation = Conversation(
         buyer_id=current_user,
         farmer_id=land.owner_id,
@@ -101,7 +96,6 @@ def start_chat(
     db.commit()
     db.refresh(conversation)
 
-    # Create notification for farmer
     notification = Notification(
         user_id=land.owner_id,
         title="💬 New Chat",
@@ -144,7 +138,6 @@ def send_message(
             detail="Conversation not found"
         )
 
-    # Only conversation participants can send messages
     if current_user not in [
         conversation.buyer_id,
         conversation.farmer_id
@@ -154,14 +147,12 @@ def send_message(
             detail="You are not part of this conversation"
         )
 
-    # Prevent empty messages
     if not data.message or not data.message.strip():
         raise HTTPException(
             status_code=400,
             detail="Message cannot be empty"
         )
 
-    # Save message
     message = Message(
         conversation_id=conversation.id,
         sender_id=current_user,
@@ -172,20 +163,17 @@ def send_message(
     db.commit()
     db.refresh(message)
 
-    # Get sender details
     sender = (
         db.query(User)
         .filter(User.id == current_user)
         .first()
     )
 
-    # Decide receiver
     if current_user == conversation.buyer_id:
         receiver_id = conversation.farmer_id
     else:
         receiver_id = conversation.buyer_id
 
-    # Create notification
     notification = Notification(
         user_id=receiver_id,
         title="💬 New Message",
@@ -228,7 +216,6 @@ def get_messages(
             detail="Conversation not found"
         )
 
-    # Only participants can read messages
     if current_user not in [
         conversation.buyer_id,
         conversation.farmer_id
@@ -248,6 +235,65 @@ def get_messages(
     )
 
     return messages
+
+
+# ==========================
+# Get Conversation Details
+# ==========================
+
+@router.get("/conversation/{conversation_id}")
+def get_conversation_details(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id == conversation_id
+        )
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    if current_user not in [
+        conversation.buyer_id,
+        conversation.farmer_id
+    ]:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied"
+        )
+
+    if current_user == conversation.buyer_id:
+        other_user_id = conversation.farmer_id
+    else:
+        other_user_id = conversation.buyer_id
+
+    other_user = (
+        db.query(User)
+        .filter(
+            User.id == other_user_id
+        )
+        .first()
+    )
+
+    if not other_user:
+        raise HTTPException(
+            status_code=404,
+            detail="Other user not found"
+        )
+
+    return {
+        "conversation_id": conversation.id,
+        "other_user_id": other_user.id,
+        "other_user_name": other_user.full_name
+    }
 
 
 # ==========================
@@ -328,6 +374,10 @@ def my_conversations(
                 else None
             )
         })
+
+    return result
+
+
 # ==========================
 # Update Online Presence
 # ==========================
@@ -352,6 +402,7 @@ def update_presence(
     user.last_seen = datetime.now(timezone.utc)
 
     db.commit()
+    db.refresh(user)
 
     return {
         "message": "Presence updated",
@@ -369,7 +420,6 @@ def get_presence(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    # Verify requested user exists
     user = (
         db.query(User)
         .filter(User.id == user_id)
@@ -387,9 +437,9 @@ def get_presence(
     online = False
 
     if user.last_seen:
+
         last_seen = user.last_seen
 
-        # Handle databases returning a naive datetime
         if last_seen.tzinfo is None:
             last_seen = last_seen.replace(
                 tzinfo=timezone.utc
@@ -399,7 +449,6 @@ def get_presence(
             now - last_seen
         ).total_seconds()
 
-        # Consider user online for 60 seconds
         if seconds_since_seen <= 60:
             online = True
 
@@ -408,5 +457,3 @@ def get_presence(
         "online": online,
         "last_seen": user.last_seen
     }
-
-    return result
