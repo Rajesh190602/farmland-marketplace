@@ -1,7 +1,7 @@
 from sqlalchemy import or_, desc
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
+from datetime import datetime, timezone
 from app.database import get_db
 from app.auth import get_current_user
 from app.models import (
@@ -328,5 +328,85 @@ def my_conversations(
                 else None
             )
         })
+# ==========================
+# Update Online Presence
+# ==========================
+
+@router.post("/presence")
+def update_presence(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.last_seen = datetime.now(timezone.utc)
+
+    db.commit()
+
+    return {
+        "message": "Presence updated",
+        "last_seen": user.last_seen
+    }
+
+
+# ==========================
+# Get User Online Status
+# ==========================
+
+@router.get("/presence/{user_id}")
+def get_presence(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # Verify requested user exists
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    now = datetime.now(timezone.utc)
+
+    online = False
+
+    if user.last_seen:
+        last_seen = user.last_seen
+
+        # Handle databases returning a naive datetime
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(
+                tzinfo=timezone.utc
+            )
+
+        seconds_since_seen = (
+            now - last_seen
+        ).total_seconds()
+
+        # Consider user online for 60 seconds
+        if seconds_since_seen <= 60:
+            online = True
+
+    return {
+        "user_id": user.id,
+        "online": online,
+        "last_seen": user.last_seen
+    }
 
     return result

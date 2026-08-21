@@ -18,6 +18,10 @@ class User(Base):
         DateTime(timezone=True),
         server_default=func.now()
     )
+    last_seen = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
 
     lands = relationship(
         "Land",
