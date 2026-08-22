@@ -1550,13 +1550,19 @@ function AdminDashboard() {
                       }}
                     >
 
+
                       <span>
-
-                        👤 User ID:{" "}
-                        {activity.target_id ||
-                          "-"}
-
+                         {" "}
+                        {activity.user_name || "System"}
                       </span>
+
+                       {activity.user_email && (
+                         <span>
+                           ✉️ {activity.user_email}
+                          </span>
+                        )}
+
+                        
 
 
                       {activity.target_type && (
