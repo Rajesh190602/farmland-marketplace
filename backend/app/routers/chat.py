@@ -21,7 +21,8 @@ from app.models import (
     Land,
     Message,
     User,
-    Notification
+    Notification,
+    ActivityLog
 )
 
 from app.schemas import (
@@ -138,6 +139,25 @@ def start_chat(
     db.refresh(conversation)
 
     # ----------------------------------
+    # SECURITY ACTIVITY LOG
+    # ----------------------------------
+
+    activity_log = ActivityLog(
+        user_id=current_user,
+        action="CHAT_STARTED",
+        description=(
+            f"Started a conversation with farmer "
+            f"user {land.owner_id} about land "
+            f"'{land.title}'."
+        ),
+        target_type="conversation",
+        target_id=conversation.id
+    )
+
+    db.add(activity_log)
+    db.commit()
+
+    # ----------------------------------
     # Notification for farmer
     # ----------------------------------
 
@@ -223,6 +243,24 @@ def send_message(
     db.add(message)
     db.commit()
     db.refresh(message)
+
+    # ----------------------------------
+    # SECURITY ACTIVITY LOG
+    # ----------------------------------
+
+    activity_log = ActivityLog(
+        user_id=current_user,
+        action="CHAT_MESSAGE_SENT",
+        description=(
+            f"Sent a message in conversation "
+            f"{conversation.id}."
+        ),
+        target_type="conversation",
+        target_id=conversation.id
+    )
+
+    db.add(activity_log)
+    db.commit()
 
     # ----------------------------------
     # Get sender
@@ -432,9 +470,7 @@ async def send_chat_file(
         conversation_id=conversation.id,
         sender_id=current_user,
 
-        # Important:
-        # File messages don't contain text.
-        # This requires Message.message to allow NULL.
+        # File messages do not contain text
         message=None,
 
         message_type=message_type,
@@ -471,6 +507,24 @@ async def send_chat_file(
                 f"{str(database_error)}"
             )
         )
+
+    # ----------------------------------
+    # SECURITY ACTIVITY LOG
+    # ----------------------------------
+
+    activity_log = ActivityLog(
+        user_id=current_user,
+        action="CHAT_FILE_SENT",
+        description=(
+            f"Sent file '{file.filename}' "
+            f"in conversation {conversation.id}."
+        ),
+        target_type="conversation",
+        target_id=conversation.id
+    )
+
+    db.add(activity_log)
+    db.commit()
 
     # ----------------------------------
     # Get sender
@@ -544,13 +598,11 @@ def delete_message(
     if message.sender_id != current_user:
         raise HTTPException(
             status_code=403,
-            detail=(
-                "You can delete only your own messages"
-            )
+            detail="You can delete only your own messages"
         )
 
     # ----------------------------------
-    # Verify conversation exists
+    # Verify conversation
     # ----------------------------------
 
     conversation = (
@@ -569,9 +621,27 @@ def delete_message(
         )
 
     # ----------------------------------
+    # Save activity information
+    # BEFORE deleting message
+    # ----------------------------------
+
+    activity_log = ActivityLog(
+        user_id=current_user,
+        action="CHAT_MESSAGE_DELETED",
+        description=(
+            f"Deleted message {message.id} "
+            f"from conversation "
+            f"{conversation.id}."
+        ),
+        target_type="message",
+        target_id=message.id
+    )
+
+    # ----------------------------------
     # Delete message
     # ----------------------------------
 
+    db.add(activity_log)
     db.delete(message)
     db.commit()
 
@@ -583,19 +653,6 @@ def delete_message(
 
 # =========================================================
 # GET MESSAGES
-# =========================================================
-#
-# IMPORTANT:
-# There must be ONLY ONE endpoint with this path.
-#
-# When a user opens the conversation, all messages
-# received from the other participant are marked READ.
-#
-# This produces:
-#
-# ✓   = sent but not seen
-# ✓✓  = seen by receiver
-#
 # =========================================================
 
 @router.get("/messages/{conversation_id}")
