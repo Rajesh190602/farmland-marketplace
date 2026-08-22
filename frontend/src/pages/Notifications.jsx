@@ -1,25 +1,42 @@
 import { useEffect, useState } from "react";
+import {
+  FaBell,
+  FaCheckDouble,
+  FaTrash,
+  FaSync,
+  FaEnvelopeOpen,
+} from "react-icons/fa";
+
+import Navbar from "../components/Navbar";
 import api from "../services/api";
 
 function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
+  const [markingAll, setMarkingAll] = useState(false);
+
+  // =====================================================
+  // FETCH NOTIFICATIONS
+  // =====================================================
 
   const fetchNotifications = async () => {
     try {
       setLoading(true);
 
       const response = await api.get("/notifications/");
-      setNotifications(response.data);
-    } catch (error) {
-      console.error("Notification Error:", error);
 
-      if (error.response) {
-        alert(error.response.data.detail || "Failed to load notifications");
-      } else {
-        alert("Failed to load notifications");
-      }
+      setNotifications(response.data || []);
+    } catch (error) {
+      console.error(
+        "Notification Error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+        "Failed to load notifications"
+      );
     } finally {
       setLoading(false);
     }
@@ -29,48 +46,113 @@ function Notifications() {
     fetchNotifications();
   }, []);
 
-  // ==========================
-  // Mark Notification As Read
-  // ==========================
+  // =====================================================
+  // MARK SINGLE NOTIFICATION AS READ
+  // =====================================================
 
   const markAsRead = async (notificationId) => {
     try {
       setProcessingId(notificationId);
 
-      await api.put(`/notifications/${notificationId}/read`);
-
-      // Update UI immediately
-      setNotifications((previousNotifications) =>
-        previousNotifications.map((notification) =>
-          notification.id === notificationId
-            ? { ...notification, is_read: true }
-            : notification
-        )
+      await api.put(
+        `/notifications/${notificationId}/read`
       );
 
-      // Tell Navbar to refresh unread count
-      window.dispatchEvent(new Event("notificationsUpdated"));
-    } catch (error) {
-      console.error("Mark Read Error:", error);
+      setNotifications(
+        (previousNotifications) =>
+          previousNotifications.map(
+            (notification) =>
+              notification.id === notificationId
+                ? {
+                    ...notification,
+                    is_read: true,
+                  }
+                : notification
+          )
+      );
 
-      if (error.response) {
-        alert(
-          error.response.data.detail ||
-            "Failed to mark notification as read"
-        );
-      } else {
-        alert("Failed to mark notification as read");
-      }
+      // Refresh Navbar notification count
+      window.dispatchEvent(
+        new Event("notificationsUpdated")
+      );
+
+    } catch (error) {
+      console.error(
+        "Mark Read Error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+        "Failed to mark notification as read"
+      );
+
     } finally {
       setProcessingId(null);
     }
   };
 
-  // ==========================
-  // Delete Notification
-  // ==========================
+  // =====================================================
+  // MARK ALL NOTIFICATIONS AS READ
+  // =====================================================
 
-  const deleteNotification = async (notificationId) => {
+  const markAllAsRead = async () => {
+    const unreadNotifications =
+      notifications.filter(
+        (notification) =>
+          !notification.is_read
+      );
+
+    if (unreadNotifications.length === 0) {
+      return;
+    }
+
+    try {
+      setMarkingAll(true);
+
+      await api.put(
+        "/notifications/read-all"
+      );
+
+      // Update UI immediately
+      setNotifications(
+        (previousNotifications) =>
+          previousNotifications.map(
+            (notification) => ({
+              ...notification,
+              is_read: true,
+            })
+          )
+      );
+
+      // Refresh Navbar unread count
+      window.dispatchEvent(
+        new Event("notificationsUpdated")
+      );
+
+    } catch (error) {
+      console.error(
+        "Mark All Read Error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+        "Failed to mark all notifications as read"
+      );
+
+    } finally {
+      setMarkingAll(false);
+    }
+  };
+
+  // =====================================================
+  // DELETE NOTIFICATION
+  // =====================================================
+
+  const deleteNotification = async (
+    notificationId
+  ) => {
     const confirmed = window.confirm(
       "Are you sure you want to delete this notification?"
     );
@@ -82,183 +164,491 @@ function Notifications() {
     try {
       setProcessingId(notificationId);
 
-      await api.delete(`/notifications/${notificationId}`);
-
-      // Remove from UI immediately
-      setNotifications((previousNotifications) =>
-        previousNotifications.filter(
-          (notification) => notification.id !== notificationId
-        )
+      await api.delete(
+        `/notifications/${notificationId}`
       );
 
-      // Tell Navbar to refresh unread count
-      window.dispatchEvent(new Event("notificationsUpdated"));
-    } catch (error) {
-      console.error("Delete Notification Error:", error);
+      setNotifications(
+        (previousNotifications) =>
+          previousNotifications.filter(
+            (notification) =>
+              notification.id !== notificationId
+          )
+      );
 
-      if (error.response) {
-        alert(
-          error.response.data.detail ||
-            "Failed to delete notification"
-        );
-      } else {
-        alert("Failed to delete notification");
-      }
+      // Refresh Navbar unread count
+      window.dispatchEvent(
+        new Event("notificationsUpdated")
+      );
+
+    } catch (error) {
+      console.error(
+        "Delete Notification Error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+        "Failed to delete notification"
+      );
+
     } finally {
       setProcessingId(null);
     }
   };
 
+  // =====================================================
+  // COUNTS
+  // =====================================================
+
+  const unreadCount =
+    notifications.filter(
+      (notification) =>
+        !notification.is_read
+    ).length;
+
+  // =====================================================
+  // LOADING
+  // =====================================================
+
   if (loading) {
     return (
-      <div className="container mt-4">
-        <h2>🔔 Notifications</h2>
-        <p>Loading...</p>
-      </div>
+      <>
+        <Navbar />
+
+        <div
+          style={{
+            minHeight: "70vh",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            fontSize: "24px",
+            color: "#2E7D32",
+            fontWeight: "bold",
+          }}
+        >
+          Loading Notifications...
+        </div>
+      </>
     );
   }
 
+  // =====================================================
+  // PAGE
+  // =====================================================
+
   return (
-    <div
-      className="container mt-4"
-      style={{
-        maxWidth: "900px",
-        paddingBottom: "40px",
-      }}
-    >
-      <h2
+    <>
+      <Navbar />
+
+      <div
         style={{
-          color: "#2E7D32",
-          marginBottom: "25px",
-          fontWeight: "bold",
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          padding: "30px 20px",
         }}
       >
-        🔔 Notifications
-      </h2>
+        <div
+          style={{
+            maxWidth: "950px",
+            margin: "0 auto",
+          }}
+        >
 
-      {notifications.length === 0 ? (
-        <div className="alert alert-info">
-          No notifications available.
-        </div>
-      ) : (
-        notifications.map((notification) => (
+          {/* =================================================
+              HEADER
+          ================================================= */}
+
           <div
-            key={notification.id}
-            className={`card mb-3 ${
-              notification.is_read
-                ? "border-secondary"
-                : "border-primary"
-            }`}
             style={{
-              backgroundColor: notification.is_read
-                ? "#f8f9fa"
-                : "#ffffff",
-              boxShadow: "0 3px 10px rgba(0,0,0,0.08)",
+              background: "#fff",
+              borderRadius: "18px",
+              padding: "25px",
+              marginBottom: "25px",
+              boxShadow:
+                "0 6px 18px rgba(0,0,0,0.10)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "15px",
             }}
           >
-            <div className="card-body">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: "15px",
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <h5
-                    style={{
-                      fontWeight: "bold",
-                      color: notification.is_read
-                        ? "#555"
-                        : "#2E7D32",
-                    }}
-                  >
-                    {notification.title}
-                  </h5>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "15px",
+              }}
+            >
+              <FaBell
+                size={35}
+                color="#2E7D32"
+              />
 
-                  <p
-                    style={{
-                      marginBottom: "10px",
-                      color: "#333",
-                    }}
-                  >
-                    {notification.message}
-                  </p>
-
-                  <small className="text-muted">
-                    {notification.created_at
-                      ? new Date(
-                          notification.created_at
-                        ).toLocaleString()
-                      : ""}
-                  </small>
-                </div>
-
-                <div
+              <div>
+                <h1
                   style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                    minWidth: "130px",
+                    margin: 0,
+                    color: "#2E7D32",
                   }}
                 >
-                  {!notification.is_read && (
-                    <button
-                      onClick={() =>
-                        markAsRead(notification.id)
-                      }
-                      disabled={
-                        processingId === notification.id
-                      }
-                      style={{
-                        padding: "8px 10px",
-                        background: "#2E7D32",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "6px",
-                        cursor:
-                          processingId === notification.id
-                            ? "not-allowed"
-                            : "pointer",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {processingId === notification.id
-                        ? "Processing..."
-                        : "✓ Mark as Read"}
-                    </button>
-                  )}
+                  Notifications
+                </h1>
 
-                  <button
-                    onClick={() =>
-                      deleteNotification(notification.id)
-                    }
-                    disabled={
-                      processingId === notification.id
-                    }
-                    style={{
-                      padding: "8px 10px",
-                      background: "#D32F2F",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor:
-                        processingId === notification.id
-                          ? "not-allowed"
-                          : "pointer",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    🗑 Delete
-                  </button>
-                </div>
+                <p
+                  style={{
+                    margin: "5px 0 0",
+                    color: "#666",
+                  }}
+                >
+                  {unreadCount > 0
+                    ? `${unreadCount} unread notification${
+                        unreadCount > 1
+                          ? "s"
+                          : ""
+                      }`
+                    : "All notifications are read"}
+                </p>
               </div>
             </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                onClick={fetchNotifications}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  padding: "10px 15px",
+                  background: "#1976D2",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                <FaSync />
+                Refresh
+              </button>
+
+              <button
+                onClick={markAllAsRead}
+                disabled={
+                  markingAll ||
+                  unreadCount === 0
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  padding: "10px 15px",
+                  background:
+                    unreadCount === 0
+                      ? "#aaa"
+                      : "#2E7D32",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor:
+                    markingAll ||
+                    unreadCount === 0
+                      ? "not-allowed"
+                      : "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                <FaCheckDouble />
+
+                {markingAll
+                  ? "Marking..."
+                  : "Mark All as Read"}
+              </button>
+            </div>
           </div>
-        ))
-      )}
-    </div>
+
+          {/* =================================================
+              EMPTY STATE
+          ================================================= */}
+
+          {notifications.length === 0 ? (
+            <div
+              style={{
+                background: "#fff",
+                borderRadius: "18px",
+                padding: "60px 30px",
+                textAlign: "center",
+                boxShadow:
+                  "0 6px 18px rgba(0,0,0,0.10)",
+              }}
+            >
+              <FaBell
+                size={60}
+                color="#9E9E9E"
+              />
+
+              <h2
+                style={{
+                  marginTop: "20px",
+                  color: "#444",
+                }}
+              >
+                No Notifications
+              </h2>
+
+              <p
+                style={{
+                  color: "#777",
+                }}
+              >
+                You don't have any notifications
+                yet.
+              </p>
+            </div>
+          ) : (
+
+            /* =================================================
+               NOTIFICATION LIST
+            ================================================= */
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "15px",
+              }}
+            >
+              {notifications.map(
+                (notification) => {
+                  const isUnread =
+                    !notification.is_read;
+
+                  const isProcessing =
+                    processingId ===
+                    notification.id;
+
+                  return (
+                    <div
+                      key={notification.id}
+                      style={{
+                        background: isUnread
+                          ? "#FFFFFF"
+                          : "#F4F5F6",
+
+                        borderRadius: "15px",
+
+                        border: isUnread
+                          ? "2px solid #2E7D32"
+                          : "1px solid #ddd",
+
+                        boxShadow: isUnread
+                          ? "0 5px 15px rgba(46,125,50,0.12)"
+                          : "0 3px 10px rgba(0,0,0,0.06)",
+
+                        padding: "20px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent:
+                            "space-between",
+                          gap: "20px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+
+                        {/* NOTIFICATION CONTENT */}
+
+                        <div
+                          style={{
+                            flex: 1,
+                            minWidth:
+                              "250px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems:
+                                "center",
+                              gap: "10px",
+                            }}
+                          >
+                            <FaEnvelopeOpen
+                              color={
+                                isUnread
+                                  ? "#2E7D32"
+                                  : "#888"
+                              }
+                            />
+
+                            <h3
+                              style={{
+                                margin: 0,
+                                color:
+                                  isUnread
+                                    ? "#2E7D32"
+                                    : "#555",
+                                fontWeight:
+                                  "bold",
+                              }}
+                            >
+                              {
+                                notification.title
+                              }
+                            </h3>
+
+                            {isUnread && (
+                              <span
+                                style={{
+                                  background:
+                                    "#D32F2F",
+                                  color:
+                                    "#fff",
+                                  fontSize:
+                                    "11px",
+                                  padding:
+                                    "4px 8px",
+                                  borderRadius:
+                                    "20px",
+                                  fontWeight:
+                                    "bold",
+                                }}
+                              >
+                                NEW
+                              </span>
+                            )}
+                          </div>
+
+                          <p
+                            style={{
+                              margin:
+                                "12px 0",
+                              color: "#333",
+                              lineHeight:
+                                "1.5",
+                            }}
+                          >
+                            {
+                              notification.message
+                            }
+                          </p>
+
+                          <small
+                            style={{
+                              color: "#777",
+                            }}
+                          >
+                            {notification.created_at
+                              ? new Date(
+                                  notification.created_at
+                                ).toLocaleString()
+                              : ""}
+                          </small>
+                        </div>
+
+                        {/* ACTIONS */}
+
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection:
+                              "column",
+                            gap: "8px",
+                            minWidth:
+                              "145px",
+                          }}
+                        >
+                          {isUnread && (
+                            <button
+                              onClick={() =>
+                                markAsRead(
+                                  notification.id
+                                )
+                              }
+                              disabled={
+                                isProcessing
+                              }
+                              style={{
+                                padding:
+                                  "9px 12px",
+                                background:
+                                  "#2E7D32",
+                                color:
+                                  "#fff",
+                                border:
+                                  "none",
+                                borderRadius:
+                                  "7px",
+                                cursor:
+                                  isProcessing
+                                    ? "not-allowed"
+                                    : "pointer",
+                                fontWeight:
+                                  "bold",
+                              }}
+                            >
+                              {isProcessing
+                                ? "Processing..."
+                                : "✓ Mark as Read"}
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() =>
+                              deleteNotification(
+                                notification.id
+                              )
+                            }
+                            disabled={
+                              isProcessing
+                            }
+                            style={{
+                              padding:
+                                "9px 12px",
+                              background:
+                                "#D32F2F",
+                              color: "#fff",
+                              border:
+                                "none",
+                              borderRadius:
+                                "7px",
+                              cursor:
+                                isProcessing
+                                  ? "not-allowed"
+                                  : "pointer",
+                              fontWeight:
+                                "bold",
+                            }}
+                          >
+                            <FaTrash
+                              style={{
+                                marginRight:
+                                  "5px",
+                              }}
+                            />
+
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 
