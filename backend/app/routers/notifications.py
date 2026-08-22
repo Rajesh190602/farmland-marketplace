@@ -12,9 +12,9 @@ router = APIRouter(
 )
 
 
-# ==========================
-# Get My Notifications
-# ==========================
+# =========================================================
+# GET MY NOTIFICATIONS
+# =========================================================
 
 @router.get("/")
 def get_notifications(
@@ -35,9 +35,9 @@ def get_notifications(
     return notifications
 
 
-# ==========================
-# Get Unread Notification Count
-# ==========================
+# =========================================================
+# GET UNREAD NOTIFICATION COUNT
+# =========================================================
 
 @router.get("/unread-count")
 def unread_count(
@@ -58,9 +58,41 @@ def unread_count(
     }
 
 
-# ==========================
-# Mark Notification As Read
-# ==========================
+# =========================================================
+# MARK ALL NOTIFICATIONS AS READ
+# =========================================================
+
+@router.put("/read-all")
+def mark_all_as_read(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    notifications = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == current_user,
+            Notification.is_read == False
+        )
+        .all()
+    )
+
+    updated_count = 0
+
+    for notification in notifications:
+        notification.is_read = True
+        updated_count += 1
+
+    db.commit()
+
+    return {
+        "message": "All notifications marked as read",
+        "updated_count": updated_count
+    }
+
+
+# =========================================================
+# MARK SINGLE NOTIFICATION AS READ
+# =========================================================
 
 @router.put("/{notification_id}/read")
 def mark_as_read(
@@ -89,13 +121,14 @@ def mark_as_read(
     db.refresh(notification)
 
     return {
-        "message": "Notification marked as read"
+        "message": "Notification marked as read",
+        "notification_id": notification.id
     }
 
 
-# ==========================
-# Delete Notification
-# ==========================
+# =========================================================
+# DELETE NOTIFICATION
+# =========================================================
 
 @router.delete("/{notification_id}")
 def delete_notification(
@@ -122,5 +155,6 @@ def delete_notification(
     db.commit()
 
     return {
-        "message": "Notification deleted successfully"
+        "message": "Notification deleted successfully",
+        "notification_id": notification_id
     }
