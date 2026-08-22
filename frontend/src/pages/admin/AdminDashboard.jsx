@@ -216,44 +216,34 @@ function AdminDashboard() {
   // =========================================================
 
   const fetchRecentActivity = async () => {
+  try {
+    setActivityLoading(true);
 
-    try {
+    const response = await api.get(
+      "/admin/recent-activity"
+    );
 
-      setActivityLoading(true);
+    console.log(
+      "Recent Activity Response:",
+      response.data
+    );
 
-      /*
-       * The dashboard endpoint already returns:
-       *
-       * recent_activity
-       *
-       * We use that data directly.
-       */
+    setRecentActivity(
+      response.data.activities || []
+    );
 
-      const response = await api.get(
-        "/admin/recent-activity"
-      );
+  } catch (error) {
+    console.error(
+      "Recent Activity Error:",
+      error
+    );
 
-      setRecentActivity(
-        response.data.recent_activity || []
-      );
+    setRecentActivity([]);
 
-    } catch (error) {
-
-      console.error(
-        "Recent Activity Error:",
-        error
-      );
-
-      setRecentActivity([]);
-
-    } finally {
-
-      setActivityLoading(false);
-
-    }
-
-  };
-
+  } finally {
+    setActivityLoading(false);
+  }
+};
 
   // =========================================================
   // DOWNLOAD REPORTS
