@@ -793,13 +793,17 @@ def update_user_admin(
 # ==========================
 # Admin Delete User
 # ==========================
+# =========================================================
+# Delete User
+# =========================================================
 
 @router.delete("/users/{user_id}")
-def delete_user_admin(
+def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(get_current_admin),
 ):
+    # Find target user
     user = (
         db.query(User)
         .filter(User.id == user_id)
@@ -812,24 +816,61 @@ def delete_user_admin(
             detail="User not found"
         )
 
-    user_name = user.full_name
+    # -----------------------------------------
+    # Prevent admin from deleting themselves
+    # -----------------------------------------
 
-    create_activity_log(
-        db=db,
+    if user.id == admin:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete your own admin account"
+        )
+
+    # -----------------------------------------
+    # Prevent deleting another admin
+    # -----------------------------------------
+
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be deleted"
+        )
+
+    # Save information before deletion
+    deleted_user_name = user.full_name
+    deleted_user_email = user.email
+    deleted_user_role = user.role
+
+    # -----------------------------------------
+    # Activity log
+    # -----------------------------------------
+
+    activity_log = ActivityLog(
         user_id=admin,
         action="DELETE_USER",
-        description=f'Deleted user "{user_name}"',
+        description=(
+            f'Deleted user "{deleted_user_name}" '
+            f'({deleted_user_email}) '
+            f'with role "{deleted_user_role}".'
+        ),
         target_type="USER",
-        target_id=user_id,
+        target_id=user.id
     )
 
-    db.delete(user)
+    db.add(activity_log)
 
+    # -----------------------------------------
+    # Delete user
+    # -----------------------------------------
+
+    db.delete(user)
     db.commit()
 
     return {
-        "message": "User deleted successfully"
+        "message": "User deleted successfully",
+        "user_id": user_id
     }
+
 @router.get("/district-analytics")
 def district_analytics(
     db: Session = Depends(get_db),

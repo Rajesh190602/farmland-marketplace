@@ -330,6 +330,7 @@ function Users() {
             <option value="">All Roles</option>
             <option value="admin">Admin</option>
             <option value="farmer">Farmer</option>
+            <option value="buyer">Buyer</option>
           </select>
 
           {/* Refresh */}
