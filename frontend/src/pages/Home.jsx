@@ -26,45 +26,208 @@ function Home() {
     chats: 0,
     notifications: 0,
   });
+
   const userName =
-   sessionStorage.getItem("full_name") || "Farmer";
+    sessionStorage.getItem("full_name") || "Farmer";
+
+  const userRole =
+    sessionStorage.getItem("role") || "";
+
   const [featuredLands, setFeaturedLands] = useState([]);
+
+  // Stores favorite state:
+  // {
+  //   1: true,
+  //   2: false,
+  //   3: true
+  // }
+  const [favoriteStatus, setFavoriteStatus] = useState({});
+
+  const [favoriteLoading, setFavoriteLoading] = useState({});
 
   useEffect(() => {
     fetchDashboard();
     fetchFeaturedLands();
   }, []);
-const fetchFeaturedLands = async () => {
-  try {
-    const response = await api.get("/lands");
 
-    setFeaturedLands(response.data.slice(0, 3));
-  } catch (error) {
-    console.log(error);
-  }
-};
-  const fetchDashboard = async () => {
+  // =====================================================
+  // FETCH FEATURED LANDS
+  // =====================================================
+
+  const fetchFeaturedLands = async () => {
     try {
-      const response = await api.get("/dashboard");
+      const response = await api.get("/lands");
 
-      setStats({
-        total_users: response.data.total_users || 0,
-        total_lands: response.data.total_lands || 0,
-        my_lands: response.data.my_lands || 0,
-        favorites: response.data.favorites || 0,
-        chats: response.data.chats || 0,
-        notifications: response.data.notifications || 0,
-      });
+      const lands = response.data.slice(0, 3);
+
+      setFeaturedLands(lands);
+
+      // Only buyers need favorite status
+      if (userRole === "buyer") {
+        checkFavoriteStatus(lands);
+      }
+
     } catch (error) {
       console.log(error);
     }
   };
 
+  // =====================================================
+  // CHECK FAVORITE STATUS
+  // =====================================================
+
+  const checkFavoriteStatus = async (lands) => {
+    try {
+      const status = {};
+
+      await Promise.all(
+        lands.map(async (land) => {
+          try {
+            const response = await api.get(
+              `/favorites/check/${land.id}`
+            );
+
+            status[land.id] =
+              response.data.is_favorite;
+
+          } catch (error) {
+            console.log(
+              `Failed to check favorite for land ${land.id}`,
+              error
+            );
+
+            status[land.id] = false;
+          }
+        })
+      );
+
+      setFavoriteStatus(status);
+
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  // =====================================================
+  // TOGGLE FAVORITE
+  // =====================================================
+
+  const toggleFavorite = async (landId) => {
+    // Only buyers can favorite
+    if (userRole !== "buyer") {
+      alert("Only buyers can add lands to favorites.");
+      return;
+    }
+
+    // Prevent double clicking
+    if (favoriteLoading[landId]) {
+      return;
+    }
+
+    try {
+      setFavoriteLoading((prev) => ({
+        ...prev,
+        [landId]: true,
+      }));
+
+      const isFavorite =
+        favoriteStatus[landId] === true;
+
+      if (isFavorite) {
+        // ----------------------------------------------
+        // REMOVE FAVORITE
+        // ----------------------------------------------
+
+        await api.delete(
+          `/favorites/${landId}`
+        );
+
+        setFavoriteStatus((prev) => ({
+          ...prev,
+          [landId]: false,
+        }));
+
+        // Refresh dashboard favorite count
+        fetchDashboard();
+
+      } else {
+        // ----------------------------------------------
+        // ADD FAVORITE
+        // ----------------------------------------------
+
+        await api.post(
+          `/favorites/${landId}`
+        );
+
+        setFavoriteStatus((prev) => ({
+          ...prev,
+          [landId]: true,
+        }));
+
+        // Refresh dashboard favorite count
+        fetchDashboard();
+      }
+
+    } catch (error) {
+      console.error(error);
+
+      const message =
+        error.response?.data?.detail ||
+        "Failed to update favorite.";
+
+      alert(message);
+
+    } finally {
+      setFavoriteLoading((prev) => ({
+        ...prev,
+        [landId]: false,
+      }));
+    }
+  };
+
+  // =====================================================
+  // DASHBOARD
+  // =====================================================
+
+  const fetchDashboard = async () => {
+    try {
+      const response = await api.get("/dashboard");
+
+      setStats({
+        total_users:
+          response.data.total_users || 0,
+
+        total_lands:
+          response.data.total_lands || 0,
+
+        my_lands:
+          response.data.my_lands || 0,
+
+        favorites:
+          response.data.favorites || 0,
+
+        chats:
+          response.data.chats || 0,
+
+        notifications:
+          response.data.notifications || 0,
+      });
+
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  // =====================================================
+  // STYLES
+  // =====================================================
+
   const cardStyle = {
     background: "#fff",
     borderRadius: "15px",
     padding: "25px",
-    boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+    boxShadow:
+      "0 6px 18px rgba(0,0,0,0.12)",
     textAlign: "center",
     flex: "1",
     minWidth: "180px",
@@ -81,8 +244,11 @@ const fetchFeaturedLands = async () => {
     fontWeight: "bold",
     width: "100%",
     maxWidth: "280px",
-    
   });
+
+  // =====================================================
+  // UI
+  // =====================================================
 
   return (
     <>
@@ -95,7 +261,10 @@ const fetchFeaturedLands = async () => {
           padding: "25px",
         }}
       >
-        {/* Welcome */}
+
+        {/* =================================================
+            WELCOME
+        ================================================= */}
 
         <div
           style={{
@@ -110,10 +279,11 @@ const fetchFeaturedLands = async () => {
           <h1
             style={{
               margin: 0,
-              fontSize:"clamp(28px, 5vw, 38px)" ,
+              fontSize:
+                "clamp(28px, 5vw, 38px)",
             }}
           >
-            🌾 Farmland Marketplace 
+            🌾 Farmland Marketplace
           </h1>
 
           <h2
@@ -121,21 +291,24 @@ const fetchFeaturedLands = async () => {
               marginTop: "15px",
             }}
           >
-            Welcome Back, {userName}! 👋 
+            Welcome Back, {userName}! 👋
           </h2>
 
           <p
             style={{
-              fontSize: "clamp(15px, 2.5vw, 18px)",
+              fontSize:
+                "clamp(15px, 2.5vw, 18px)",
               marginTop: "10px",
             }}
           >
-            Manage your farmland, connect with buyers,
-            and grow your farming business.
+            Manage your farmland, connect with
+            buyers, and grow your farming business.
           </p>
         </div>
 
-        {/* Statistics */}
+        {/* =================================================
+            STATISTICS
+        ================================================= */}
 
         <h2
           style={{
@@ -209,7 +382,9 @@ const fetchFeaturedLands = async () => {
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* =================================================
+            QUICK ACTIONS
+        ================================================= */}
 
         <h2
           style={{
@@ -224,144 +399,251 @@ const fetchFeaturedLands = async () => {
           style={{
             display: "flex",
             flexWrap: "wrap",
-             justifyContent: "center",
+            justifyContent: "center",
             gap: "20px",
             marginTop: "25px",
           }}
         >
           <button
             style={quickButton("#2E7D32")}
-            onClick={() => navigate("/add-land")}
+            onClick={() =>
+              navigate("/add-land")
+            }
           >
             <FaPlusCircle /> Add Land
           </button>
 
           <button
             style={quickButton("#1565C0")}
-            onClick={() => navigate("/my-lands")}
+            onClick={() =>
+              navigate("/my-lands")
+            }
           >
             <FaMapMarkedAlt /> My Lands
           </button>
 
           <button
             style={quickButton("#EF6C00")}
-            onClick={() => navigate("/all-lands")}
+            onClick={() =>
+              navigate("/all-lands")
+            }
           >
             <FaSearch /> Browse Lands
           </button>
 
           <button
             style={quickButton("#6A1B9A")}
-            onClick={() => navigate("/profile")}
+            onClick={() =>
+              navigate("/profile")
+            }
           >
             <FaUserCircle /> My Profile
           </button>
         </div>
-        {/* Featured Lands */}
 
-<div
-  style={{
-    marginTop: "60px",
-  }}
->
-  <h2
-    style={{
-      color: "#2E7D32",
-      marginBottom: "25px",
-      textAlign: "center",
-    }}
-  >
-    ⭐ Featured Lands
-  </h2>
-
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
-      gap: "25px",
-    }}
-  >
-    {featuredLands.map((land) => (
-      <div
-        key={land.id}
-        style={{
-          background: "#fff",
-          borderRadius: "18px",
-          overflow: "hidden",
-          boxShadow: "0 8px 20px rgba(0,0,0,.12)",
-          transition: ".3s",
-        }}
-      >
-        <img
-          src={land.image_url || "https://via.placeholder.com/400x250"}
-          alt={land.title}
-          style={{
-            width: "100%",
-            height: "220px",
-            objectFit: "cover",
-          }}
-        />
+        {/* =================================================
+            FEATURED LANDS
+        ================================================= */}
 
         <div
           style={{
-            padding: "20px",
+            marginTop: "60px",
           }}
         >
-          <h3
+          <h2
             style={{
-              marginBottom: "10px",
               color: "#2E7D32",
+              marginBottom: "25px",
+              textAlign: "center",
             }}
           >
-            {land.title}
-          </h3>
+            ⭐ Featured Lands
+          </h2>
 
-          <p>
-            <strong>📍</strong> {land.village}, {land.district}
-          </p>
-
-          <p>
-            <strong>🌱 Soil:</strong> {land.soil_type}
-          </p>
-
-          <p>
-            <strong>📐 Area:</strong> {land.area} Acres
-          </p>
-
-          <p
+          <div
             style={{
-              color: "#E65100",
-              fontWeight: "bold",
-              fontSize: "20px",
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit,minmax(300px,1fr))",
+              gap: "25px",
             }}
           >
-            ₹{land.price}
-          </p>
 
-          <button
-            onClick={() => navigate(`/land/${land.id}`)}
-            style={{
-              marginTop: "15px",
-              width: "100%",
-              background: "#2E7D32",
-              color: "#fff",
-              border: "none",
-              padding: "12px",
-              borderRadius: "10px",
-              cursor: "pointer",
-              fontWeight: "bold",
-            }}
-          >
-            View Details
-          </button>
+            {featuredLands.map((land) => {
+
+              const isFavorite =
+                favoriteStatus[land.id] === true;
+
+              const isLoading =
+                favoriteLoading[land.id] === true;
+
+              return (
+                <div
+                  key={land.id}
+                  style={{
+                    background: "#fff",
+                    borderRadius: "18px",
+                    overflow: "hidden",
+                    boxShadow:
+                      "0 8px 20px rgba(0,0,0,.12)",
+                    transition: ".3s",
+                    position: "relative",
+                  }}
+                >
+
+                  {/* LAND IMAGE */}
+
+                  <div
+                    style={{
+                      position: "relative",
+                    }}
+                  >
+                    <img
+                      src={
+                        land.image_url ||
+                        "https://via.placeholder.com/400x250"
+                      }
+                      alt={land.title}
+                      style={{
+                        width: "100%",
+                        height: "220px",
+                        objectFit: "cover",
+                      }}
+                    />
+
+                    {/* =================================================
+                        FAVORITE BUTTON
+                    ================================================= */}
+
+                    {userRole === "buyer" && (
+                      <button
+                        onClick={() =>
+                          toggleFavorite(
+                            land.id
+                          )
+                        }
+                        disabled={isLoading}
+                        title={
+                          isFavorite
+                            ? "Remove from favorites"
+                            : "Add to favorites"
+                        }
+                        style={{
+                          position: "absolute",
+                          top: "12px",
+                          right: "12px",
+
+                          width: "45px",
+                          height: "45px",
+
+                          borderRadius: "50%",
+                          border: "none",
+
+                          background:
+                            "rgba(255,255,255,0.95)",
+
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+
+                          cursor: isLoading
+                            ? "not-allowed"
+                            : "pointer",
+
+                          boxShadow:
+                            "0 3px 10px rgba(0,0,0,.25)",
+
+                          opacity: isLoading
+                            ? 0.6
+                            : 1,
+                        }}
+                      >
+                        <FaHeart
+                          size={22}
+                          color={
+                            isFavorite
+                              ? "#E91E63"
+                              : "#777"
+                          }
+                        />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* LAND DETAILS */}
+
+                  <div
+                    style={{
+                      padding: "20px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        marginBottom: "10px",
+                        color: "#2E7D32",
+                      }}
+                    >
+                      {land.title}
+                    </h3>
+
+                    <p>
+                      <strong>📍</strong>{" "}
+                      {land.village},{" "}
+                      {land.district}
+                    </p>
+
+                    <p>
+                      <strong>🌱 Soil:</strong>{" "}
+                      {land.soil_type}
+                    </p>
+
+                    <p>
+                      <strong>📐 Area:</strong>{" "}
+                      {land.area} Acres
+                    </p>
+
+                    <p
+                      style={{
+                        color: "#E65100",
+                        fontWeight: "bold",
+                        fontSize: "20px",
+                      }}
+                    >
+                      ₹{land.price}
+                    </p>
+
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/land/${land.id}`
+                        )
+                      }
+                      style={{
+                        marginTop: "15px",
+                        width: "100%",
+                        background: "#2E7D32",
+                        color: "#fff",
+                        border: "none",
+                        padding: "12px",
+                        borderRadius: "10px",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })}
+
+          </div>
         </div>
-      </div>
-    ))}
-  </div>
-</div>
 
-
-        {/* Recent Activity */}
+        {/* =================================================
+            RECENT ACTIVITY
+        ================================================= */}
 
         <div
           style={{
@@ -369,7 +651,8 @@ const fetchFeaturedLands = async () => {
             background: "#fff",
             borderRadius: "18px",
             padding: "30px",
-            boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
+            boxShadow:
+              "0 6px 18px rgba(0,0,0,0.10)",
           }}
         >
           <h2
@@ -387,10 +670,11 @@ const fetchFeaturedLands = async () => {
             }}
           >
             Recent land listings, buyer inquiries,
-            notifications, and chat updates will appear
-            here.
+            notifications, and chat updates will
+            appear here.
           </p>
         </div>
+
       </div>
     </>
   );
