@@ -140,11 +140,52 @@ class Message(Base):
         nullable=False
     )
 
-    message = Column(String, nullable=False)
+    # Normal text message
+    message = Column(
+        String,
+        nullable=True
+    )
 
-    is_read = Column(Boolean, default=False)
+    # text / image / file
+    message_type = Column(
+        String,
+        default="text",
+        nullable=False
+    )
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Cloudinary URL
+    file_url = Column(
+        String,
+        nullable=True
+    )
+
+    # Original uploaded filename
+    file_name = Column(
+        String,
+        nullable=True
+    )
+
+    # File size in bytes
+    file_size = Column(
+        Integer,
+        nullable=True
+    )
+
+    # MIME type
+    file_type = Column(
+        String,
+        nullable=True
+    )
+
+    is_read = Column(
+        Boolean,
+        default=False
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
 
     conversation = relationship(
         "Conversation",

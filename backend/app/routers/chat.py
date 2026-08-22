@@ -1,8 +1,9 @@
 from sqlalchemy import or_, desc
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException,UploadFile,File,Form
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
-
+import cloudinary
+import cloudinary.uploader
 from app.database import get_db
 from app.auth import get_current_user
 from app.models import (
@@ -189,6 +190,178 @@ def send_message(
     return {
         "message": "Message sent successfully",
         "message_id": message.id
+    }
+# ==========================
+# Send Chat File / Image
+# ==========================
+
+@router.post("/send-file")
+async def send_chat_file(
+    conversation_id: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # ----------------------------------
+    # Find conversation
+    # ----------------------------------
+
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id == conversation_id
+        )
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    # ----------------------------------
+    # Only participants can upload
+    # ----------------------------------
+
+    if current_user not in [
+        conversation.buyer_id,
+        conversation.farmer_id
+    ]:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not part of this conversation"
+        )
+
+    # ----------------------------------
+    # Validate file
+    # ----------------------------------
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="No file selected"
+        )
+
+    allowed_types = {
+        "image/jpeg": "image",
+        "image/png": "image",
+        "image/webp": "image",
+        "application/pdf": "file",
+        "application/msword": "file",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "file",
+        "application/vnd.ms-excel": "file",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "file"
+    }
+
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail="File type is not supported"
+        )
+
+    message_type = allowed_types[file.content_type]
+
+    # ----------------------------------
+    # File size limit: 10 MB
+    # ----------------------------------
+
+    MAX_FILE_SIZE = 10 * 1024 * 1024
+
+    file_content = await file.read()
+
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="File size must be 10 MB or less"
+        )
+
+    # ----------------------------------
+    # Upload to Cloudinary
+    # ----------------------------------
+
+    try:
+
+        upload_result = cloudinary.uploader.upload(
+            file_content,
+            resource_type="auto"
+        )
+
+    except Exception as e:
+
+        print("Cloudinary upload error:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to upload file"
+        )
+
+    file_url = upload_result.get("secure_url")
+
+    if not file_url:
+        raise HTTPException(
+            status_code=500,
+            detail="File upload failed"
+        )
+
+    # ----------------------------------
+    # Determine receiver
+    # ----------------------------------
+
+    if current_user == conversation.buyer_id:
+        receiver_id = conversation.farmer_id
+    else:
+        receiver_id = conversation.buyer_id
+
+    # ----------------------------------
+    # Create message
+    # ----------------------------------
+
+    message = Message(
+        conversation_id=conversation.id,
+        sender_id=current_user,
+        message=None,
+        message_type=message_type,
+        file_url=file_url,
+        file_name=file.filename,
+        file_size=len(file_content),
+        file_type=file.content_type
+    )
+
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+
+    # ----------------------------------
+    # Create notification
+    # ----------------------------------
+
+    sender = (
+        db.query(User)
+        .filter(
+            User.id == current_user
+        )
+        .first()
+    )
+
+    notification = Notification(
+        user_id=receiver_id,
+        title="📎 New File",
+        message=(
+            f"{sender.full_name if sender else 'User'} "
+            f"sent you a file: {file.filename}"
+        )
+    )
+
+    db.add(notification)
+    db.commit()
+
+    return {
+        "message": "File sent successfully",
+        "message_id": message.id,
+        "file_name": file.filename,
+        "file_url": file_url,
+        "message_type": message_type
     }
 
 
