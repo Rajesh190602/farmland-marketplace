@@ -357,16 +357,21 @@ async def send_chat_file(
 
     except Exception as e:
         db.rollback()
-
+        import traceback
         print("====================================")
-        print("DATABASE ERROR WHILE SAVING FILE")
+        print("DATABASE ERROR WHILE SAVING CHAT FILE")
         print("ERROR:", str(e))
+        traceback.print_exc()
         print("====================================")
 
-        raise HTTPException(
-            status_code=500,
-            detail="File uploaded but message could not be saved"
-        )
+    raise HTTPException(
+        status_code=500,
+        detail=f"Database error: {str(e)}"
+    )
+
+
+
+        
 
     # ----------------------------------
     # Get sender
