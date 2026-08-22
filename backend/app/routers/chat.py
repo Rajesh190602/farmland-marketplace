@@ -1,11 +1,21 @@
 from sqlalchemy import or_, desc
-from fastapi import APIRouter, Depends, HTTPException,UploadFile,File,Form
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form
+)
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+
 import cloudinary
 import cloudinary.uploader
+
 from app.database import get_db
 from app.auth import get_current_user
+
 from app.models import (
     Conversation,
     Land,
@@ -13,7 +23,11 @@ from app.models import (
     User,
     Notification
 )
-from app.schemas import ConversationCreate, MessageCreate
+
+from app.schemas import (
+    ConversationCreate,
+    MessageCreate
+)
 
 
 router = APIRouter(
@@ -22,9 +36,9 @@ router = APIRouter(
 )
 
 
-# ==========================
-# Start Chat
-# ==========================
+# =========================================================
+# START CHAT
+# =========================================================
 
 @router.post("/start")
 def start_chat(
@@ -32,9 +46,15 @@ def start_chat(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # ----------------------------------
+    # Get current user
+    # ----------------------------------
+
     buyer = (
         db.query(User)
-        .filter(User.id == current_user)
+        .filter(
+            User.id == current_user
+        )
         .first()
     )
 
@@ -44,11 +64,19 @@ def start_chat(
             detail="User not found"
         )
 
+    # ----------------------------------
+    # Only buyers can start marketplace chats
+    # ----------------------------------
+
     if buyer.role != "buyer":
         raise HTTPException(
             status_code=403,
             detail="Only buyers can start a chat"
         )
+
+    # ----------------------------------
+    # Only approved lands can be contacted
+    # ----------------------------------
 
     land = (
         db.query(Land)
@@ -65,11 +93,19 @@ def start_chat(
             detail="Approved land not found"
         )
 
+    # ----------------------------------
+    # Prevent chatting with own land
+    # ----------------------------------
+
     if land.owner_id == current_user:
         raise HTTPException(
             status_code=400,
             detail="You cannot chat with yourself."
         )
+
+    # ----------------------------------
+    # Check existing conversation
+    # ----------------------------------
 
     conversation = (
         db.query(Conversation)
@@ -87,6 +123,10 @@ def start_chat(
             "message": "Conversation already exists"
         }
 
+    # ----------------------------------
+    # Create conversation
+    # ----------------------------------
+
     conversation = Conversation(
         buyer_id=current_user,
         farmer_id=land.owner_id,
@@ -96,6 +136,10 @@ def start_chat(
     db.add(conversation)
     db.commit()
     db.refresh(conversation)
+
+    # ----------------------------------
+    # Notification for farmer
+    # ----------------------------------
 
     notification = Notification(
         user_id=land.owner_id,
@@ -115,9 +159,9 @@ def start_chat(
     }
 
 
-# ==========================
-# Send Message
-# ==========================
+# =========================================================
+# SEND TEXT MESSAGE
+# =========================================================
 
 @router.post("/send")
 def send_message(
@@ -125,6 +169,10 @@ def send_message(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # ----------------------------------
+    # Find conversation
+    # ----------------------------------
+
     conversation = (
         db.query(Conversation)
         .filter(
@@ -139,6 +187,10 @@ def send_message(
             detail="Conversation not found"
         )
 
+    # ----------------------------------
+    # Only participants can send
+    # ----------------------------------
+
     if current_user not in [
         conversation.buyer_id,
         conversation.farmer_id
@@ -148,11 +200,19 @@ def send_message(
             detail="You are not part of this conversation"
         )
 
+    # ----------------------------------
+    # Prevent empty messages
+    # ----------------------------------
+
     if not data.message or not data.message.strip():
         raise HTTPException(
             status_code=400,
             detail="Message cannot be empty"
         )
+
+    # ----------------------------------
+    # Create message
+    # ----------------------------------
 
     message = Message(
         conversation_id=conversation.id,
@@ -164,16 +224,30 @@ def send_message(
     db.commit()
     db.refresh(message)
 
+    # ----------------------------------
+    # Get sender
+    # ----------------------------------
+
     sender = (
         db.query(User)
-        .filter(User.id == current_user)
+        .filter(
+            User.id == current_user
+        )
         .first()
     )
+
+    # ----------------------------------
+    # Determine receiver
+    # ----------------------------------
 
     if current_user == conversation.buyer_id:
         receiver_id = conversation.farmer_id
     else:
         receiver_id = conversation.buyer_id
+
+    # ----------------------------------
+    # Notification
+    # ----------------------------------
 
     notification = Notification(
         user_id=receiver_id,
@@ -191,9 +265,11 @@ def send_message(
         "message": "Message sent successfully",
         "message_id": message.id
     }
-# ==========================
-# Send Chat File / Image
-# ==========================
+
+
+# =========================================================
+# SEND CHAT FILE / IMAGE
+# =========================================================
 
 @router.post("/send-file")
 async def send_chat_file(
@@ -202,6 +278,10 @@ async def send_chat_file(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # ----------------------------------
+    # Find conversation
+    # ----------------------------------
+
     conversation = (
         db.query(Conversation)
         .filter(
@@ -216,6 +296,10 @@ async def send_chat_file(
             detail="Conversation not found"
         )
 
+    # ----------------------------------
+    # Only participants can send files
+    # ----------------------------------
+
     if current_user not in [
         conversation.buyer_id,
         conversation.farmer_id
@@ -225,30 +309,55 @@ async def send_chat_file(
             detail="You are not part of this conversation"
         )
 
+    # ----------------------------------
+    # Validate filename
+    # ----------------------------------
+
     if not file.filename:
         raise HTTPException(
             status_code=400,
             detail="No file selected"
         )
 
+    # ----------------------------------
+    # Allowed file types
+    # ----------------------------------
+
     allowed_types = {
         "image/jpeg": "image",
         "image/png": "image",
         "image/webp": "image",
+
         "application/pdf": "file",
+
         "application/msword": "file",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "file",
-        "application/vnd.ms-excel": "file",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "file"
+
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            "file",
+
+        "application/vnd.ms-excel":
+            "file",
+
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            "file"
     }
 
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail=f"File type not supported: {file.content_type}"
+            detail=(
+                f"File type not supported: "
+                f"{file.content_type}"
+            )
         )
 
-    message_type = allowed_types[file.content_type]
+    message_type = allowed_types[
+        file.content_type
+    ]
+
+    # ----------------------------------
+    # Maximum 10 MB
+    # ----------------------------------
 
     MAX_FILE_SIZE = 10 * 1024 * 1024
 
@@ -276,7 +385,9 @@ async def send_chat_file(
             resource_type="auto"
         )
 
-        file_url = upload_result.get("secure_url")
+        file_url = upload_result.get(
+            "secure_url"
+        )
 
         if not file_url:
             raise Exception(
@@ -287,14 +398,14 @@ async def send_chat_file(
 
         import traceback
 
-        print("====================================")
+        print("=" * 50)
         print("CLOUDINARY UPLOAD ERROR")
         print(
             "ERROR:",
             str(cloudinary_error)
         )
         traceback.print_exc()
-        print("====================================")
+        print("=" * 50)
 
         raise HTTPException(
             status_code=500,
@@ -314,13 +425,18 @@ async def send_chat_file(
         receiver_id = conversation.buyer_id
 
     # ----------------------------------
-    # Create message
+    # Create file message
     # ----------------------------------
 
     message = Message(
         conversation_id=conversation.id,
         sender_id=current_user,
+
+        # Important:
+        # File messages don't contain text.
+        # This requires Message.message to allow NULL.
         message=None,
+
         message_type=message_type,
         file_url=file_url,
         file_name=file.filename,
@@ -339,14 +455,14 @@ async def send_chat_file(
 
         import traceback
 
-        print("====================================")
+        print("=" * 50)
         print("DATABASE ERROR WHILE SAVING CHAT FILE")
         print(
             "ERROR:",
             str(database_error)
         )
         traceback.print_exc()
-        print("====================================")
+        print("=" * 50)
 
         raise HTTPException(
             status_code=500,
@@ -369,7 +485,7 @@ async def send_chat_file(
     )
 
     # ----------------------------------
-    # Create notification
+    # Notification
     # ----------------------------------
 
     notification = Notification(
@@ -391,9 +507,11 @@ async def send_chat_file(
         "file_url": file_url,
         "message_type": message_type
     }
-# ==========================
-# Delete Message
-# ==========================
+
+
+# =========================================================
+# DELETE MESSAGE
+# =========================================================
 
 @router.delete("/messages/{message_id}")
 def delete_message(
@@ -426,7 +544,9 @@ def delete_message(
     if message.sender_id != current_user:
         raise HTTPException(
             status_code=403,
-            detail="You can delete only your own messages"
+            detail=(
+                "You can delete only your own messages"
+            )
         )
 
     # ----------------------------------
@@ -460,53 +580,23 @@ def delete_message(
         "message_id": message_id
     }
 
-# ==========================
-# Get Messages
-# ==========================
 
-@router.get("/messages/{conversation_id}")
-def get_messages(
-    conversation_id: int,
-    db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user)
-):
-    conversation = (
-        db.query(Conversation)
-        .filter(
-            Conversation.id == conversation_id
-        )
-        .first()
-    )
-
-    if not conversation:
-        raise HTTPException(
-            status_code=404,
-            detail="Conversation not found"
-        )
-
-    if current_user not in [
-        conversation.buyer_id,
-        conversation.farmer_id
-    ]:
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied"
-        )
-
-    messages = (
-        db.query(Message)
-        .filter(
-            Message.conversation_id == conversation_id
-        )
-        .order_by(Message.created_at.asc())
-        .all()
-    )
-
-    return messages
-
-# ==========================
-# Get Messages
-# ==========================
+# =========================================================
+# GET MESSAGES
+# =========================================================
+#
+# IMPORTANT:
+# There must be ONLY ONE endpoint with this path.
+#
+# When a user opens the conversation, all messages
+# received from the other participant are marked READ.
+#
+# This produces:
+#
+# ✓   = sent but not seen
+# ✓✓  = seen by receiver
+#
+# =========================================================
 
 @router.get("/messages/{conversation_id}")
 def get_messages(
@@ -533,7 +623,7 @@ def get_messages(
         )
 
     # ----------------------------------
-    # Check participant
+    # Verify participant
     # ----------------------------------
 
     if current_user not in [
@@ -546,13 +636,17 @@ def get_messages(
         )
 
     # ----------------------------------
-    # Mark messages from the other
-    # participant as READ
+    # Mark messages from OTHER USER
+    # as READ
     # ----------------------------------
 
     db.query(Message).filter(
-        Message.conversation_id == conversation_id,
-        Message.sender_id != current_user,
+        Message.conversation_id ==
+        conversation_id,
+
+        Message.sender_id !=
+        current_user,
+
         Message.is_read == False
     ).update(
         {
@@ -564,7 +658,7 @@ def get_messages(
     db.commit()
 
     # ----------------------------------
-    # Get all messages
+    # Get messages
     # ----------------------------------
 
     messages = (
@@ -581,9 +675,10 @@ def get_messages(
 
     return messages
 
-# ==========================
-# My Conversations
-# ==========================
+
+# =========================================================
+# MY CONVERSATIONS
+# =========================================================
 
 @router.get("/my-conversations")
 def my_conversations(
@@ -594,11 +689,16 @@ def my_conversations(
         db.query(Conversation)
         .filter(
             or_(
-                Conversation.buyer_id == current_user,
-                Conversation.farmer_id == current_user
+                Conversation.buyer_id ==
+                current_user,
+
+                Conversation.farmer_id ==
+                current_user
             )
         )
-        .order_by(desc(Conversation.id))
+        .order_by(
+            desc(Conversation.id)
+        )
         .all()
     )
 
@@ -606,66 +706,100 @@ def my_conversations(
 
     for conversation in conversations:
 
+        # ----------------------------------
+        # Find other user
+        # ----------------------------------
+
         if conversation.buyer_id == current_user:
+
             other_user = (
                 db.query(User)
                 .filter(
-                    User.id == conversation.farmer_id
+                    User.id ==
+                    conversation.farmer_id
                 )
                 .first()
             )
+
         else:
+
             other_user = (
                 db.query(User)
                 .filter(
-                    User.id == conversation.buyer_id
+                    User.id ==
+                    conversation.buyer_id
                 )
                 .first()
             )
+
+        # ----------------------------------
+        # Find land
+        # ----------------------------------
 
         land = (
             db.query(Land)
             .filter(
-                Land.id == conversation.land_id
+                Land.id ==
+                conversation.land_id
             )
             .first()
         )
+
+        # ----------------------------------
+        # Find last message
+        # ----------------------------------
 
         last_message = (
             db.query(Message)
             .filter(
-                Message.conversation_id == conversation.id
+                Message.conversation_id ==
+                conversation.id
             )
-            .order_by(Message.created_at.desc())
+            .order_by(
+                Message.created_at.desc()
+            )
             .first()
         )
 
-        result.append({
-            "conversation_id": conversation.id,
-            "land_title": land.title if land else "",
-            "other_user": (
-                other_user.full_name
-                if other_user
-                else ""
-            ),
-            "last_message": (
-                last_message.message
-                if last_message
-                else ""
-            ),
-            "last_message_time": (
-                last_message.created_at
-                if last_message
-                else None
-            )
-        })
+        result.append(
+            {
+                "conversation_id":
+                    conversation.id,
+
+                "land_title":
+                    land.title
+                    if land
+                    else "",
+
+                "other_user":
+                    other_user.full_name
+                    if other_user
+                    else "",
+
+                "last_message":
+                    last_message.message
+                    if last_message
+                    and last_message.message
+                    else (
+                        "📎 File"
+                        if last_message
+                        and last_message.file_url
+                        else ""
+                    ),
+
+                "last_message_time":
+                    last_message.created_at
+                    if last_message
+                    else None
+            }
+        )
 
     return result
 
 
-# ==========================
-# Update Online Presence
-# ==========================
+# =========================================================
+# UPDATE ONLINE PRESENCE
+# =========================================================
 
 @router.post("/presence")
 def update_presence(
@@ -674,7 +808,9 @@ def update_presence(
 ):
     user = (
         db.query(User)
-        .filter(User.id == current_user)
+        .filter(
+            User.id == current_user
+        )
         .first()
     )
 
@@ -684,7 +820,9 @@ def update_presence(
             detail="User not found"
         )
 
-    user.last_seen = datetime.now(timezone.utc)
+    user.last_seen = datetime.now(
+        timezone.utc
+    )
 
     db.commit()
     db.refresh(user)
@@ -695,9 +833,9 @@ def update_presence(
     }
 
 
-# ==========================
-# Get User Online Status
-# ==========================
+# =========================================================
+# GET USER ONLINE STATUS
+# =========================================================
 
 @router.get("/presence/{user_id}")
 def get_presence(
@@ -705,9 +843,15 @@ def get_presence(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # ----------------------------------
+    # Find requested user
+    # ----------------------------------
+
     user = (
         db.query(User)
-        .filter(User.id == user_id)
+        .filter(
+            User.id == user_id
+        )
         .first()
     )
 
@@ -717,14 +861,21 @@ def get_presence(
             detail="User not found"
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     online = False
+
+    # ----------------------------------
+    # Check last seen
+    # ----------------------------------
 
     if user.last_seen:
 
         last_seen = user.last_seen
 
+        # Handle naive database datetime
         if last_seen.tzinfo is None:
             last_seen = last_seen.replace(
                 tzinfo=timezone.utc
@@ -734,6 +885,7 @@ def get_presence(
             now - last_seen
         ).total_seconds()
 
+        # Consider online for 60 seconds
         if seconds_since_seen <= 60:
             online = True
 
