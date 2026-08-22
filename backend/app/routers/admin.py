@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends,HTTPException,Query
 from sqlalchemy.orm import Session
-
+from sqlalchemy import or_
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import User, Land, Notification,LandImage,Conversation,ActivityLog
+from app.models import User, Land, Notification,LandImage,Conversation,ActivityLog,Message,Favorite
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
 from sqlalchemy import func,extract
@@ -796,6 +796,9 @@ def update_user_admin(
 # =========================================================
 # Delete User
 # =========================================================
+# =========================================================
+# DELETE USER
+# =========================================================
 
 @router.delete("/users/{user_id}")
 def delete_user(
@@ -803,73 +806,239 @@ def delete_user(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin),
 ):
-    # Find target user
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
+    try:
+        # -------------------------------------------------
+        # Find target user
+        # -------------------------------------------------
 
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
+        user = (
+            db.query(User)
+            .filter(User.id == user_id)
+            .first()
         )
 
-    # -----------------------------------------
-    # Prevent admin from deleting themselves
-    # -----------------------------------------
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
 
-    if user.id == admin:
-        raise HTTPException(
-            status_code=400,
-            detail="You cannot delete your own admin account"
+        # -------------------------------------------------
+        # Prevent deleting yourself
+        # -------------------------------------------------
+
+        if user.id == admin:
+            raise HTTPException(
+                status_code=400,
+                detail="You cannot delete your own admin account"
+            )
+
+        # -------------------------------------------------
+        # Prevent deleting another admin
+        # -------------------------------------------------
+
+        if user.role == "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Admin accounts cannot be deleted"
+            )
+
+        # -------------------------------------------------
+        # Save information before deletion
+        # -------------------------------------------------
+
+        deleted_user_name = user.full_name
+        deleted_user_email = user.email
+        deleted_user_role = user.role
+
+        # -------------------------------------------------
+        # Find user's lands
+        # -------------------------------------------------
+
+        user_lands = (
+            db.query(Land)
+            .filter(
+                Land.owner_id == user.id
+            )
+            .all()
         )
 
-    # -----------------------------------------
-    # Prevent deleting another admin
-    # -----------------------------------------
+        land_ids = [
+            land.id
+            for land in user_lands
+        ]
 
-    if user.role == "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="Admin accounts cannot be deleted"
+        # -------------------------------------------------
+        # Find conversations involving this user
+        #
+        # Also include conversations belonging to
+        # the user's lands.
+        # -------------------------------------------------
+
+        conversation_query = (
+            db.query(Conversation)
+            .filter(
+                or_(
+                    Conversation.buyer_id == user.id,
+                    Conversation.farmer_id == user.id,
+                    Conversation.land_id.in_(land_ids)
+                    if land_ids
+                    else False
+                )
+            )
         )
 
-    # Save information before deletion
-    deleted_user_name = user.full_name
-    deleted_user_email = user.email
-    deleted_user_role = user.role
+        conversations = conversation_query.all()
 
-    # -----------------------------------------
-    # Activity log
-    # -----------------------------------------
+        conversation_ids = [
+            conversation.id
+            for conversation in conversations
+        ]
 
-    activity_log = ActivityLog(
-        user_id=admin,
-        action="DELETE_USER",
-        description=(
-            f'Deleted user "{deleted_user_name}" '
-            f'({deleted_user_email}) '
-            f'with role "{deleted_user_role}".'
-        ),
-        target_type="USER",
-        target_id=user.id
-    )
+        # -------------------------------------------------
+        # Delete messages belonging to conversations
+        # -------------------------------------------------
 
-    db.add(activity_log)
+        if conversation_ids:
+            db.query(Message).filter(
+                Message.conversation_id.in_(
+                    conversation_ids
+                )
+            ).delete(
+                synchronize_session=False
+            )
 
-    # -----------------------------------------
-    # Delete user
-    # -----------------------------------------
+        # -------------------------------------------------
+        # Delete conversations
+        # -------------------------------------------------
 
-    db.delete(user)
-    db.commit()
+        if conversation_ids:
+            db.query(Conversation).filter(
+                Conversation.id.in_(
+                    conversation_ids
+                )
+            ).delete(
+                synchronize_session=False
+            )
 
-    return {
-        "message": "User deleted successfully",
-        "user_id": user_id
-    }
+        # -------------------------------------------------
+        # Delete land images
+        # -------------------------------------------------
+
+        if land_ids:
+            db.query(LandImage).filter(
+                LandImage.land_id.in_(land_ids)
+            ).delete(
+                synchronize_session=False
+            )
+
+        # -------------------------------------------------
+        # Delete favorites
+        #
+        # 1. Favorites created by this user
+        # 2. Favorites on lands owned by this user
+        # -------------------------------------------------
+
+        db.query(Favorite).filter(
+            Favorite.user_id == user.id
+        ).delete(
+            synchronize_session=False
+        )
+
+        if land_ids:
+            db.query(Favorite).filter(
+                Favorite.land_id.in_(land_ids)
+            ).delete(
+                synchronize_session=False
+            )
+
+        # -------------------------------------------------
+        # Delete notifications belonging to user
+        # -------------------------------------------------
+
+        db.query(Notification).filter(
+            Notification.user_id == user.id
+        ).delete(
+            synchronize_session=False
+        )
+
+        # -------------------------------------------------
+        # Delete activity logs belonging to user
+        #
+        # Important:
+        # We should NOT create the DELETE_USER activity log
+        # with user_id=user.id because the user itself is
+        # about to be deleted.
+        # -------------------------------------------------
+
+        db.query(ActivityLog).filter(
+            ActivityLog.user_id == user.id
+        ).delete(
+            synchronize_session=False
+        )
+
+        # -------------------------------------------------
+        # Create deletion activity log
+        # -------------------------------------------------
+
+        activity_log = ActivityLog(
+            user_id=admin,
+            action="DELETE_USER",
+            description=(
+                f'Deleted user "{deleted_user_name}" '
+                f'({deleted_user_email}) '
+                f'with role "{deleted_user_role}".'
+            ),
+            target_type="USER",
+            target_id=user.id
+        )
+
+        db.add(activity_log)
+
+        # -------------------------------------------------
+        # Delete user's lands
+        # -------------------------------------------------
+
+        if land_ids:
+            db.query(Land).filter(
+                Land.id.in_(land_ids)
+            ).delete(
+                synchronize_session=False
+            )
+
+        # -------------------------------------------------
+        # Finally delete the user
+        # -------------------------------------------------
+
+        db.delete(user)
+
+        # -------------------------------------------------
+        # Commit everything as one transaction
+        # -------------------------------------------------
+
+        db.commit()
+
+        return {
+            "message": "User deleted successfully",
+            "user_id": user_id
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as error:
+        db.rollback()
+
+        print(
+            "DELETE USER ERROR:",
+            repr(error)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete user. All changes were rolled back."
+        )
 
 @router.get("/district-analytics")
 def district_analytics(
