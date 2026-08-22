@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import {
   FaUsers,
   FaSeedling,
@@ -10,6 +11,12 @@ import {
   FaUserCircle,
   FaComments,
   FaBell,
+  FaLock,
+  FaEdit,
+  FaTrash,
+  FaFile,
+  FaEnvelope,
+  FaSignInAlt,
 } from "react-icons/fa";
 
 import Navbar from "../components/Navbar";
@@ -17,6 +24,10 @@ import api from "../services/api";
 
 function Home() {
   const navigate = useNavigate();
+
+  // =====================================================
+  // DASHBOARD STATE
+  // =====================================================
 
   const [stats, setStats] = useState({
     total_users: 0,
@@ -27,6 +38,8 @@ function Home() {
     notifications: 0,
   });
 
+  const [recentActivity, setRecentActivity] = useState([]);
+
   const userName =
     sessionStorage.getItem("full_name") || "Farmer";
 
@@ -35,15 +48,16 @@ function Home() {
 
   const [featuredLands, setFeaturedLands] = useState([]);
 
-  // Stores favorite state:
-  // {
-  //   1: true,
-  //   2: false,
-  //   3: true
-  // }
-  const [favoriteStatus, setFavoriteStatus] = useState({});
+  // =====================================================
+  // FAVORITES
+  // =====================================================
 
+  const [favoriteStatus, setFavoriteStatus] = useState({});
   const [favoriteLoading, setFavoriteLoading] = useState({});
+
+  // =====================================================
+  // INITIAL LOAD
+  // =====================================================
 
   useEffect(() => {
     fetchDashboard();
@@ -66,7 +80,6 @@ function Home() {
       if (userRole === "buyer") {
         checkFavoriteStatus(lands);
       }
-
     } catch (error) {
       console.log(error);
     }
@@ -89,7 +102,6 @@ function Home() {
 
             status[land.id] =
               response.data.is_favorite;
-
           } catch (error) {
             console.log(
               `Failed to check favorite for land ${land.id}`,
@@ -102,7 +114,6 @@ function Home() {
       );
 
       setFavoriteStatus(status);
-
     } catch (error) {
       console.log(error);
     }
@@ -113,13 +124,13 @@ function Home() {
   // =====================================================
 
   const toggleFavorite = async (landId) => {
-    // Only buyers can favorite
     if (userRole !== "buyer") {
-      alert("Only buyers can add lands to favorites.");
+      alert(
+        "Only buyers can add lands to favorites."
+      );
       return;
     }
 
-    // Prevent double clicking
     if (favoriteLoading[landId]) {
       return;
     }
@@ -134,10 +145,6 @@ function Home() {
         favoriteStatus[landId] === true;
 
       if (isFavorite) {
-        // ----------------------------------------------
-        // REMOVE FAVORITE
-        // ----------------------------------------------
-
         await api.delete(
           `/favorites/${landId}`
         );
@@ -147,14 +154,8 @@ function Home() {
           [landId]: false,
         }));
 
-        // Refresh dashboard favorite count
         fetchDashboard();
-
       } else {
-        // ----------------------------------------------
-        // ADD FAVORITE
-        // ----------------------------------------------
-
         await api.post(
           `/favorites/${landId}`
         );
@@ -164,10 +165,8 @@ function Home() {
           [landId]: true,
         }));
 
-        // Refresh dashboard favorite count
         fetchDashboard();
       }
-
     } catch (error) {
       console.error(error);
 
@@ -176,7 +175,6 @@ function Home() {
         "Failed to update favorite.";
 
       alert(message);
-
     } finally {
       setFavoriteLoading((prev) => ({
         ...prev,
@@ -191,7 +189,9 @@ function Home() {
 
   const fetchDashboard = async () => {
     try {
-      const response = await api.get("/dashboard");
+      const response = await api.get(
+        "/dashboard"
+      );
 
       setStats({
         total_users:
@@ -213,8 +213,139 @@ function Home() {
           response.data.notifications || 0,
       });
 
+      // -----------------------------------------------
+      // Recent Activity
+      // -----------------------------------------------
+
+      setRecentActivity(
+        response.data.recent_activity || []
+      );
     } catch (error) {
       console.log(error);
+    }
+  };
+
+  // =====================================================
+  // ACTIVITY ICON
+  // =====================================================
+
+  const getActivityIcon = (action) => {
+    switch (action) {
+      case "LOGIN":
+        return <FaSignInAlt />;
+
+      case "PROFILE_UPDATED":
+        return <FaEdit />;
+
+      case "PASSWORD_CHANGED":
+        return <FaLock />;
+
+      case "LAND_FAVORITED":
+        return <FaHeart />;
+
+      case "LAND_UNFAVORITED":
+        return <FaHeart />;
+
+      case "CHAT_MESSAGE_SENT":
+        return <FaComments />;
+
+      case "CHAT_FILE_SENT":
+        return <FaFile />;
+
+      case "CREATE_LAND":
+        return <FaSeedling />;
+
+      case "UPDATE_LAND":
+        return <FaEdit />;
+
+      case "DELETE_LAND":
+        return <FaTrash />;
+
+      default:
+        return <FaEnvelope />;
+    }
+  };
+
+  // =====================================================
+  // ACTIVITY COLOR
+  // =====================================================
+
+  const getActivityColor = (action) => {
+    switch (action) {
+      case "LOGIN":
+        return "#1565C0";
+
+      case "PROFILE_UPDATED":
+        return "#6A1B9A";
+
+      case "PASSWORD_CHANGED":
+        return "#C62828";
+
+      case "LAND_FAVORITED":
+        return "#D81B60";
+
+      case "LAND_UNFAVORITED":
+        return "#757575";
+
+      case "CHAT_MESSAGE_SENT":
+        return "#1976D2";
+
+      case "CHAT_FILE_SENT":
+        return "#EF6C00";
+
+      case "CREATE_LAND":
+        return "#2E7D32";
+
+      case "UPDATE_LAND":
+        return "#EF6C00";
+
+      case "DELETE_LAND":
+        return "#C62828";
+
+      default:
+        return "#616161";
+    }
+  };
+
+  // =====================================================
+  // ACTIVITY NAVIGATION
+  // =====================================================
+
+  const openActivity = (activity) => {
+    if (
+      !activity.target_type ||
+      !activity.target_id
+    ) {
+      return;
+    }
+
+    if (
+      activity.target_type.toLowerCase() ===
+      "land"
+    ) {
+      navigate(
+        `/land/${activity.target_id}`
+      );
+
+      return;
+    }
+
+    if (
+      activity.target_type.toLowerCase() ===
+      "conversation"
+    ) {
+      navigate(
+        `/chat/${activity.target_id}`
+      );
+
+      return;
+    }
+
+    if (
+      activity.target_type.toLowerCase() ===
+      "user"
+    ) {
+      navigate("/profile");
     }
   };
 
@@ -468,14 +599,14 @@ function Home() {
               gap: "25px",
             }}
           >
-
             {featuredLands.map((land) => {
-
               const isFavorite =
-                favoriteStatus[land.id] === true;
+                favoriteStatus[land.id] ===
+                true;
 
               const isLoading =
-                favoriteLoading[land.id] === true;
+                favoriteLoading[land.id] ===
+                true;
 
               return (
                 <div
@@ -511,9 +642,7 @@ function Home() {
                       }}
                     />
 
-                    {/* =================================================
-                        FAVORITE BUTTON
-                    ================================================= */}
+                    {/* FAVORITE BUTTON */}
 
                     {userRole === "buyer" && (
                       <button
@@ -529,22 +658,26 @@ function Home() {
                             : "Add to favorites"
                         }
                         style={{
-                          position: "absolute",
+                          position:
+                            "absolute",
                           top: "12px",
                           right: "12px",
 
                           width: "45px",
                           height: "45px",
 
-                          borderRadius: "50%",
+                          borderRadius:
+                            "50%",
                           border: "none",
 
                           background:
                             "rgba(255,255,255,0.95)",
 
                           display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
+                          alignItems:
+                            "center",
+                          justifyContent:
+                            "center",
 
                           cursor: isLoading
                             ? "not-allowed"
@@ -579,7 +712,8 @@ function Home() {
                   >
                     <h3
                       style={{
-                        marginBottom: "10px",
+                        marginBottom:
+                          "10px",
                         color: "#2E7D32",
                       }}
                     >
@@ -621,23 +755,24 @@ function Home() {
                       style={{
                         marginTop: "15px",
                         width: "100%",
-                        background: "#2E7D32",
+                        background:
+                          "#2E7D32",
                         color: "#fff",
                         border: "none",
                         padding: "12px",
-                        borderRadius: "10px",
+                        borderRadius:
+                          "10px",
                         cursor: "pointer",
-                        fontWeight: "bold",
+                        fontWeight:
+                          "bold",
                       }}
                     >
                       View Details
                     </button>
                   </div>
-
                 </div>
               );
             })}
-
           </div>
         </div>
 
@@ -655,26 +790,235 @@ function Home() {
               "0 6px 18px rgba(0,0,0,0.10)",
           }}
         >
-          <h2
+          <div
             style={{
-              color: "#2E7D32",
+              display: "flex",
+              justifyContent:
+                "space-between",
+              alignItems: "center",
+              gap: "15px",
+              flexWrap: "wrap",
+              marginBottom: "25px",
             }}
           >
-            🌱 Recent Activity
-          </h2>
+            <h2
+              style={{
+                color: "#2E7D32",
+                margin: 0,
+              }}
+            >
+              🌱 Recent Activity
+            </h2>
 
-          <p
-            style={{
-              color: "#666",
-              marginTop: "20px",
-            }}
-          >
-            Recent land listings, buyer inquiries,
-            notifications, and chat updates will
-            appear here.
-          </p>
+            <button
+              onClick={() =>
+                navigate("/notifications")
+              }
+              style={{
+                background: "#1976D2",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                padding: "9px 15px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              View Notifications
+            </button>
+          </div>
+
+          {recentActivity.length === 0 ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "30px",
+                color: "#777",
+              }}
+            >
+              <FaBell
+                size={40}
+                color="#aaa"
+              />
+
+              <p>
+                No recent activity found.
+              </p>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                flexDirection:
+                  "column",
+                gap: "12px",
+              }}
+            >
+              {recentActivity.map(
+                (activity) => {
+                  const clickable =
+                    Boolean(
+                      activity.target_type &&
+                      activity.target_id
+                    );
+
+                  const activityColor =
+                    getActivityColor(
+                      activity.action
+                    );
+
+                  return (
+                    <div
+                      key={activity.id}
+                      onClick={() =>
+                        clickable &&
+                        openActivity(
+                          activity
+                        )
+                      }
+                      style={{
+                        display: "flex",
+                        alignItems:
+                          "center",
+                        gap: "15px",
+                        padding: "15px",
+                        borderRadius:
+                          "12px",
+                        background:
+                          "#F8F9FA",
+                        border:
+                          "1px solid #E5E5E5",
+                        cursor: clickable
+                          ? "pointer"
+                          : "default",
+                        transition:
+                          "0.2s",
+                      }}
+                      title={
+                        clickable
+                          ? "Click to open"
+                          : ""
+                      }
+                    >
+                      {/* ICON */}
+
+                      <div
+                        style={{
+                          minWidth: "45px",
+                          width: "45px",
+                          height: "45px",
+                          borderRadius:
+                            "50%",
+                          background:
+                            activityColor,
+                          color: "#fff",
+                          display: "flex",
+                          alignItems:
+                            "center",
+                          justifyContent:
+                            "center",
+                        }}
+                      >
+                        {getActivityIcon(
+                          activity.action
+                        )}
+                      </div>
+
+                      {/* DETAILS */}
+
+                      <div
+                        style={{
+                          flex: 1,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight:
+                              "bold",
+                            color:
+                              "#333",
+                            marginBottom:
+                              "5px",
+                          }}
+                        >
+                          {activity.action
+                            .replaceAll(
+                              "_",
+                              " "
+                            )}
+                        </div>
+
+                        <div
+                          style={{
+                            color:
+                              "#555",
+                            fontSize:
+                              "14px",
+                          }}
+                        >
+                          {
+                            activity.description
+                          }
+                        </div>
+
+                        <small
+                          style={{
+                            color:
+                              "#888",
+                            display:
+                              "block",
+                            marginTop:
+                              "5px",
+                          }}
+                        >
+                          {activity.created_at
+                            ? new Date(
+                                activity.created_at
+                              ).toLocaleString()
+                            : ""}
+                        </small>
+                      </div>
+
+                      {/* TARGET */}
+
+                      {clickable && (
+                        <div
+                          style={{
+                            color:
+                              "#1976D2",
+                            fontWeight:
+                              "bold",
+                            fontSize:
+                              "13px",
+                            whiteSpace:
+                              "nowrap",
+                          }}
+                        >
+                          Open →
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          )}
+
+          {recentActivity.length > 0 && (
+            <div
+              style={{
+                textAlign: "center",
+                marginTop: "20px",
+                color: "#777",
+                fontSize: "13px",
+              }}
+            >
+              Showing your latest{" "}
+              {recentActivity.length}{" "}
+              activities
+            </div>
+          )}
         </div>
-
       </div>
     </>
   );
