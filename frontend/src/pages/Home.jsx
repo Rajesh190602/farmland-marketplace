@@ -463,7 +463,7 @@ function Home() {
               size={42}
               color="#1565C0"
             />
-            <h3>Total Farmers</h3>
+            <h3>Total Users</h3>
             <h1>{stats.total_users}</h1>
           </div>
 
