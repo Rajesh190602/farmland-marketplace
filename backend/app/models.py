@@ -285,8 +285,23 @@ class ActivityLog(Base):
         server_default=func.now()
     )
 
+    # ==========================
+    # Export / Archive
+    # ==========================
+
+    is_archived = Column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+
+    archived_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
     user = relationship(
         "User",
         back_populates="activity_logs"
     )
-    
+   
