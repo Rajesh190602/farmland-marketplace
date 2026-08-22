@@ -504,17 +504,20 @@ def get_messages(
 
     return messages
 
-
 # ==========================
-# Get Conversation Details
+# Get Messages
 # ==========================
 
-@router.get("/conversation/{conversation_id}")
-def get_conversation_details(
+@router.get("/messages/{conversation_id}")
+def get_messages(
     conversation_id: int,
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # ----------------------------------
+    # Find conversation
+    # ----------------------------------
+
     conversation = (
         db.query(Conversation)
         .filter(
@@ -529,6 +532,10 @@ def get_conversation_details(
             detail="Conversation not found"
         )
 
+    # ----------------------------------
+    # Check participant
+    # ----------------------------------
+
     if current_user not in [
         conversation.buyer_id,
         conversation.farmer_id
@@ -538,31 +545,41 @@ def get_conversation_details(
             detail="Access denied"
         )
 
-    if current_user == conversation.buyer_id:
-        other_user_id = conversation.farmer_id
-    else:
-        other_user_id = conversation.buyer_id
+    # ----------------------------------
+    # Mark messages from the other
+    # participant as READ
+    # ----------------------------------
 
-    other_user = (
-        db.query(User)
-        .filter(
-            User.id == other_user_id
-        )
-        .first()
+    db.query(Message).filter(
+        Message.conversation_id == conversation_id,
+        Message.sender_id != current_user,
+        Message.is_read == False
+    ).update(
+        {
+            Message.is_read: True
+        },
+        synchronize_session=False
     )
 
-    if not other_user:
-        raise HTTPException(
-            status_code=404,
-            detail="Other user not found"
+    db.commit()
+
+    # ----------------------------------
+    # Get all messages
+    # ----------------------------------
+
+    messages = (
+        db.query(Message)
+        .filter(
+            Message.conversation_id ==
+            conversation_id
         )
+        .order_by(
+            Message.created_at.asc()
+        )
+        .all()
+    )
 
-    return {
-        "conversation_id": conversation.id,
-        "other_user_id": other_user.id,
-        "other_user_name": other_user.full_name
-    }
-
+    return messages
 
 # ==========================
 # My Conversations
