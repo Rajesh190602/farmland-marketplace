@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import {
   FaBell,
   FaCheckDouble,
   FaTrash,
   FaSync,
   FaEnvelopeOpen,
+  FaExternalLinkAlt,
 } from "react-icons/fa";
 
 import Navbar from "../components/Navbar";
 import api from "../services/api";
 
 function Notifications() {
+  const navigate = useNavigate();
+
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
@@ -28,14 +33,11 @@ function Notifications() {
 
       setNotifications(response.data || []);
     } catch (error) {
-      console.error(
-        "Notification Error:",
-        error
-      );
+      console.error("Notification Error:", error);
 
       alert(
         error.response?.data?.detail ||
-        "Failed to load notifications"
+          "Failed to load notifications"
       );
     } finally {
       setLoading(false);
@@ -71,11 +73,9 @@ function Notifications() {
           )
       );
 
-      // Refresh Navbar notification count
       window.dispatchEvent(
         new Event("notificationsUpdated")
       );
-
     } catch (error) {
       console.error(
         "Mark Read Error:",
@@ -84,9 +84,8 @@ function Notifications() {
 
       alert(
         error.response?.data?.detail ||
-        "Failed to mark notification as read"
+          "Failed to mark notification as read"
       );
-
     } finally {
       setProcessingId(null);
     }
@@ -114,7 +113,6 @@ function Notifications() {
         "/notifications/read-all"
       );
 
-      // Update UI immediately
       setNotifications(
         (previousNotifications) =>
           previousNotifications.map(
@@ -125,11 +123,9 @@ function Notifications() {
           )
       );
 
-      // Refresh Navbar unread count
       window.dispatchEvent(
         new Event("notificationsUpdated")
       );
-
     } catch (error) {
       console.error(
         "Mark All Read Error:",
@@ -138,9 +134,8 @@ function Notifications() {
 
       alert(
         error.response?.data?.detail ||
-        "Failed to mark all notifications as read"
+          "Failed to mark all notifications as read"
       );
-
     } finally {
       setMarkingAll(false);
     }
@@ -176,11 +171,9 @@ function Notifications() {
           )
       );
 
-      // Refresh Navbar unread count
       window.dispatchEvent(
         new Event("notificationsUpdated")
       );
-
     } catch (error) {
       console.error(
         "Delete Notification Error:",
@@ -189,12 +182,95 @@ function Notifications() {
 
       alert(
         error.response?.data?.detail ||
-        "Failed to delete notification"
+          "Failed to delete notification"
       );
-
     } finally {
       setProcessingId(null);
     }
+  };
+
+  // =====================================================
+  // OPEN NOTIFICATION TARGET
+  // =====================================================
+
+  const openNotification = async (
+    notification
+  ) => {
+    try {
+      // -------------------------------------------------
+      // Mark unread notification as read first
+      // -------------------------------------------------
+
+      if (!notification.is_read) {
+        await markAsRead(notification.id);
+      }
+
+      // -------------------------------------------------
+      // No navigation target
+      // -------------------------------------------------
+
+      if (
+        !notification.target_type ||
+        !notification.target_id
+      ) {
+        return;
+      }
+
+      // -------------------------------------------------
+      // LAND
+      // -------------------------------------------------
+
+      if (
+        notification.target_type === "land"
+      ) {
+        navigate(
+          `/land/${notification.target_id}`
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------
+      // CONVERSATION
+      // -------------------------------------------------
+
+      if (
+        notification.target_type ===
+        "conversation"
+      ) {
+        navigate(
+          `/chat/${notification.target_id}`
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------
+      // Unknown target
+      // -------------------------------------------------
+
+      console.warn(
+        "Unknown notification target:",
+        notification.target_type,
+        notification.target_id
+      );
+    } catch (error) {
+      console.error(
+        "Notification Navigation Error:",
+        error
+      );
+    }
+  };
+
+  // =====================================================
+  // CHECK WHETHER NOTIFICATION IS NAVIGABLE
+  // =====================================================
+
+  const isNavigable = (notification) => {
+    return (
+      Boolean(notification.target_type) &&
+      Boolean(notification.target_id)
+    );
   };
 
   // =====================================================
@@ -408,8 +484,8 @@ function Notifications() {
                   color: "#777",
                 }}
               >
-                You don't have any notifications
-                yet.
+                You don't have any
+                notifications yet.
               </p>
             </div>
           ) : (
@@ -434,13 +510,19 @@ function Notifications() {
                     processingId ===
                     notification.id;
 
+                  const navigable =
+                    isNavigable(
+                      notification
+                    );
+
                   return (
                     <div
                       key={notification.id}
                       style={{
-                        background: isUnread
-                          ? "#FFFFFF"
-                          : "#F4F5F6",
+                        background:
+                          isUnread
+                            ? "#FFFFFF"
+                            : "#F4F5F6",
 
                         borderRadius: "15px",
 
@@ -448,9 +530,10 @@ function Notifications() {
                           ? "2px solid #2E7D32"
                           : "1px solid #ddd",
 
-                        boxShadow: isUnread
-                          ? "0 5px 15px rgba(46,125,50,0.12)"
-                          : "0 3px 10px rgba(0,0,0,0.06)",
+                        boxShadow:
+                          isUnread
+                            ? "0 5px 15px rgba(46,125,50,0.12)"
+                            : "0 3px 10px rgba(0,0,0,0.06)",
 
                         padding: "20px",
                       }}
@@ -465,14 +548,31 @@ function Notifications() {
                         }}
                       >
 
-                        {/* NOTIFICATION CONTENT */}
+                        {/* =================================================
+                            NOTIFICATION CONTENT
+                        ================================================= */}
 
                         <div
+                          onClick={() =>
+                            navigable &&
+                            openNotification(
+                              notification
+                            )
+                          }
                           style={{
                             flex: 1,
-                            minWidth:
-                              "250px",
+                            minWidth: "250px",
+                            cursor: navigable
+                              ? "pointer"
+                              : "default",
+                            borderRadius: "10px",
+                            padding: "5px",
                           }}
+                          title={
+                            navigable
+                              ? "Click to open"
+                              : undefined
+                          }
                         >
                           <div
                             style={{
@@ -480,6 +580,8 @@ function Notifications() {
                               alignItems:
                                 "center",
                               gap: "10px",
+                              flexWrap:
+                                "wrap",
                             }}
                           >
                             <FaEnvelopeOpen
@@ -553,9 +655,35 @@ function Notifications() {
                                 ).toLocaleString()
                               : ""}
                           </small>
+
+                          {navigable && (
+                            <div
+                              style={{
+                                marginTop:
+                                  "10px",
+                                color:
+                                  "#1976D2",
+                                fontSize:
+                                  "13px",
+                                fontWeight:
+                                  "bold",
+                              }}
+                            >
+                              <FaExternalLinkAlt
+                                style={{
+                                  marginRight:
+                                    "5px",
+                                }}
+                              />
+
+                              Click to open
+                            </div>
+                          )}
                         </div>
 
-                        {/* ACTIONS */}
+                        {/* =================================================
+                            ACTIONS
+                        ================================================= */}
 
                         <div
                           style={{
@@ -567,6 +695,50 @@ function Notifications() {
                               "145px",
                           }}
                         >
+
+                          {/* OPEN BUTTON */}
+
+                          {navigable && (
+                            <button
+                              onClick={() =>
+                                openNotification(
+                                  notification
+                                )
+                              }
+                              disabled={
+                                isProcessing
+                              }
+                              style={{
+                                padding:
+                                  "9px 12px",
+                                background:
+                                  "#1976D2",
+                                color:
+                                  "#fff",
+                                border:
+                                  "none",
+                                borderRadius:
+                                  "7px",
+                                cursor:
+                                  isProcessing
+                                    ? "not-allowed"
+                                    : "pointer",
+                                fontWeight:
+                                  "bold",
+                              }}
+                            >
+                              <FaExternalLinkAlt
+                                style={{
+                                  marginRight:
+                                    "5px",
+                                }}
+                              />
+                              Open
+                            </button>
+                          )}
+
+                          {/* MARK AS READ */}
+
                           {isUnread && (
                             <button
                               onClick={() =>
@@ -602,6 +774,8 @@ function Notifications() {
                             </button>
                           )}
 
+                          {/* DELETE */}
+
                           <button
                             onClick={() =>
                               deleteNotification(
@@ -617,8 +791,7 @@ function Notifications() {
                               background:
                                 "#D32F2F",
                               color: "#fff",
-                              border:
-                                "none",
+                              border: "none",
                               borderRadius:
                                 "7px",
                               cursor:
