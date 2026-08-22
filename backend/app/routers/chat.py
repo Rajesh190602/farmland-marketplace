@@ -391,7 +391,74 @@ async def send_chat_file(
         "file_url": file_url,
         "message_type": message_type
     }
+# ==========================
+# Delete Message
+# ==========================
 
+@router.delete("/messages/{message_id}")
+def delete_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # ----------------------------------
+    # Find message
+    # ----------------------------------
+
+    message = (
+        db.query(Message)
+        .filter(
+            Message.id == message_id
+        )
+        .first()
+    )
+
+    if not message:
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found"
+        )
+
+    # ----------------------------------
+    # Only sender can delete
+    # ----------------------------------
+
+    if message.sender_id != current_user:
+        raise HTTPException(
+            status_code=403,
+            detail="You can delete only your own messages"
+        )
+
+    # ----------------------------------
+    # Verify conversation exists
+    # ----------------------------------
+
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id ==
+            message.conversation_id
+        )
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    # ----------------------------------
+    # Delete message
+    # ----------------------------------
+
+    db.delete(message)
+    db.commit()
+
+    return {
+        "message": "Message deleted successfully",
+        "message_id": message_id
+    }
 
 # ==========================
 # Get Messages
