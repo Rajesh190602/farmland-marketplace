@@ -10,6 +10,7 @@ import {
   FaShoppingCart,
   FaChevronLeft,
   FaChevronRight,
+  FaTrash,
 } from "react-icons/fa";
 import api from "../../services/api";
 
@@ -21,32 +22,23 @@ function Users() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
-
+  const [deletingId, setDeletingId] = useState(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
   const LIMIT = 10;
 
-  /*
-   * Fetch users whenever:
-   * - search changes
-   * - role changes
-   * - page changes
-   */
-  useEffect(() => {
-  const timer = setTimeout(() => {
-    fetchUsers();    
-  }, 400);
-  return () => clearTimeout(timer);
-  }, [page, search, role]);
+  // =========================================================
+  // FETCH USERS
+  // =========================================================
+
   const fetchUsers = async () => {
-  try {
-    if (users.length === 0) {
-      setLoading(true);
-    } else {
-      setSearchLoading(true);
-    }
-  
+    try {
+      if (users.length === 0) {
+        setLoading(true);
+      } else {
+        setSearchLoading(true);
+      }
 
       const response = await api.get("/admin/users", {
         params: {
@@ -58,17 +50,6 @@ function Users() {
       });
 
       console.log("Users API Response:", response.data);
-
-      /*
-       * Backend response:
-       *
-       * {
-       *   total: 9,
-       *   page: 1,
-       *   limit: 10,
-       *   users: [...]
-       * }
-       */
 
       if (Array.isArray(response.data.users)) {
         setUsers(response.data.users);
@@ -87,24 +68,41 @@ function Users() {
       setUsers([]);
       setTotal(0);
 
-      alert("Failed to load users");
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load users"
+      );
     } finally {
       setLoading(false);
       setSearchLoading(false);
     }
   };
 
-  /*
-   * Calculate total number of pages.
-   */
+  // =========================================================
+  // FETCH WHEN SEARCH / ROLE / PAGE CHANGES
+  // =========================================================
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchUsers();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [page, search, role]);
+
+  // =========================================================
+  // TOTAL PAGES
+  // =========================================================
+
   const totalPages = Math.max(
     1,
     Math.ceil(total / LIMIT)
   );
 
-  /*
-   * Role badge color.
-   */
+  // =========================================================
+  // ROLE COLOR
+  // =========================================================
+
   const getRoleColor = (userRole) => {
     switch (userRole?.toLowerCase()) {
       case "admin":
@@ -121,9 +119,10 @@ function Users() {
     }
   };
 
-  /*
-   * Role icon.
-   */
+  // =========================================================
+  // ROLE ICON
+  // =========================================================
+
   const getRoleIcon = (userRole) => {
     switch (userRole?.toLowerCase()) {
       case "admin":
@@ -140,52 +139,107 @@ function Users() {
     }
   };
 
-  /*
-   * Search input.
-   *
-   * When search changes, always return to page 1.
-   */
+  // =========================================================
+  // SEARCH
+  // =========================================================
+
   const handleSearchChange = (event) => {
     setPage(1);
     setSearch(event.target.value);
   };
 
-  /*
-   * Role filter.
-   */
+  // =========================================================
+  // ROLE FILTER
+  // =========================================================
+
   const handleRoleChange = (event) => {
     setPage(1);
     setRole(event.target.value);
   };
 
-  /*
-   * Previous page.
-   */
+  // =========================================================
+  // PAGINATION
+  // =========================================================
+
   const handlePreviousPage = () => {
     if (page > 1) {
       setPage((currentPage) => currentPage - 1);
     }
   };
 
-  /*
-   * Next page.
-   */
   const handleNextPage = () => {
     if (page < totalPages) {
       setPage((currentPage) => currentPage + 1);
     }
   };
 
-  /*
-   * Refresh current page.
-   */
+  // =========================================================
+  // REFRESH
+  // =========================================================
+
   const handleRefresh = () => {
     fetchUsers();
   };
 
-  /*
-   * Loading screen.
-   */
+  // =========================================================
+  // DELETE USER
+  // =========================================================
+
+  const handleDeleteUser = async (user) => {
+    // Frontend protection
+    if (user.role?.toLowerCase() === "admin") {
+      alert("Admin accounts cannot be deleted.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${user.full_name}"?\n\n` +
+        "This action cannot be undone."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingId(user.id);
+
+      await api.delete(`/admin/users/${user.id}`);
+
+      // Remove deleted user from current page
+      setUsers((previousUsers) =>
+        previousUsers.filter(
+          (currentUser) =>
+            currentUser.id !== user.id
+        )
+      );
+
+      // Update total
+      setTotal((previousTotal) =>
+        Math.max(0, previousTotal - 1)
+      );
+
+      alert("User deleted successfully.");
+
+    } catch (error) {
+      console.error(
+        "Delete User Error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to delete user."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
+
   if (loading) {
     return (
       <div
@@ -203,6 +257,10 @@ function Users() {
       </div>
     );
   }
+
+  // =========================================================
+  // UI
+  // =========================================================
 
   return (
     <div
@@ -224,7 +282,8 @@ function Users() {
           padding: "25px",
           borderRadius: "18px",
           marginBottom: "30px",
-          boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
+          boxShadow:
+            "0 6px 18px rgba(0,0,0,0.10)",
         }}
       >
         <h1
@@ -256,7 +315,8 @@ function Users() {
           background: "#fff",
           padding: "20px",
           borderRadius: "15px",
-          boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
+          boxShadow:
+            "0 5px 15px rgba(0,0,0,0.08)",
           marginBottom: "25px",
         }}
       >
@@ -283,8 +343,9 @@ function Users() {
             }}
           >
             <FaSearch color="#777" />
+
             {searchLoading && (
-              <span             
+              <span
                 style={{
                   marginLeft: "10px",
                   fontSize: "12px",
@@ -294,7 +355,7 @@ function Users() {
               >
                 Searching...
               </span>
-            )} 
+            )}
 
             <input
               type="text"
@@ -327,10 +388,21 @@ function Users() {
               cursor: "pointer",
             }}
           >
-            <option value="">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="farmer">Farmer</option>
-            <option value="buyer">Buyer</option>
+            <option value="">
+              All Roles
+            </option>
+
+            <option value="admin">
+              Admin
+            </option>
+
+            <option value="farmer">
+              Farmer
+            </option>
+
+            <option value="buyer">
+              Buyer
+            </option>
           </select>
 
           {/* Refresh */}
@@ -377,7 +449,8 @@ function Users() {
             borderRadius: "15px",
             flex: 1,
             minWidth: "220px",
-            boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
+            boxShadow:
+              "0 5px 15px rgba(0,0,0,0.08)",
           }}
         >
           <FaUsers
@@ -410,7 +483,8 @@ function Users() {
             borderRadius: "15px",
             flex: 1,
             minWidth: "220px",
-            boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
+            boxShadow:
+              "0 5px 15px rgba(0,0,0,0.08)",
           }}
         >
           <FaUsers
@@ -448,7 +522,8 @@ function Users() {
             padding: "50px 30px",
             borderRadius: "15px",
             textAlign: "center",
-            boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
+            boxShadow:
+              "0 5px 15px rgba(0,0,0,0.08)",
           }}
         >
           <FaUsers
@@ -465,7 +540,8 @@ function Users() {
               color: "#777",
             }}
           >
-            Try changing your search or role filter.
+            Try changing your search
+            or role filter.
           </p>
         </div>
       ) : (
@@ -497,7 +573,8 @@ function Users() {
                   color: "#222",
                 }}
               >
-                {user.full_name || "Unknown User"}
+                {user.full_name ||
+                  "Unknown User"}
               </h2>
 
               {/* Email */}
@@ -535,14 +612,17 @@ function Users() {
                   padding: "8px 14px",
                   borderRadius: "30px",
                   fontWeight: "bold",
-                  textTransform: "capitalize",
+                  textTransform:
+                    "capitalize",
                 }}
               >
                 {getRoleIcon(user.role)}
                 {user.role || "Unknown"}
               </div>
 
-              {/* View Details */}
+              {/* =================================================
+                  VIEW DETAILS
+              ================================================== */}
 
               <button
                 onClick={() =>
@@ -555,7 +635,8 @@ function Users() {
                   width: "100%",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
+                  justifyContent:
+                    "center",
                   gap: "8px",
                   background: "#1976D2",
                   color: "#fff",
@@ -570,6 +651,53 @@ function Users() {
                 <FaEye />
                 View Details
               </button>
+
+              {/* =================================================
+                  DELETE USER
+
+                  Admin accounts do not get a delete button.
+              ================================================== */}
+
+              {user.role?.toLowerCase() !==
+                "admin" && (
+                <button
+                  onClick={() =>
+                    handleDeleteUser(user)
+                  }
+                  disabled={
+                    deletingId === user.id
+                  }
+                  style={{
+                    marginTop: "10px",
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent:
+                      "center",
+                    gap: "8px",
+                    background:
+                      deletingId === user.id
+                        ? "#999"
+                        : "#D32F2F",
+                    color: "#fff",
+                    border: "none",
+                    padding: "12px",
+                    borderRadius: "10px",
+                    cursor:
+                      deletingId === user.id
+                        ? "not-allowed"
+                        : "pointer",
+                    fontWeight: "bold",
+                    fontSize: "15px",
+                  }}
+                >
+                  <FaTrash />
+
+                  {deletingId === user.id
+                    ? "Deleting..."
+                    : "Delete User"}
+                </button>
+              )}
             </div>
           ))}
         </div>
