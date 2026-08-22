@@ -139,13 +139,15 @@ def add_favorite(
     # ----------------------------------
 
     notification = Notification(
-        user_id=land.owner_id,
-        title="❤️ New Favorite",
-        message=(
-            f"{buyer.full_name} added your land "
-            f"'{land.title}' to favorites."
-        )
-    )
+    user_id=land.owner_id,
+    title="❤️ New Favorite",
+    message=(
+        f"{buyer.full_name} added your land "
+        f"'{land.title}' to favorites."
+    ),
+    target_type="land",
+    target_id=land.id
+)
 
     db.add(notification)
 
