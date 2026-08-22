@@ -230,7 +230,7 @@ function AdminDashboard() {
        */
 
       const response = await api.get(
-        "/dashboard"
+        "/admin/recent-activity"
       );
 
       setRecentActivity(

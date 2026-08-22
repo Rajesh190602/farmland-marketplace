@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import User, Land, Notification,LandImage,Conversation
+from app.models import User, Land, Notification,LandImage,Conversation,ActivityLog
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
 from sqlalchemy import func,extract
@@ -88,6 +88,79 @@ def admin_analytics(
         .count(),
 
         "total_chats": total_chats,
+    }
+# =========================================================
+# Admin Recent Activity
+# =========================================================
+
+@router.get("/recent-activity")
+def get_recent_activity(
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=50
+    ),
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    logs = (
+        db.query(ActivityLog)
+        .filter(
+            ActivityLog.is_archived == False
+        )
+        .order_by(
+            ActivityLog.id.desc()
+        )
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+
+    for log in logs:
+
+        user = None
+
+        if log.user_id:
+            user = (
+                db.query(User)
+                .filter(
+                    User.id == log.user_id
+                )
+                .first()
+            )
+
+        result.append({
+            "id": log.id,
+
+            "user_id": log.user_id,
+
+            "user_name": (
+                user.full_name
+                if user
+                else "System"
+            ),
+
+            "user_email": (
+                user.email
+                if user
+                else ""
+            ),
+
+            "action": log.action,
+
+            "description": log.description,
+
+            "target_type": log.target_type,
+
+            "target_id": log.target_id,
+
+            "created_at": log.created_at,
+        })
+
+    return {
+        "total": len(result),
+        "activities": result,
     }
 @router.get("/users")
 def get_all_users(
