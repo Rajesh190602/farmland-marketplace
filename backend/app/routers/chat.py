@@ -202,10 +202,6 @@ async def send_chat_file(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    # ----------------------------------
-    # Find conversation
-    # ----------------------------------
-
     conversation = (
         db.query(Conversation)
         .filter(
@@ -220,10 +216,6 @@ async def send_chat_file(
             detail="Conversation not found"
         )
 
-    # ----------------------------------
-    # Check participant
-    # ----------------------------------
-
     if current_user not in [
         conversation.buyer_id,
         conversation.farmer_id
@@ -232,10 +224,6 @@ async def send_chat_file(
             status_code=403,
             detail="You are not part of this conversation"
         )
-
-    # ----------------------------------
-    # Validate file
-    # ----------------------------------
 
     if not file.filename:
         raise HTTPException(
@@ -262,10 +250,6 @@ async def send_chat_file(
 
     message_type = allowed_types[file.content_type]
 
-    # ----------------------------------
-    # Read file
-    # ----------------------------------
-
     MAX_FILE_SIZE = 10 * 1024 * 1024
 
     file_content = await file.read()
@@ -287,42 +271,37 @@ async def send_chat_file(
     # ----------------------------------
 
     try:
-        print("Starting Cloudinary upload...")
-        print("Filename:", file.filename)
-        print("Content type:", file.content_type)
-        print("File size:", len(file_content))
-
         upload_result = cloudinary.uploader.upload(
             file_content,
             resource_type="auto"
         )
 
-        print("Cloudinary upload successful")
+        file_url = upload_result.get("secure_url")
 
-    except Exception as e:
+        if not file_url:
+            raise Exception(
+                "Cloudinary did not return secure_url"
+            )
+
+    except Exception as cloudinary_error:
+
         import traceback
 
         print("====================================")
         print("CLOUDINARY UPLOAD ERROR")
-        print("ERROR:", str(e))
+        print(
+            "ERROR:",
+            str(cloudinary_error)
+        )
         traceback.print_exc()
         print("====================================")
 
         raise HTTPException(
             status_code=500,
-            detail=f"Cloudinary upload failed: {str(e)}"
-        )
-
-    # ----------------------------------
-    # Get Cloudinary URL
-    # ----------------------------------
-
-    file_url = upload_result.get("secure_url")
-
-    if not file_url:
-        raise HTTPException(
-            status_code=500,
-            detail="Cloudinary did not return secure_url"
+            detail=(
+                "Cloudinary upload failed: "
+                f"{str(cloudinary_error)}"
+            )
         )
 
     # ----------------------------------
@@ -349,29 +328,33 @@ async def send_chat_file(
         file_type=file.content_type
     )
 
-    db.add(message)
-
     try:
+        db.add(message)
         db.commit()
         db.refresh(message)
 
-    except Exception as e:
+    except Exception as database_error:
+
         db.rollback()
+
         import traceback
+
         print("====================================")
         print("DATABASE ERROR WHILE SAVING CHAT FILE")
-        print("ERROR:", str(e))
+        print(
+            "ERROR:",
+            str(database_error)
+        )
         traceback.print_exc()
         print("====================================")
 
-    raise HTTPException(
-        status_code=500,
-        detail=f"Database error: {str(e)}"
-    )
-
-
-
-        
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Database error: "
+                f"{str(database_error)}"
+            )
+        )
 
     # ----------------------------------
     # Get sender
@@ -386,7 +369,7 @@ async def send_chat_file(
     )
 
     # ----------------------------------
-    # Notification
+    # Create notification
     # ----------------------------------
 
     notification = Notification(
