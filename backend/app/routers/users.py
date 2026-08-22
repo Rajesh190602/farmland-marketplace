@@ -451,60 +451,205 @@ def get_profile(
     }
 from app.schemas import ProfileUpdate
 
+# =========================================================
+# UPDATE PROFILE
+# =========================================================
+
 @router.put("/profile")
 def update_profile(
     data: ProfileUpdate,
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
-    user = db.query(User).filter(User.id == current_user).first()
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
 
-    user.full_name = data.full_name
-    user.mobile = data.mobile
+    # ----------------------------------
+    # Clean input
+    # ----------------------------------
+
+    full_name = data.full_name.strip()
+    mobile = data.mobile.strip()
+
+    # ----------------------------------
+    # Validate full name
+    # ----------------------------------
+
+    if not full_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Full Name is required"
+        )
+
+    # ----------------------------------
+    # Validate mobile
+    # ----------------------------------
+
+    if not mobile.isdigit() or len(mobile) != 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a valid 10-digit mobile number"
+        )
+
+    # ----------------------------------
+    # Check duplicate mobile
+    # ----------------------------------
+
+    existing_mobile = (
+        db.query(User)
+        .filter(
+            User.mobile == mobile,
+            User.id != current_user
+        )
+        .first()
+    )
+
+    if existing_mobile:
+        raise HTTPException(
+            status_code=400,
+            detail="Mobile number already exists"
+        )
+
+    # ----------------------------------
+    # Detect changes
+    # ----------------------------------
+
+    changes = []
+
+    if user.full_name != full_name:
+        changes.append("full name")
+
+    if user.mobile != mobile:
+        changes.append("mobile number")
+
+    # ----------------------------------
+    # Update user
+    # ----------------------------------
+
+    user.full_name = full_name
+    user.mobile = mobile
+
+    # ----------------------------------
+    # Security activity log
+    # ----------------------------------
+
+    if changes:
+        create_activity_log(
+            db=db,
+            user_id=current_user,
+            action="PROFILE_UPDATED",
+            description=(
+                "Updated profile: "
+                + ", ".join(changes)
+                + "."
+            ),
+            target_type="USER",
+            target_id=current_user
+        )
 
     db.commit()
     db.refresh(user)
 
     return {
-        "message": "Profile updated successfully"
+        "message": "Profile updated successfully",
+        "user": {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "mobile": user.mobile,
+            "role": user.role
+        }
     }
+# =========================================================
+# CHANGE PASSWORD
+# =========================================================
+
 @router.put("/change-password")
 def change_password(
     data: ChangePassword,
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
-    user = db.query(User).filter(User.id == current_user).first()
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
 
+    # ----------------------------------
     # Verify current password
-    if not verify_password(data.current_password, user.password):
+    # ----------------------------------
+
+    if not verify_password(
+        data.current_password,
+        user.password
+    ):
         raise HTTPException(
             status_code=400,
             detail="Current password is incorrect"
         )
 
-    # Check new password confirmation
+    # ----------------------------------
+    # Check password confirmation
+    # ----------------------------------
+
     if data.new_password != data.confirm_password:
         raise HTTPException(
             status_code=400,
             detail="New passwords do not match"
         )
 
-    # Optional: Prevent reusing the same password
-    if verify_password(data.new_password, user.password):
+    # ----------------------------------
+    # Prevent same password
+    # ----------------------------------
+
+    if verify_password(
+        data.new_password,
+        user.password
+    ):
         raise HTTPException(
             status_code=400,
-            detail="New password must be different from the current password"
+            detail=(
+                "New password must be different "
+                "from the current password"
+            )
         )
 
+    # ----------------------------------
     # Update password
-    user.password = get_password_hash(data.new_password)
+    # ----------------------------------
+
+    user.password = get_password_hash(
+        data.new_password
+    )
+
+    # ----------------------------------
+    # Security activity log
+    # ----------------------------------
+
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="PASSWORD_CHANGED",
+        description="User changed their password.",
+        target_type="USER",
+        target_id=current_user
+    )
 
     db.commit()
 
