@@ -32,26 +32,11 @@ router = APIRouter(
 
 @router.get("/")
 def get_activity_logs(
-    page: int = Query(
-        default=1,
-        ge=1
-    ),
-
-    limit: int = Query(
-        default=20,
-        ge=1,
-        le=100
-    ),
-
-    action: str = Query(
-        default=""
-    ),
-
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    action: str = Query(default=""),
     db: Session = Depends(get_db),
-
-    admin: int = Depends(
-        get_current_admin
-    ),
+    admin: int = Depends(get_current_admin),
 ):
     query = (
         db.query(models.ActivityLog)
@@ -60,24 +45,19 @@ def get_activity_logs(
         )
     )
 
-    # Filter by action
     if action:
         query = query.filter(
             models.ActivityLog.action == action
         )
 
-    # Total active logs
     total = query.count()
 
-    # Pagination
     logs = (
         query
         .order_by(
             models.ActivityLog.id.desc()
         )
-        .offset(
-            (page - 1) * limit
-        )
+        .offset((page - 1) * limit)
         .limit(limit)
         .all()
     )
@@ -89,7 +69,6 @@ def get_activity_logs(
         user = None
 
         if log.user_id:
-
             user = (
                 db.query(models.User)
                 .filter(
@@ -100,29 +79,21 @@ def get_activity_logs(
 
         result.append({
             "id": log.id,
-
             "user_id": log.user_id,
-
             "user_name": (
                 user.full_name
                 if user
                 else "System"
             ),
-
             "user_email": (
                 user.email
                 if user
                 else ""
             ),
-
             "action": log.action,
-
             "description": log.description,
-
             "target_type": log.target_type,
-
             "target_id": log.target_id,
-
             "created_at": log.created_at,
         })
 
@@ -140,29 +111,15 @@ def get_activity_logs(
 
 @router.get("/export")
 def export_activity_logs(
-    from_date: str = Query(
-        default="",
-        description="Start date YYYY-MM-DD"
-    ),
-
-    to_date: str = Query(
-        default="",
-        description="End date YYYY-MM-DD"
-    ),
-
-    action: str = Query(
-        default="",
-        description="Optional action filter"
-    ),
-
+    from_date: str = Query(default=""),
+    to_date: str = Query(default=""),
+    action: str = Query(default=""),
     db: Session = Depends(get_db),
-
-    admin: int = Depends(
-        get_current_admin
-    ),
+    admin: int = Depends(get_current_admin),
 ):
+
     # =====================================================
-    # START QUERY
+    # BUILD QUERY
     # =====================================================
 
     query = (
@@ -179,7 +136,6 @@ def export_activity_logs(
     try:
 
         if from_date:
-
             start_date = datetime.strptime(
                 from_date,
                 "%Y-%m-%d"
@@ -191,7 +147,6 @@ def export_activity_logs(
             )
 
         if to_date:
-
             end_date = datetime.strptime(
                 to_date,
                 "%Y-%m-%d"
@@ -214,10 +169,7 @@ def export_activity_logs(
 
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Date must be in "
-                "YYYY-MM-DD format"
-            )
+            detail="Date must be in YYYY-MM-DD format"
         )
 
     # =====================================================
@@ -225,7 +177,6 @@ def export_activity_logs(
     # =====================================================
 
     if action:
-
         query = query.filter(
             models.ActivityLog.action == action
         )
@@ -243,145 +194,182 @@ def export_activity_logs(
     )
 
     if not logs:
-
         raise HTTPException(
             status_code=404,
-            detail="No activity logs found to export"
+            detail="No active activity logs found for the selected filters."
         )
 
     # =====================================================
     # CREATE EXCEL
     # =====================================================
 
-    workbook = Workbook()
+    try:
 
-    worksheet = workbook.active
+        workbook = Workbook()
 
-    worksheet.title = "Activity Logs"
+        worksheet = workbook.active
 
-    headers = [
-        "Log ID",
-        "User ID",
-        "User Name",
-        "User Email",
-        "Action",
-        "Description",
-        "Target Type",
-        "Target ID",
-        "Created At",
-    ]
+        worksheet.title = "Activity Logs"
 
-    worksheet.append(headers)
+        headers = [
+            "Log ID",
+            "User ID",
+            "User Name",
+            "User Email",
+            "Action",
+            "Description",
+            "Target Type",
+            "Target ID",
+            "Created At",
+        ]
 
-    # Header formatting
-    for cell in worksheet[1]:
+        worksheet.append(headers)
 
-        cell.font = Font(
-            bold=True
-        )
+        # Header formatting
+        for cell in worksheet[1]:
 
-        cell.alignment = Alignment(
-            horizontal="center"
-        )
-
-    # =====================================================
-    # ADD LOGS
-    # =====================================================
-
-    for log in logs:
-
-        user = None
-
-        if log.user_id:
-
-            user = (
-                db.query(models.User)
-                .filter(
-                    models.User.id == log.user_id
-                )
-                .first()
+            cell.font = Font(
+                bold=True
             )
 
-        worksheet.append([
-            log.id,
+            cell.alignment = Alignment(
+                horizontal="center"
+            )
 
-            log.user_id,
+        # =================================================
+        # ADD LOG DATA
+        # =================================================
 
-            (
-                user.full_name
-                if user
-                else "System"
-            ),
+        for log in logs:
 
-            (
-                user.email
-                if user
-                else ""
-            ),
+            user = None
 
-            log.action,
+            if log.user_id:
+                user = (
+                    db.query(models.User)
+                    .filter(
+                        models.User.id ==
+                        log.user_id
+                    )
+                    .first()
+                )
 
-            log.description,
+            # ---------------------------------------------
+            # IMPORTANT:
+            # Excel does not support timezone-aware
+            # datetime values.
+            # ---------------------------------------------
 
-            log.target_type,
+            created_at = log.created_at
 
-            log.target_id,
+            if (
+                created_at is not None
+                and created_at.tzinfo is not None
+            ):
+                created_at = created_at.replace(
+                    tzinfo=None
+                )
 
-            log.created_at,
-        ])
+            worksheet.append([
+                log.id,
 
-    # =====================================================
-    # COLUMN WIDTHS
-    # =====================================================
+                log.user_id,
 
-    column_widths = {
-        "A": 10,
-        "B": 10,
-        "C": 25,
-        "D": 35,
-        "E": 25,
-        "F": 60,
-        "G": 20,
-        "H": 12,
-        "I": 25,
-    }
+                (
+                    user.full_name
+                    if user
+                    else "System"
+                ),
 
-    for column, width in column_widths.items():
+                (
+                    user.email
+                    if user
+                    else ""
+                ),
 
-        worksheet.column_dimensions[
-            column
-        ].width = width
+                log.action,
 
-    # Freeze header
-    worksheet.freeze_panes = "A2"
+                log.description,
 
-    # =====================================================
-    # CREATE FILE IN MEMORY
-    # =====================================================
+                log.target_type,
 
-    excel_file = BytesIO()
+                log.target_id,
 
-    workbook.save(
-        excel_file
-    )
+                created_at,
+            ])
 
-    excel_file.seek(0)
+        # =================================================
+        # COLUMN WIDTHS
+        # =================================================
+
+        column_widths = {
+            "A": 10,
+            "B": 10,
+            "C": 25,
+            "D": 35,
+            "E": 25,
+            "F": 60,
+            "G": 20,
+            "H": 12,
+            "I": 25,
+        }
+
+        for column, width in column_widths.items():
+
+            worksheet.column_dimensions[
+                column
+            ].width = width
+
+        # Freeze header
+        worksheet.freeze_panes = "A2"
+
+        # =================================================
+        # SAVE EXCEL TO MEMORY
+        # =================================================
+
+        excel_file = BytesIO()
+
+        workbook.save(
+            excel_file
+        )
+
+        excel_file.seek(0)
+
+    except Exception as e:
+
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Excel generation failed: {str(e)}"
+        )
 
     # =====================================================
     # ARCHIVE EXPORTED LOGS
     # =====================================================
 
-    archive_time = datetime.now(
-        timezone.utc
-    )
+    try:
 
-    for log in logs:
+        archive_time = datetime.now(
+            timezone.utc
+        )
 
-        log.is_archived = True
+        for log in logs:
 
-        log.archived_at = archive_time
+            log.is_archived = True
 
-    db.commit()
+            log.archived_at = archive_time
+
+        db.commit()
+
+    except Exception as e:
+
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database archive failed: {str(e)}"
+        )
 
     # =====================================================
     # FILE NAME
@@ -401,12 +389,10 @@ def export_activity_logs(
 
     return StreamingResponse(
         excel_file,
-
         media_type=(
             "application/vnd.openxmlformats-"
             "officedocument.spreadsheetml.sheet"
         ),
-
         headers={
             "Content-Disposition":
                 f'attachment; filename="{filename}"'
