@@ -288,13 +288,17 @@ async def send_chat_file(
         )
 
     except Exception as e:
+         import traceback
 
-        print("Cloudinary upload error:", e)
+    print("CLOUDINARY ERROR:", str(e))
+    traceback.print_exc()
 
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to upload file"
-        )
+    raise HTTPException(
+        status_code=500,
+        detail=f"Cloudinary upload failed: {str(e)}"
+    )
+
+        
 
     file_url = upload_result.get("secure_url")
 
