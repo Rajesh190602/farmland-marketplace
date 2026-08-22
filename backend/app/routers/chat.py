@@ -221,7 +221,7 @@ async def send_chat_file(
         )
 
     # ----------------------------------
-    # Only participants can upload
+    # Check participant
     # ----------------------------------
 
     if current_user not in [
@@ -257,18 +257,24 @@ async def send_chat_file(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail="File type is not supported"
+            detail=f"File type not supported: {file.content_type}"
         )
 
     message_type = allowed_types[file.content_type]
 
     # ----------------------------------
-    # File size limit: 10 MB
+    # Read file
     # ----------------------------------
 
     MAX_FILE_SIZE = 10 * 1024 * 1024
 
     file_content = await file.read()
+
+    if len(file_content) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file is empty"
+        )
 
     if len(file_content) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -281,31 +287,42 @@ async def send_chat_file(
     # ----------------------------------
 
     try:
+        print("Starting Cloudinary upload...")
+        print("Filename:", file.filename)
+        print("Content type:", file.content_type)
+        print("File size:", len(file_content))
 
         upload_result = cloudinary.uploader.upload(
             file_content,
             resource_type="auto"
         )
 
+        print("Cloudinary upload successful")
+
     except Exception as e:
-         import traceback
+        import traceback
 
-    print("CLOUDINARY ERROR:", str(e))
-    traceback.print_exc()
+        print("====================================")
+        print("CLOUDINARY UPLOAD ERROR")
+        print("ERROR:", str(e))
+        traceback.print_exc()
+        print("====================================")
 
-    raise HTTPException(
-        status_code=500,
-        detail=f"Cloudinary upload failed: {str(e)}"
-    )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cloudinary upload failed: {str(e)}"
+        )
 
-        
+    # ----------------------------------
+    # Get Cloudinary URL
+    # ----------------------------------
 
     file_url = upload_result.get("secure_url")
 
     if not file_url:
         raise HTTPException(
             status_code=500,
-            detail="File upload failed"
+            detail="Cloudinary did not return secure_url"
         )
 
     # ----------------------------------
@@ -333,11 +350,26 @@ async def send_chat_file(
     )
 
     db.add(message)
-    db.commit()
-    db.refresh(message)
+
+    try:
+        db.commit()
+        db.refresh(message)
+
+    except Exception as e:
+        db.rollback()
+
+        print("====================================")
+        print("DATABASE ERROR WHILE SAVING FILE")
+        print("ERROR:", str(e))
+        print("====================================")
+
+        raise HTTPException(
+            status_code=500,
+            detail="File uploaded but message could not be saved"
+        )
 
     # ----------------------------------
-    # Create notification
+    # Get sender
     # ----------------------------------
 
     sender = (
@@ -347,6 +379,10 @@ async def send_chat_file(
         )
         .first()
     )
+
+    # ----------------------------------
+    # Notification
+    # ----------------------------------
 
     notification = Notification(
         user_id=receiver_id,
