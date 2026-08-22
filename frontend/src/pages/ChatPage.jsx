@@ -1,22 +1,34 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
 
 export default function ChatPage() {
   const { conversationId } = useParams();
+  const navigate = useNavigate();
 
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [deletingMessage, setDeletingMessage] = useState(false);
 
   const [otherUserId, setOtherUserId] = useState(null);
-  const [otherUserName, setOtherUserName] =
-    useState("User");
+  const [otherUserName, setOtherUserName] = useState("User");
+
   const [isOnline, setIsOnline] = useState(false);
+  const [lastSeen, setLastSeen] = useState(null);
+
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+
+  // Message whose menu is currently open
+  const [openMessageMenu, setOpenMessageMenu] = useState(null);
 
   const myUserId = Number(
     sessionStorage.getItem("user_id")
@@ -37,8 +49,7 @@ export default function ChatPage() {
       );
 
       setOtherUserName(
-        response.data.other_user_name ||
-          "User"
+        response.data.other_user_name || "User"
       );
     } catch (error) {
       console.error(
@@ -70,7 +81,7 @@ export default function ChatPage() {
   };
 
   // =====================================================
-  // UPDATE MY PRESENCE
+  // UPDATE MY ONLINE PRESENCE
   // =====================================================
 
   const updateMyPresence = async () => {
@@ -101,6 +112,10 @@ export default function ChatPage() {
       setIsOnline(
         response.data.online === true
       );
+
+      setLastSeen(
+        response.data.last_seen || null
+      );
     } catch (error) {
       console.error(
         "Failed to check online status:",
@@ -122,20 +137,16 @@ export default function ChatPage() {
 
     const messageInterval = setInterval(() => {
       loadMessages();
-    }, 3000);
-
-    const presenceInterval = setInterval(() => {
       updateMyPresence();
-    }, 20000);
+    }, 3000);
 
     return () => {
       clearInterval(messageInterval);
-      clearInterval(presenceInterval);
     };
   }, [conversationId]);
 
   // =====================================================
-  // CHECK OTHER USER STATUS
+  // PRESENCE CHECK
   // =====================================================
 
   useEffect(() => {
@@ -165,11 +176,11 @@ export default function ChatPage() {
   }, [messages]);
 
   // =====================================================
-  // SEND MESSAGE
+  // SEND TEXT MESSAGE
   // =====================================================
 
   const sendMessage = async () => {
-    if (!text.trim()) {
+    if (!text.trim() || sending) {
       return;
     }
 
@@ -177,13 +188,12 @@ export default function ChatPage() {
       setSending(true);
 
       await api.post("/chat/send", {
-        conversation_id: Number(
-          conversationId
-        ),
+        conversation_id: Number(conversationId),
         message: text.trim(),
       });
 
       setText("");
+      setShowEmoji(false);
 
       await updateMyPresence();
       await loadMessages();
@@ -203,6 +213,698 @@ export default function ChatPage() {
   };
 
   // =====================================================
+  // DELETE MESSAGE
+  // =====================================================
+
+  const deleteMessage = async (messageId) => {
+    if (!messageId || deletingMessage) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete this message?"
+    );
+
+    if (!confirmed) {
+      setOpenMessageMenu(null);
+      return;
+    }
+
+    try {
+      setDeletingMessage(true);
+
+      await api.delete(
+        `/chat/messages/${messageId}`
+      );
+
+      // Immediately remove from screen
+      setMessages((previousMessages) =>
+        previousMessages.filter(
+          (message) => message.id !== messageId
+        )
+      );
+
+      setOpenMessageMenu(null);
+    } catch (error) {
+      console.error(
+        "Failed to delete message:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to delete message."
+      );
+    } finally {
+      setDeletingMessage(false);
+    }
+  };
+
+  // =====================================================
+  // SELECT FILE
+  // =====================================================
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+    setShowAttachMenu(false);
+  };
+
+  // =====================================================
+  // UPLOAD FILE
+  // =====================================================
+
+  const uploadFile = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      alert(
+        "File size must be 10 MB or less."
+      );
+
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const formData = new FormData();
+
+      formData.append(
+        "conversation_id",
+        Number(conversationId)
+      );
+
+      formData.append(
+        "file",
+        file
+      );
+
+      await api.post(
+        "/chat/send-file",
+        formData
+      );
+
+      await updateMyPresence();
+      await loadMessages();
+    } catch (error) {
+      console.error(
+        "File upload failed:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to upload file."
+      );
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  // =====================================================
+  // EMOJIS
+  // =====================================================
+
+  const emojis = [
+    "😀",
+    "😂",
+    "😍",
+    "😊",
+    "😎",
+    "❤️",
+    "👍",
+    "🙏",
+    "🔥",
+    "🎉",
+    "🌾",
+    "🌱",
+    "🏡",
+    "💰",
+    "📍",
+    "🤝",
+  ];
+
+  const addEmoji = (emoji) => {
+    setText(
+      (previous) => previous + emoji
+    );
+  };
+
+  // =====================================================
+  // DATE FORMAT
+  // =====================================================
+
+  const getDateLabel = (dateValue) => {
+    const date = new Date(dateValue);
+
+    const today = new Date();
+
+    const yesterday = new Date();
+    yesterday.setDate(
+      yesterday.getDate() - 1
+    );
+
+    if (
+      date.toDateString() ===
+      today.toDateString()
+    ) {
+      return "Today";
+    }
+
+    if (
+      date.toDateString() ===
+      yesterday.toDateString()
+    ) {
+      return "Yesterday";
+    }
+
+    return date.toLocaleDateString(
+      undefined,
+      {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }
+    );
+  };
+
+  // =====================================================
+  // TIME FORMAT
+  // =====================================================
+
+  const getTime = (dateValue) => {
+    return new Date(
+      dateValue
+    ).toLocaleTimeString(
+      [],
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
+  };
+
+  // =====================================================
+  // LAST SEEN
+  // =====================================================
+
+  const getLastSeenText = () => {
+    if (isOnline) {
+      return "online";
+    }
+
+    if (!lastSeen) {
+      return "offline";
+    }
+
+    return `last seen ${new Date(
+      lastSeen
+    ).toLocaleString([], {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+  };
+
+  // =====================================================
+  // FILE SIZE
+  // =====================================================
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) {
+      return "";
+    }
+
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(
+        bytes / 1024
+      ).toFixed(1)} KB`;
+    }
+
+    return `${(
+      bytes /
+      (1024 * 1024)
+    ).toFixed(1)} MB`;
+  };
+
+  // =====================================================
+  // MESSAGE RENDER
+  // =====================================================
+
+  const renderMessage = (msg, index) => {
+    const isMine =
+      Number(msg.sender_id) ===
+      myUserId;
+
+    const previousMessage =
+      messages[index - 1];
+
+    const currentDate =
+      new Date(
+        msg.created_at
+      ).toDateString();
+
+    const previousDate =
+      previousMessage
+        ? new Date(
+            previousMessage.created_at
+          ).toDateString()
+        : null;
+
+    const showDate =
+      currentDate !== previousDate;
+
+    return (
+      <div key={msg.id}>
+        {showDate && (
+          <div
+            style={{
+              textAlign: "center",
+              margin: "16px 0",
+            }}
+          >
+            <span
+              style={{
+                background: "#E2F0D9",
+                color: "#555",
+                padding: "6px 12px",
+                borderRadius: "8px",
+                fontSize: "12px",
+                boxShadow:
+                  "0 1px 2px rgba(0,0,0,0.08)",
+              }}
+            >
+              {getDateLabel(
+                msg.created_at
+              )}
+            </span>
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent:
+              isMine
+                ? "flex-end"
+                : "flex-start",
+            marginBottom: "5px",
+          }}
+        >
+          <div
+            style={{
+              maxWidth:
+                "min(75%, 520px)",
+
+              minWidth:
+                msg.message_type !== "text" &&
+                msg.file_url
+                  ? "220px"
+                  : "80px",
+
+              background:
+                isMine
+                  ? "#D9FDD3"
+                  : "#FFFFFF",
+
+              borderRadius:
+                isMine
+                  ? "10px 10px 2px 10px"
+                  : "10px 10px 10px 2px",
+
+              padding:
+                msg.message_type !== "text"
+                  ? "32px 5px 5px"
+                  : "32px 10px 8px",
+
+              boxShadow:
+                "0 1px 2px rgba(0,0,0,0.15)",
+
+              position: "relative",
+
+              zIndex:
+                openMessageMenu === msg.id
+                  ? 100
+                  : 1,
+            }}
+          >
+            {/* =====================================================
+                MESSAGE OPTIONS
+            ===================================================== */}
+
+            {isMine && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "5px",
+                  right: "5px",
+                  zIndex: 200,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+
+                    setOpenMessageMenu(
+                      openMessageMenu ===
+                        msg.id
+                        ? null
+                        : msg.id
+                    );
+                  }}
+                  style={{
+                    border: "none",
+                    background:
+                      "rgba(255,255,255,0.8)",
+                    borderRadius: "50%",
+                    width: "28px",
+                    height: "28px",
+                    cursor: "pointer",
+                    fontSize: "18px",
+                    lineHeight: "24px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  title="Message options"
+                >
+                  ⋮
+                </button>
+
+                {openMessageMenu ===
+                  msg.id && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "32px",
+                      right: "0",
+                      width: "150px",
+                      background: "#FFFFFF",
+                      borderRadius: "8px",
+                      boxShadow:
+                        "0 4px 15px rgba(0,0,0,0.2)",
+                      overflow: "hidden",
+                      zIndex: 300,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      disabled={
+                        deletingMessage
+                      }
+                      onClick={() =>
+                        deleteMessage(
+                          msg.id
+                        )
+                      }
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        background:
+                          "#FFFFFF",
+                        padding:
+                          "12px 15px",
+                        textAlign:
+                          "left",
+                        cursor:
+                          deletingMessage
+                            ? "not-allowed"
+                            : "pointer",
+                        color:
+                          "#D32F2F",
+                        fontSize:
+                          "14px",
+                      }}
+                    >
+                      🗑️{" "}
+                      {deletingMessage
+                        ? "Deleting..."
+                        : "Delete"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* =====================================================
+                IMAGE
+            ===================================================== */}
+
+            {msg.message_type ===
+              "image" &&
+              msg.file_url && (
+                <div>
+                  <a
+                    href={
+                      msg.file_url
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src={
+                        msg.file_url
+                      }
+                      alt={
+                        msg.file_name ||
+                        "Image"
+                      }
+                      style={{
+                        width: "100%",
+                        maxHeight: "350px",
+                        objectFit: "cover",
+                        borderRadius: "7px",
+                        display: "block",
+                        cursor: "pointer",
+                      }}
+                    />
+                  </a>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent:
+                        "space-between",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding:
+                        "8px 5px 3px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "#555",
+                        overflow: "hidden",
+                        textOverflow:
+                          "ellipsis",
+                        whiteSpace:
+                          "nowrap",
+                      }}
+                    >
+                      {msg.file_name}
+                    </span>
+
+                    <a
+                      href={
+                        msg.file_url
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        textDecoration:
+                          "none",
+                        fontSize: "18px",
+                      }}
+                      title="Download"
+                    >
+                      ⬇️
+                    </a>
+                  </div>
+                </div>
+              )}
+
+            {/* =====================================================
+                DOCUMENT
+            ===================================================== */}
+
+            {msg.message_type ===
+              "file" &&
+              msg.file_url && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "8px",
+                    background:
+                      isMine
+                        ? "#C8F7C2"
+                        : "#F0F0F0",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "42px",
+                      height: "42px",
+                      borderRadius: "8px",
+                      background:
+                        "#FFFFFF",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent:
+                        "center",
+                      fontSize: "22px",
+                    }}
+                  >
+                    📄
+                  </div>
+
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight:
+                          "600",
+                        fontSize:
+                          "13px",
+                        overflow:
+                          "hidden",
+                        textOverflow:
+                          "ellipsis",
+                        whiteSpace:
+                          "nowrap",
+                      }}
+                    >
+                      {msg.file_name}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize:
+                          "11px",
+                        color: "#666",
+                        marginTop:
+                          "3px",
+                      }}
+                    >
+                      {formatFileSize(
+                        msg.file_size
+                      )}
+                    </div>
+                  </div>
+
+                  <a
+                    href={
+                      msg.file_url
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      textDecoration:
+                        "none",
+                      fontSize: "20px",
+                    }}
+                    title="Download"
+                  >
+                    ⬇️
+                  </a>
+                </div>
+              )}
+
+            {/* =====================================================
+                TEXT
+            ===================================================== */}
+
+            {msg.message && (
+              <div
+                style={{
+                  fontSize: "14px",
+                  lineHeight: "1.45",
+                  whiteSpace:
+                    "pre-wrap",
+                  wordBreak:
+                    "break-word",
+                  margin:
+                    msg.message_type !==
+                    "text"
+                      ? "6px 4px 2px"
+                      : "0",
+                }}
+              >
+                {msg.message}
+              </div>
+            )}
+
+            {/* =====================================================
+                TIME + READ STATUS
+            ===================================================== */}
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "flex-end",
+                alignItems:
+                  "center",
+                gap: "4px",
+                marginTop: "3px",
+                padding: "0 3px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "10px",
+                  color: "#667781",
+                }}
+              >
+                {getTime(
+                  msg.created_at
+                )}
+              </span>
+
+              {isMine && (
+                <span
+                  style={{
+                    fontSize: "13px",
+                    color:
+                      msg.is_read
+                        ? "#53BDEB"
+                        : "#667781",
+                  }}
+                >
+                  {msg.is_read
+                    ? "✓✓"
+                    : "✓"}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // =====================================================
   // LOADING
   // =====================================================
 
@@ -214,10 +916,10 @@ export default function ChatPage() {
         <div
           style={{
             textAlign: "center",
-            marginTop: "80px",
-            fontSize: "24px",
+            marginTop: "100px",
             color: "#2E7D32",
-            fontWeight: "bold",
+            fontSize: "22px",
+            fontWeight: "600",
           }}
         >
           Loading Chat...
@@ -227,7 +929,7 @@ export default function ChatPage() {
   }
 
   // =====================================================
-  // CHAT PAGE
+  // CHAT UI
   // =====================================================
 
   return (
@@ -236,216 +938,486 @@ export default function ChatPage() {
 
       <div
         style={{
-          maxWidth: "800px",
-          margin: "30px auto",
-          padding: "20px",
+          minHeight:
+            "calc(100vh - 70px)",
+          background: "#E5DDD5",
+          padding: "0",
         }}
       >
-
-        {/* =================================================
-            CHAT HEADER
-        ================================================= */}
-
         <div
           style={{
-            background: "#fff",
-            border: "1px solid #ddd",
-            borderRadius: "12px",
-            padding: "15px 20px",
-            marginBottom: "15px",
-            boxShadow:
-              "0 2px 6px rgba(0,0,0,0.08)",
+            width: "100%",
+            maxWidth: "1000px",
+            height:
+              "calc(100vh - 70px)",
+            margin: "0 auto",
+            display: "flex",
+            flexDirection: "column",
+            background: "#EFE7DE",
           }}
         >
-          <h1
-            style={{
-              color: "#2E7D32",
-              margin: 0,
-              fontSize: "24px",
-            }}
-          >
-            💬 {otherUserName}
-          </h1>
+          {/* =====================================================
+              HEADER
+          ===================================================== */}
 
           <div
             style={{
-              marginTop: "7px",
-              fontSize: "15px",
-              fontWeight: "bold",
-              color: isOnline
-                ? "#2E7D32"
-                : "#757575",
+              height: "65px",
+              background: "#075E54",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              padding: "0 15px",
+              gap: "12px",
+              flexShrink: 0,
+              boxShadow:
+                "0 1px 3px rgba(0,0,0,0.25)",
             }}
           >
-            {isOnline ? (
-              <>
-                🟢 Online
-              </>
-            ) : (
-              <>
-                ⚫ Offline
-              </>
-            )}
-          </div>
-        </div>
+            <button
+              onClick={() =>
+                navigate(-1)
+              }
+              style={{
+                background:
+                  "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "25px",
+                cursor: "pointer",
+                padding: "4px",
+              }}
+              title="Back"
+            >
+              ←
+            </button>
 
-        {/* =================================================
-            MESSAGES
-        ================================================= */}
-
-        <div
-          style={{
-            height: "450px",
-            overflowY: "auto",
-            border: "1px solid #ddd",
-            borderRadius: "12px",
-            padding: "15px",
-            background: "#F8F9FA",
-            marginBottom: "20px",
-          }}
-        >
-          {messages.length === 0 ? (
             <div
               style={{
-                textAlign: "center",
-                marginTop: "180px",
-                color: "#777",
+                width: "43px",
+                height: "43px",
+                borderRadius: "50%",
+                background: "#D9FDD3",
+                color: "#075E54",
+                display: "flex",
+                alignItems: "center",
+                justifyContent:
+                  "center",
+                fontSize: "22px",
+                fontWeight: "bold",
+                flexShrink: 0,
               }}
             >
-              No messages yet.
-              <br />
-              Start the conversation.
+              {otherUserName
+                ? otherUserName
+                    .charAt(0)
+                    .toUpperCase()
+                : "U"}
             </div>
-          ) : (
-            messages.map((msg) => {
-              const isMine =
-                Number(msg.sender_id) ===
-                myUserId;
 
-              return (
-                <div
-                  key={msg.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: isMine
-                      ? "flex-end"
-                      : "flex-start",
-                    marginBottom: "15px",
-                  }}
-                >
-                  <div
-                    style={{
-                      maxWidth: "70%",
-                      background: isMine
-                        ? "#DCF8C6"
-                        : "#F1F1F1",
-                      padding: "12px",
-                      borderRadius: "15px",
-                      boxShadow:
-                        "0 2px 6px rgba(0,0,0,0.1)",
-                    }}
-                  >
-                    <strong>
-                      {isMine
-                        ? "You"
-                        : otherUserName}
-                    </strong>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  overflow: "hidden",
+                  textOverflow:
+                    "ellipsis",
+                  whiteSpace:
+                    "nowrap",
+                }}
+              >
+                {otherUserName}
+              </div>
 
-                    <p
-                      style={{
-                        margin: "8px 0",
-                      }}
-                    >
-                      {msg.message}
-                    </p>
+              <div
+                style={{
+                  fontSize: "12px",
+                  marginTop: "2px",
+                  color: isOnline
+                    ? "#B9FBC0"
+                    : "#D7E8E5",
+                }}
+              >
+                {isOnline
+                  ? "● online"
+                  : getLastSeenText()}
+              </div>
+            </div>
 
-                    <small
-                      style={{
-                        color: "#666",
-                      }}
-                    >
-                      {new Date(
-                        msg.created_at
-                      ).toLocaleString()}
+            <div
+              style={{
+                fontSize: "22px",
+                opacity: 0.9,
+              }}
+            >
+              ⋮
+            </div>
+          </div>
 
-                      {" • "}
+          {/* =====================================================
+              MESSAGE AREA
+          ===================================================== */}
 
-                      {msg.is_read
-                        ? "✓✓ Read"
-                        : "✓ Sent"}
-                    </small>
-                  </div>
-                </div>
-              );
-            })
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* =================================================
-            MESSAGE INPUT
-        ================================================= */}
-
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Type your message..."
-            value={text}
-            onChange={(e) =>
-              setText(e.target.value)
-            }
-            onKeyDown={(e) => {
-              if (
-                e.key === "Enter" &&
-                !sending
-              ) {
-                sendMessage();
-              }
-            }}
+          <div
             style={{
               flex: 1,
-              padding: "12px",
-              borderRadius: "8px",
-              border: "1px solid #ccc",
-              fontSize: "15px",
-            }}
-          />
-
-          <button
-            type="button"
-            onClick={sendMessage}
-            disabled={
-              sending || !text.trim()
-            }
-            style={{
-              background: "#2E7D32",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              padding: "12px 25px",
-              cursor:
-                sending || !text.trim()
-                  ? "not-allowed"
-                  : "pointer",
-              fontWeight: "bold",
-              opacity:
-                sending || !text.trim()
-                  ? 0.6
-                  : 1,
+              overflowY: "auto",
+              padding: "15px 12px",
+              backgroundColor:
+                "#EFE7DE",
+              backgroundImage:
+                "radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px)",
+              backgroundSize:
+                "20px 20px",
             }}
           >
-            {sending
-              ? "Sending..."
-              : "Send"}
-          </button>
-        </div>
+            {messages.length ===
+            0 ? (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "center",
+                  alignItems: "center",
+                  height: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    background:
+                      "#FFF3C4",
+                    padding:
+                      "12px 18px",
+                    borderRadius: "8px",
+                    textAlign:
+                      "center",
+                    color: "#666",
+                    fontSize: "13px",
+                    boxShadow:
+                      "0 1px 2px rgba(0,0,0,0.1)",
+                  }}
+                >
+                  🔒 Messages are end-to-end
+                  encrypted in this chat.
+                  <br />
+                  Start the conversation.
+                </div>
+              </div>
+            ) : (
+              messages.map(
+                renderMessage
+              )
+            )}
 
+            {uploading && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "flex-end",
+                  margin: "10px 0",
+                }}
+              >
+                <div
+                  style={{
+                    background:
+                      "#D9FDD3",
+                    padding:
+                      "10px 14px",
+                    borderRadius:
+                      "10px",
+                    fontSize: "13px",
+                    color: "#555",
+                  }}
+                >
+                  📤 Uploading file...
+                </div>
+              </div>
+            )}
+
+            <div
+              ref={messagesEndRef}
+            />
+          </div>
+
+          {/* =====================================================
+              EMOJI PANEL
+          ===================================================== */}
+
+          {showEmoji && (
+            <div
+              style={{
+                background: "#fff",
+                padding: "10px",
+                borderTop:
+                  "1px solid #ddd",
+                display: "flex",
+                flexWrap:
+                  "wrap",
+                gap: "8px",
+                maxHeight:
+                  "130px",
+                overflowY: "auto",
+              }}
+            >
+              {emojis.map(
+                (emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() =>
+                      addEmoji(
+                        emoji
+                      )
+                    }
+                    style={{
+                      border: "none",
+                      background:
+                        "transparent",
+                      fontSize: "23px",
+                      cursor:
+                        "pointer",
+                      padding: "3px",
+                    }}
+                  >
+                    {emoji}
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
+          {/* =====================================================
+              ATTACHMENT MENU
+          ===================================================== */}
+
+          {showAttachMenu && (
+            <div
+              style={{
+                position:
+                  "relative",
+              }}
+            >
+              <div
+                style={{
+                  position:
+                    "absolute",
+                  bottom: "8px",
+                  left: "15px",
+                  background:
+                    "#fff",
+                  borderRadius:
+                    "12px",
+                  padding: "8px",
+                  boxShadow:
+                    "0 4px 15px rgba(0,0,0,0.2)",
+                  zIndex: 20,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={
+                    openFilePicker
+                  }
+                  style={{
+                    border: "none",
+                    background:
+                      "transparent",
+                    padding:
+                      "10px 14px",
+                    cursor:
+                      "pointer",
+                    fontSize: "14px",
+                    display: "flex",
+                    alignItems:
+                      "center",
+                    gap: "8px",
+                  }}
+                >
+                  🖼️ Photo / Document
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =====================================================
+              INPUT AREA
+          ===================================================== */}
+
+          <div
+            style={{
+              background:
+                "#F0F2F5",
+              padding: "8px",
+              display: "flex",
+              alignItems:
+                "center",
+              gap: "7px",
+              flexShrink: 0,
+              borderTop:
+                "1px solid #ddd",
+            }}
+          >
+            {/* EMOJI */}
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowEmoji(
+                  !showEmoji
+                );
+                setShowAttachMenu(
+                  false
+                );
+              }}
+              style={{
+                border: "none",
+                background:
+                  "transparent",
+                fontSize: "24px",
+                cursor:
+                  "pointer",
+                padding: "5px",
+              }}
+              title="Emoji"
+            >
+              😊
+            </button>
+
+            {/* ATTACHMENT */}
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowAttachMenu(
+                  !showAttachMenu
+                );
+                setShowEmoji(false);
+              }}
+              style={{
+                border: "none",
+                background:
+                  "transparent",
+                fontSize: "23px",
+                cursor:
+                  "pointer",
+                padding: "5px",
+                transform:
+                  "rotate(-35deg)",
+              }}
+              title="Attach"
+            >
+              📎
+            </button>
+
+            {/* HIDDEN FILE INPUT */}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx"
+              onChange={
+                uploadFile
+              }
+              style={{
+                display: "none",
+              }}
+            />
+
+            {/* TEXT */}
+
+            <input
+              type="text"
+              placeholder={
+                uploading
+                  ? "Uploading..."
+                  : "Type a message"
+              }
+              value={text}
+              disabled={
+                uploading
+              }
+              onChange={(e) =>
+                setText(
+                  e.target.value
+                )
+              }
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey
+                ) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+              style={{
+                flex: 1,
+                border: "none",
+                outline: "none",
+                background:
+                  "#fff",
+                borderRadius:
+                  "22px",
+                padding:
+                  "11px 15px",
+                fontSize: "14px",
+                minWidth: 0,
+              }}
+            />
+
+            {/* SEND */}
+
+            <button
+              type="button"
+              onClick={
+                sendMessage
+              }
+              disabled={
+                sending ||
+                uploading ||
+                !text.trim()
+              }
+              style={{
+                width: "44px",
+                height: "44px",
+                borderRadius:
+                  "50%",
+                border: "none",
+                background:
+                  sending ||
+                  uploading ||
+                  !text.trim()
+                    ? "#A5D6A7"
+                    : "#075E54",
+                color: "#fff",
+                cursor:
+                  sending ||
+                  uploading ||
+                  !text.trim()
+                    ? "not-allowed"
+                    : "pointer",
+                fontSize: "20px",
+                display: "flex",
+                alignItems:
+                  "center",
+                justifyContent:
+                  "center",
+                flexShrink: 0,
+              }}
+            >
+              {sending
+                ? "..."
+                : "➤"}
+            </button>
+          </div>
+        </div>
       </div>
     </>
   );
