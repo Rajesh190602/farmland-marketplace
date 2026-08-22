@@ -3,11 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import User, Land, Notification,LandImage
+from app.models import User, Land, Notification,LandImage,Conversation
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
 from sqlalchemy import func,extract
-from app.models import User
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"]
@@ -51,23 +50,44 @@ def admin_analytics(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
+    total_chats = db.query(Conversation).count()
+
     return {
         "total_users": db.query(User).count(),
-        "farmers": db.query(User).filter(User.role == "farmer").count(),
-        "buyers": db.query(User).filter(User.role == "buyer").count(),
-        "admins": db.query(User).filter(User.role == "admin").count(),
+
+        "farmers": db.query(User)
+        .filter(User.role == "farmer")
+        .count(),
+
+        "buyers": db.query(User)
+        .filter(User.role == "buyer")
+        .count(),
+
+        "admins": db.query(User)
+        .filter(User.role == "admin")
+        .count(),
 
         "total_lands": db.query(Land).count(),
 
-        "pending": db.query(Land).filter(Land.status == "pending").count(),
+        "pending": db.query(Land)
+        .filter(Land.status == "pending")
+        .count(),
 
-        "approved": db.query(Land).filter(Land.status == "approved").count(),
+        "approved": db.query(Land)
+        .filter(Land.status == "approved")
+        .count(),
 
-        "rejected": db.query(Land).filter(Land.status == "rejected").count(),
+        "rejected": db.query(Land)
+        .filter(Land.status == "rejected")
+        .count(),
 
-        "changes_requested": db.query(Land).filter(
+        "changes_requested": db.query(Land)
+        .filter(
             Land.status == "changes_requested"
-        ).count(),
+        )
+        .count(),
+
+        "total_chats": total_chats,
     }
 @router.get("/users")
 def get_all_users(
