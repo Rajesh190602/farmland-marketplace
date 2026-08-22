@@ -162,13 +162,15 @@ def start_chat(
     # ----------------------------------
 
     notification = Notification(
-        user_id=land.owner_id,
-        title="💬 New Chat",
-        message=(
-            f"{buyer.full_name} started a conversation "
-            f"about your land '{land.title}'."
-        )
-    )
+    user_id=land.owner_id,
+    title="💬 New Chat",
+    message=(
+        f"{buyer.full_name} started a conversation "
+        f"about your land '{land.title}'."
+    ),
+    target_type="conversation",
+    target_id=conversation.id
+)
 
     db.add(notification)
     db.commit()
@@ -288,13 +290,15 @@ def send_message(
     # ----------------------------------
 
     notification = Notification(
-        user_id=receiver_id,
-        title="💬 New Message",
-        message=(
-            f"{sender.full_name if sender else 'User'} "
-            "sent you a new message."
-        )
-    )
+    user_id=receiver_id,
+    title="💬 New Message",
+    message=(
+        f"{sender.full_name if sender else 'User'} "
+        "sent you a new message."
+    ),
+    target_type="conversation",
+    target_id=conversation.id
+)
 
     db.add(notification)
     db.commit()
@@ -543,13 +547,15 @@ async def send_chat_file(
     # ----------------------------------
 
     notification = Notification(
-        user_id=receiver_id,
-        title="📎 New File",
-        message=(
-            f"{sender.full_name if sender else 'User'} "
-            f"sent you a file: {file.filename}"
-        )
-    )
+    user_id=receiver_id,
+    title="📎 New File",
+    message=(
+        f"{sender.full_name if sender else 'User'} "
+        f"sent you a file: {file.filename}"
+    ),
+    target_type="conversation",
+    target_id=conversation.id
+)
 
     db.add(notification)
     db.commit()

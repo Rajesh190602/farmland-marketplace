@@ -225,7 +225,11 @@ class Favorite(Base):
 class Notification(Base):
     __tablename__ = "notifications"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
     user_id = Column(
         Integer,
@@ -233,11 +237,34 @@ class Notification(Base):
         nullable=False
     )
 
-    title = Column(String, nullable=False)
+    title = Column(
+        String,
+        nullable=False
+    )
 
-    message = Column(String, nullable=False)
+    message = Column(
+        String,
+        nullable=False
+    )
 
-    is_read = Column(Boolean, default=False)
+    is_read = Column(
+        Boolean,
+        default=False
+    )
+
+    # ==========================================
+    # Notification Navigation
+    # ==========================================
+
+    target_type = Column(
+        String,
+        nullable=True
+    )
+
+    target_id = Column(
+        Integer,
+        nullable=True
+    )
 
     created_at = Column(
         DateTime(timezone=True),
@@ -245,6 +272,7 @@ class Notification(Base):
     )
 
     user = relationship("User")
+
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
 
