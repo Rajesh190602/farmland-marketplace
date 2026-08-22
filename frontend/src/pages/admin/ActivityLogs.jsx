@@ -5,26 +5,49 @@ import api from "../../services/api";
 function ActivityLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [total, setTotal] = useState(0);
+
+  const [action, setAction] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const [exporting, setExporting] = useState(false);
+
+  // =====================================================
+  // FETCH ACTIVE ACTIVITY LOGS
+  // =====================================================
 
   const fetchLogs = async () => {
     try {
       setLoading(true);
 
+      const params = new URLSearchParams();
+
+      params.append("page", page);
+      params.append("limit", limit);
+
+      if (action) {
+        params.append("action", action);
+      }
+
       const response = await api.get(
-        `/admin/activity-logs?page=${page}&limit=${limit}`
+        `/admin/activity-logs?${params.toString()}`
       );
 
       setLogs(response.data.logs || []);
       setTotal(response.data.total || 0);
     } catch (error) {
-      console.error("Failed to load activity logs:", error);
+      console.error(
+        "Failed to load activity logs:",
+        error
+      );
 
       alert(
         error.response?.data?.detail ||
-        "Failed to load activity logs."
+          "Failed to load activity logs."
       );
     } finally {
       setLoading(false);
@@ -33,27 +56,246 @@ function ActivityLogs() {
 
   useEffect(() => {
     fetchLogs();
-  }, [page]);
+  }, [page, action]);
 
-  const totalPages = Math.ceil(total / limit);
+  // =====================================================
+  // APPLY FILTER
+  // =====================================================
+
+  const applyFilters = () => {
+    setPage(1);
+    fetchLogs();
+  };
+
+  // =====================================================
+  // CLEAR FILTERS
+  // =====================================================
+
+  const clearFilters = () => {
+    setAction("");
+    setFromDate("");
+    setToDate("");
+    setPage(1);
+  };
+
+  // =====================================================
+  // EXPORT EXCEL
+  // =====================================================
+
+  const exportToExcel = async () => {
+    if (!fromDate || !toDate) {
+      alert(
+        "Please select both From Date and To Date before exporting."
+      );
+      return;
+    }
+
+    if (fromDate > toDate) {
+      alert(
+        "From Date cannot be later than To Date."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Export the selected activity logs to Excel?\n\n" +
+        "After a successful export, these logs will be archived " +
+        "and removed from the active Activity Logs dashboard."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setExporting(true);
+
+      const params = new URLSearchParams();
+
+      params.append("from_date", fromDate);
+      params.append("to_date", toDate);
+
+      if (action) {
+        params.append("action", action);
+      }
+
+      const response = await api.get(
+        `/admin/activity-logs/export?${params.toString()}`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      // =================================================
+      // CREATE DOWNLOAD
+      // =================================================
+
+      const blob = new Blob(
+        [response.data],
+        {
+          type:
+            "application/vnd.openxmlformats-" +
+            "officedocument.spreadsheetml.sheet",
+        }
+      );
+
+      const url =
+        window.URL.createObjectURL(blob);
+
+      const link =
+        document.createElement("a");
+
+      link.href = url;
+
+      // Try to get filename from backend
+      const contentDisposition =
+        response.headers[
+          "content-disposition"
+        ];
+
+      let filename =
+        "activity_logs.xlsx";
+
+      if (contentDisposition) {
+        const filenameMatch =
+          contentDisposition.match(
+            /filename="?([^"]+)"?/
+          );
+
+        if (filenameMatch) {
+          filename =
+            filenameMatch[1];
+        }
+      }
+
+      link.setAttribute(
+        "download",
+        filename
+      );
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      // =================================================
+      // REFRESH ACTIVE LOGS
+      // =================================================
+
+      await fetchLogs();
+
+      alert(
+        "Activity logs exported successfully.\n\n" +
+          "The exported logs have been archived."
+      );
+
+    } catch (error) {
+      console.error(
+        "Export Activity Logs Error:",
+        error
+      );
+
+      // Blob responses can contain JSON errors
+      if (
+        error.response?.data instanceof Blob
+      ) {
+        try {
+          const text =
+            await error.response.data.text();
+
+          const errorData =
+            JSON.parse(text);
+
+          alert(
+            errorData.detail ||
+              "Failed to export activity logs."
+          );
+        } catch {
+          alert(
+            "Failed to export activity logs."
+          );
+        }
+      } else {
+        alert(
+          error.response?.data?.detail ||
+            "Failed to export activity logs."
+        );
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // =====================================================
+  // ACTION COLORS
+  // =====================================================
 
   const getActionColor = (action) => {
     if (action === "LOGIN") return "#1565C0";
-    if (action === "CREATE_LAND") return "#2E7D32";
-    if (action === "UPDATE_LAND") return "#EF6C00";
-    if (action === "DELETE_LAND") return "#C62828";
-    if (action === "APPROVE_LAND") return "#2E7D32";
-    if (action === "REJECT_LAND") return "#C62828";
-    if (action === "REQUEST_CHANGES") return "#EF6C00";
-    if (action === "UPLOAD_IMAGES") return "#6A1B9A";
-    if (action === "DELETE_IMAGE") return "#C62828";
-    if (action === "UPDATE_USER") return "#1565C0";
-    if (action === "DELETE_USER") return "#C62828";
-    if (action === "ADMIN_UPDATE_LAND") return "#1565C0";
-    if (action === "ADMIN_DELETE_LAND") return "#C62828";
+
+    if (action === "CREATE_LAND")
+      return "#2E7D32";
+
+    if (action === "UPDATE_LAND")
+      return "#EF6C00";
+
+    if (action === "DELETE_LAND")
+      return "#C62828";
+
+    if (action === "APPROVE_LAND")
+      return "#2E7D32";
+
+    if (action === "REJECT_LAND")
+      return "#C62828";
+
+    if (action === "REQUEST_CHANGES")
+      return "#EF6C00";
+
+    if (action === "UPLOAD_IMAGES")
+      return "#6A1B9A";
+
+    if (action === "DELETE_IMAGE")
+      return "#C62828";
+
+    if (action === "UPDATE_USER")
+      return "#1565C0";
+
+    if (action === "DELETE_USER")
+      return "#C62828";
+
+    if (action === "ADMIN_UPDATE_LAND")
+      return "#1565C0";
+
+    if (action === "ADMIN_DELETE_LAND")
+      return "#C62828";
+
+    if (action === "CHAT_MESSAGE_SENT")
+      return "#6A1B9A";
+
+    if (action === "CHAT_FILE_SENT")
+      return "#6A1B9A";
+
+    if (action === "CHAT_STARTED")
+      return "#00897B";
+
+    if (action === "LAND_FAVORITED")
+      return "#D81B60";
+
+    if (action === "LAND_UNFAVORITED")
+      return "#C62828";
 
     return "#616161";
   };
+
+  const totalPages =
+    Math.ceil(total / limit);
+
+  // =====================================================
+  // LOADING
+  // =====================================================
 
   if (loading) {
     return (
@@ -75,6 +317,10 @@ function ActivityLogs() {
     );
   }
 
+  // =====================================================
+  // PAGE
+  // =====================================================
+
   return (
     <>
       <Navbar />
@@ -92,20 +338,310 @@ function ActivityLogs() {
             margin: "0 auto",
           }}
         >
-          <h1 style={{ color: "#2E7D32" }}>
-            Activity Logs
-          </h1>
 
-          <p style={{ color: "#555" }}>
-            Track administrator and user actions across the
-            Farmland Marketplace.
-          </p>
+          {/* =================================================
+              HEADER
+          ================================================= */}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent:
+                "space-between",
+              alignItems: "center",
+              gap: "15px",
+              flexWrap: "wrap",
+              marginBottom: "10px",
+            }}
+          >
+            <div>
+              <h1
+                style={{
+                  color: "#2E7D32",
+                  marginBottom: "8px",
+                }}
+              >
+                📋 Activity Logs
+              </h1>
+
+              <p
+                style={{
+                  color: "#555",
+                  margin: 0,
+                }}
+              >
+                Track administrator and user
+                actions across the Farmland
+                Marketplace.
+              </p>
+            </div>
+
+            <button
+              onClick={fetchLogs}
+              style={{
+                padding: "11px 18px",
+                background: "#1565C0",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              🔄 Refresh
+            </button>
+          </div>
+
+          {/* =================================================
+              FILTER / EXPORT PANEL
+          ================================================= */}
+
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              padding: "20px",
+              marginTop: "25px",
+              marginBottom: "25px",
+              boxShadow:
+                "0 3px 10px rgba(0,0,0,0.10)",
+            }}
+          >
+            <h3
+              style={{
+                marginTop: 0,
+                color: "#2E7D32",
+              }}
+            >
+              📊 Export Activity Logs
+            </h3>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(180px,1fr))",
+                gap: "15px",
+                alignItems: "end",
+              }}
+            >
+
+              {/* FROM DATE */}
+
+              <div>
+                <label
+                  style={labelStyle}
+                >
+                  From Date
+                </label>
+
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) =>
+                    setFromDate(
+                      e.target.value
+                    )
+                  }
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* TO DATE */}
+
+              <div>
+                <label
+                  style={labelStyle}
+                >
+                  To Date
+                </label>
+
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) =>
+                    setToDate(
+                      e.target.value
+                    )
+                  }
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* ACTION */}
+
+              <div>
+                <label
+                  style={labelStyle}
+                >
+                  Action
+                </label>
+
+                <select
+                  value={action}
+                  onChange={(e) => {
+                    setAction(
+                      e.target.value
+                    );
+                    setPage(1);
+                  }}
+                  style={inputStyle}
+                >
+                  <option value="">
+                    All Actions
+                  </option>
+
+                  <option value="LOGIN">
+                    LOGIN
+                  </option>
+
+                  <option value="CREATE_LAND">
+                    CREATE_LAND
+                  </option>
+
+                  <option value="UPDATE_LAND">
+                    UPDATE_LAND
+                  </option>
+
+                  <option value="DELETE_LAND">
+                    DELETE_LAND
+                  </option>
+
+                  <option value="APPROVE_LAND">
+                    APPROVE_LAND
+                  </option>
+
+                  <option value="REJECT_LAND">
+                    REJECT_LAND
+                  </option>
+
+                  <option value="REQUEST_CHANGES">
+                    REQUEST_CHANGES
+                  </option>
+
+                  <option value="UPLOAD_IMAGES">
+                    UPLOAD_IMAGES
+                  </option>
+
+                  <option value="DELETE_IMAGE">
+                    DELETE_IMAGE
+                  </option>
+
+                  <option value="UPDATE_USER">
+                    UPDATE_USER
+                  </option>
+
+                  <option value="DELETE_USER">
+                    DELETE_USER
+                  </option>
+
+                  <option value="CHAT_MESSAGE_SENT">
+                    CHAT_MESSAGE_SENT
+                  </option>
+
+                  <option value="CHAT_FILE_SENT">
+                    CHAT_FILE_SENT
+                  </option>
+
+                  <option value="CHAT_STARTED">
+                    CHAT_STARTED
+                  </option>
+
+                  <option value="LAND_FAVORITED">
+                    LAND_FAVORITED
+                  </option>
+
+                  <option value="LAND_UNFAVORITED">
+                    LAND_UNFAVORITED
+                  </option>
+                </select>
+              </div>
+
+              {/* FILTER BUTTON */}
+
+              <button
+                onClick={applyFilters}
+                style={{
+                  ...actionButtonStyle,
+                  background: "#2E7D32",
+                }}
+              >
+                🔎 Apply Filter
+              </button>
+
+              {/* CLEAR BUTTON */}
+
+              <button
+                onClick={clearFilters}
+                style={{
+                  ...actionButtonStyle,
+                  background: "#757575",
+                }}
+              >
+                ✕ Clear
+              </button>
+
+              {/* EXPORT BUTTON */}
+
+              <button
+                onClick={exportToExcel}
+                disabled={exporting}
+                style={{
+                  ...actionButtonStyle,
+                  background: exporting
+                    ? "#9E9E9E"
+                    : "#00897B",
+                  cursor: exporting
+                    ? "not-allowed"
+                    : "pointer",
+                }}
+              >
+                {exporting
+                  ? "⏳ Exporting..."
+                  : "📥 Export Excel"}
+              </button>
+            </div>
+
+            <p
+              style={{
+                marginBottom: 0,
+                marginTop: "15px",
+                color: "#777",
+                fontSize: "13px",
+              }}
+            >
+              ⚠️ After a successful export,
+              the exported logs will be archived
+              and removed from the active Activity
+              Logs dashboard. They remain preserved
+              in the database.
+            </p>
+          </div>
+
+          {/* =================================================
+              ACTIVE LOG COUNT
+          ================================================= */}
+
+          <div
+            style={{
+              marginBottom: "15px",
+              color: "#555",
+              fontWeight: "bold",
+            }}
+          >
+            Active Logs: {total}
+          </div>
+
+          {/* =================================================
+              LOG TABLE
+          ================================================= */}
 
           <div
             style={{
               background: "white",
               borderRadius: "10px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              boxShadow:
+                "0 2px 8px rgba(0,0,0,0.15)",
               overflowX: "auto",
             }}
           >
@@ -116,80 +652,150 @@ function ActivityLogs() {
                   textAlign: "center",
                 }}
               >
-                <h3>No activity logs found.</h3>
+                <h3>
+                  No active activity logs
+                  found.
+                </h3>
+
+                <p
+                  style={{
+                    color: "#777",
+                  }}
+                >
+                  Exported logs are archived
+                  and no longer appear here.
+                </p>
               </div>
             ) : (
               <table
                 style={{
                   width: "100%",
-                  borderCollapse: "collapse",
+                  borderCollapse:
+                    "collapse",
                   minWidth: "900px",
                 }}
               >
                 <thead>
                   <tr
                     style={{
-                      backgroundColor: "#2E7D32",
+                      backgroundColor:
+                        "#2E7D32",
                       color: "white",
                     }}
                   >
-                    <th style={thStyle}>ID</th>
-                    <th style={thStyle}>User</th>
-                    <th style={thStyle}>Action</th>
-                    <th style={thStyle}>Description</th>
-                    <th style={thStyle}>Target</th>
-                    <th style={thStyle}>Date & Time</th>
+                    <th style={thStyle}>
+                      ID
+                    </th>
+
+                    <th style={thStyle}>
+                      User
+                    </th>
+
+                    <th style={thStyle}>
+                      Action
+                    </th>
+
+                    <th style={thStyle}>
+                      Description
+                    </th>
+
+                    <th style={thStyle}>
+                      Target
+                    </th>
+
+                    <th style={thStyle}>
+                      Date & Time
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {logs.map((log) => (
-                    <tr key={log.id}>
-                      <td style={tdStyle}>
+                    <tr
+                      key={log.id}
+                      style={{
+                        background:
+                          log.id % 2 === 0
+                            ? "#fff"
+                            : "#fafafa",
+                      }}
+                    >
+                      <td
+                        style={tdStyle}
+                      >
                         {log.id}
                       </td>
 
-                      <td style={tdStyle}>
+                      <td
+                        style={tdStyle}
+                      >
                         <strong>
-                          {log.user_name || "Unknown"}
+                          {log.user_name ||
+                            "Unknown"}
                         </strong>
 
                         <br />
 
-                        <small>
-                          {log.user_email || ""}
+                        <small
+                          style={{
+                            color:
+                              "#666",
+                          }}
+                        >
+                          {log.user_email ||
+                            ""}
                         </small>
                       </td>
 
-                      <td style={tdStyle}>
+                      <td
+                        style={tdStyle}
+                      >
                         <span
                           style={{
-                            display: "inline-block",
-                            padding: "6px 10px",
-                            borderRadius: "20px",
+                            display:
+                              "inline-block",
+                            padding:
+                              "6px 10px",
+                            borderRadius:
+                              "20px",
                             backgroundColor:
-                              getActionColor(log.action),
-                            color: "white",
-                            fontWeight: "bold",
-                            fontSize: "12px",
+                              getActionColor(
+                                log.action
+                              ),
+                            color:
+                              "white",
+                            fontWeight:
+                              "bold",
+                            fontSize:
+                              "12px",
+                            whiteSpace:
+                              "nowrap",
                           }}
                         >
                           {log.action}
                         </span>
                       </td>
 
-                      <td style={tdStyle}>
+                      <td
+                        style={tdStyle}
+                      >
                         {log.description}
                       </td>
 
-                      <td style={tdStyle}>
-                        {log.target_type || "-"}
+                      <td
+                        style={tdStyle}
+                      >
+                        {log.target_type ||
+                          "-"}
+
                         {log.target_id
                           ? ` #${log.target_id}`
                           : ""}
                       </td>
 
-                      <td style={tdStyle}>
+                      <td
+                        style={tdStyle}
+                      >
                         {log.created_at
                           ? new Date(
                               log.created_at
@@ -203,36 +809,78 @@ function ActivityLogs() {
             )}
           </div>
 
+          {/* =================================================
+              PAGINATION
+          ================================================= */}
+
           {totalPages > 1 && (
             <div
               style={{
                 display: "flex",
-                justifyContent: "center",
+                justifyContent:
+                  "center",
                 alignItems: "center",
                 gap: "15px",
                 marginTop: "25px",
+                flexWrap: "wrap",
               }}
             >
               <button
-                disabled={page === 1}
-                onClick={() =>
-                  setPage((previous) => previous - 1)
+                disabled={
+                  page === 1
                 }
-                style={paginationButtonStyle}
+                onClick={() =>
+                  setPage(
+                    (previous) =>
+                      previous - 1
+                  )
+                }
+                style={{
+                  ...paginationButtonStyle,
+                  opacity:
+                    page === 1
+                      ? 0.5
+                      : 1,
+                  cursor:
+                    page === 1
+                      ? "not-allowed"
+                      : "pointer",
+                }}
               >
                 ← Previous
               </button>
 
-              <span>
-                Page {page} of {totalPages}
+              <span
+                style={{
+                  fontWeight: "bold",
+                  color: "#444",
+                }}
+              >
+                Page {page} of{" "}
+                {totalPages}
               </span>
 
               <button
-                disabled={page >= totalPages}
-                onClick={() =>
-                  setPage((previous) => previous + 1)
+                disabled={
+                  page >= totalPages
                 }
-                style={paginationButtonStyle}
+                onClick={() =>
+                  setPage(
+                    (previous) =>
+                      previous + 1
+                  )
+                }
+                style={{
+                  ...paginationButtonStyle,
+                  opacity:
+                    page >= totalPages
+                      ? 0.5
+                      : 1,
+                  cursor:
+                    page >= totalPages
+                      ? "not-allowed"
+                      : "pointer",
+                }}
               >
                 Next →
               </button>
@@ -243,6 +891,36 @@ function ActivityLogs() {
     </>
   );
 }
+
+
+// =========================================================
+// STYLES
+// =========================================================
+
+const labelStyle = {
+  display: "block",
+  marginBottom: "6px",
+  fontWeight: "bold",
+  color: "#444",
+};
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "10px",
+  border: "1px solid #ccc",
+  borderRadius: "7px",
+  background: "#fff",
+};
+
+const actionButtonStyle = {
+  border: "none",
+  color: "#fff",
+  padding: "10px 14px",
+  borderRadius: "7px",
+  fontWeight: "bold",
+  minHeight: "40px",
+};
 
 const thStyle = {
   padding: "14px",
@@ -262,7 +940,6 @@ const paginationButtonStyle = {
   borderRadius: "5px",
   backgroundColor: "#2E7D32",
   color: "white",
-  cursor: "pointer",
 };
 
 export default ActivityLogs;
