@@ -615,6 +615,67 @@ def delete_land_admin(
 
     land_title = land.title
 
+    # =====================================================
+    # FIND CONVERSATIONS BELONGING TO THIS LAND
+    # =====================================================
+
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.land_id == land_id)
+        .all()
+    )
+
+    conversation_ids = [
+        conversation.id
+        for conversation in conversations
+    ]
+
+    # =====================================================
+    # DELETE MESSAGES FIRST
+    # =====================================================
+
+    if conversation_ids:
+        db.query(Message).filter(
+            Message.conversation_id.in_(conversation_ids)
+        ).delete(
+            synchronize_session=False
+        )
+
+    # =====================================================
+    # DELETE CONVERSATIONS
+    # =====================================================
+
+    if conversation_ids:
+        db.query(Conversation).filter(
+            Conversation.id.in_(conversation_ids)
+        ).delete(
+            synchronize_session=False
+        )
+
+    # =====================================================
+    # DELETE LAND IMAGES
+    # =====================================================
+
+    db.query(LandImage).filter(
+        LandImage.land_id == land_id
+    ).delete(
+        synchronize_session=False
+    )
+
+    # =====================================================
+    # DELETE FAVORITES
+    # =====================================================
+
+    db.query(Favorite).filter(
+        Favorite.land_id == land_id
+    ).delete(
+        synchronize_session=False
+    )
+
+    # =====================================================
+    # ACTIVITY LOG
+    # =====================================================
+
     create_activity_log(
         db=db,
         user_id=admin,
@@ -623,6 +684,10 @@ def delete_land_admin(
         target_type="LAND",
         target_id=land_id,
     )
+
+    # =====================================================
+    # DELETE LAND
+    # =====================================================
 
     db.delete(land)
 
