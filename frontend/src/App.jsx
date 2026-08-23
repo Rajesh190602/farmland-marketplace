@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/Login";
-import UserDetails from "./pages/admin/UserDetails";
+import PendingLands from "./pages/admin/PendingLands";
 
 function App() {
   return (
