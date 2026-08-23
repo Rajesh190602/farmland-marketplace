@@ -743,6 +743,9 @@ def get_land_by_id(
 # ==========================
 # Admin Update User
 # ==========================
+# =========================================================
+# Admin Update User
+# =========================================================
 
 @router.put("/users/{user_id}")
 def update_user_admin(
@@ -751,6 +754,10 @@ def update_user_admin(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
+    # -----------------------------------------------------
+    # Find target user
+    # -----------------------------------------------------
+
     user = (
         db.query(User)
         .filter(User.id == user_id)
@@ -763,19 +770,113 @@ def update_user_admin(
             detail="User not found"
         )
 
-    updates = updated_user.model_dump(exclude_unset=True)
+    # -----------------------------------------------------
+    # Prevent admin from modifying their own role
+    # -----------------------------------------------------
+
+    if user.id == admin:
+        requested_role = (
+            updated_user.role.lower()
+            if updated_user.role
+            else user.role
+        )
+
+        if requested_role != user.role:
+            raise HTTPException(
+                status_code=400,
+                detail="You cannot change your own admin role"
+            )
+
+    # -----------------------------------------------------
+    # Validate role
+    # -----------------------------------------------------
+
+    if updated_user.role:
+        requested_role = (
+            updated_user.role
+            .strip()
+            .lower()
+        )
+
+        if requested_role not in [
+            "admin",
+            "farmer",
+            "buyer"
+        ]:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid user role"
+            )
+
+        updated_user.role = requested_role
+
+    # -----------------------------------------------------
+    # Save old values for activity log
+    # -----------------------------------------------------
+
+    old_full_name = user.full_name
+    old_email = user.email
+    old_mobile = user.mobile
+    old_role = user.role
+
+    # -----------------------------------------------------
+    # Apply updates
+    # -----------------------------------------------------
+
+    updates = updated_user.model_dump(
+        exclude_unset=True
+    )
 
     for key, value in updates.items():
         setattr(user, key, value)
+
+    # -----------------------------------------------------
+    # Determine what changed
+    # -----------------------------------------------------
+
+    changes = []
+
+    if old_full_name != user.full_name:
+        changes.append("full name")
+
+    if old_email != user.email:
+        changes.append("email")
+
+    if old_mobile != user.mobile:
+        changes.append("mobile number")
+
+    if old_role != user.role:
+        changes.append(
+            f"role ({old_role} → {user.role})"
+        )
+
+    # -----------------------------------------------------
+    # Activity log
+    # -----------------------------------------------------
+
+    if changes:
+        description = (
+            f'Updated user "{user.full_name}": '
+            + ", ".join(changes)
+            + "."
+        )
+    else:
+        description = (
+            f'Updated user "{user.full_name}".'
+        )
 
     create_activity_log(
         db=db,
         user_id=admin,
         action="UPDATE_USER",
-        description=f'Updated user "{user.full_name}"',
+        description=description,
         target_type="USER",
-        target_id=user.id,
+        target_id=user.id
     )
+
+    # -----------------------------------------------------
+    # Commit
+    # -----------------------------------------------------
 
     db.commit()
     db.refresh(user)
@@ -790,6 +891,7 @@ def update_user_admin(
             "role": user.role
         }
     }
+
 # ==========================
 # Admin Delete User
 # ==========================

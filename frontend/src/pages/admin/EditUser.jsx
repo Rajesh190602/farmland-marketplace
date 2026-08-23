@@ -8,7 +8,6 @@ function EditUser() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
   const [originalRole, setOriginalRole] = useState("");
 
   const [form, setForm] = useState({
@@ -17,6 +16,10 @@ function EditUser() {
     mobile: "",
     role: "",
   });
+
+  // =========================================================
+  // LOAD USER
+  // =========================================================
 
   useEffect(() => {
     fetchUser();
@@ -39,7 +42,9 @@ function EditUser() {
         role: user.role || "",
       });
 
-      setOriginalRole(user.role || "");
+      setOriginalRole(
+        (user.role || "").toLowerCase()
+      );
     } catch (error) {
       console.error(
         "Failed to load user:",
@@ -50,10 +55,16 @@ function EditUser() {
         error.response?.data?.detail ||
           "Failed to load user."
       );
+
+      navigate("/admin/users");
     } finally {
       setLoading(false);
     }
   };
+
+  // =========================================================
+  // HANDLE INPUT
+  // =========================================================
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -63,101 +74,166 @@ function EditUser() {
       [name]: value,
     }));
   };
+
+  // =========================================================
+  // VALIDATION
+  // =========================================================
+
+  const validateForm = () => {
+    const fullName = form.full_name.trim();
+    const email = form.email.trim();
+    const mobile = form.mobile.trim();
+    const role = form.role.trim().toLowerCase();
+
+    if (fullName.length < 2) {
+      alert(
+        "Full Name must contain at least 2 characters."
+      );
+      return false;
+    }
+
+    if (email.length === 0) {
+      alert("Email is required.");
+      return false;
+    }
+
+    // Basic email validation
+    const emailPattern =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(email)) {
+      alert("Enter a valid email address.");
+      return false;
+    }
+
+    if (mobile.length === 0) {
+      alert("Mobile number is required.");
+      return false;
+    }
+
+    if (!/^\d{10}$/.test(mobile)) {
+      alert(
+        "Mobile number must contain exactly 10 digits."
+      );
+      return false;
+    }
+
+    if (
+      !["admin", "farmer", "buyer"].includes(role)
+    ) {
+      alert("Please select a valid role.");
+      return false;
+    }
+
+    return true;
+  };
+
+  // =========================================================
+  // SAVE USER
+  // =========================================================
+
   const saveUser = async () => {
-  const fullName = form.full_name.trim();
-  const email = form.email.trim();
-  const mobile = form.mobile.trim();
-  const role = form.role.trim().toLowerCase();
-
-  // Validate Full Name
-  if (fullName.length === 0) {
-    alert("Full Name is required.");
-    return;
-  }
-
-  // Validate Email
-  if (email.length === 0) {
-    alert("Email is required.");
-    return;
-  }
-
-  // Validate Mobile
-  if (mobile.length === 0) {
-    alert("Mobile number is required.");
-    return;
-  }
-
-  // Validate Role
-  if (role.length === 0) {
-    alert("Please select a role.");
-    return;
-  }
-
-  // Validate allowed roles
-  if (!["admin", "farmer", "buyer"].includes(role)) {
-    alert("Invalid user role.");
-    return;
-  }
-
-  // Confirm if changing a normal user to admin
-  if (role === "admin" && originalRole !== "admin") {
-    const confirmed = window.confirm(
-      "You are giving this user ADMIN access.\n\n" +
-      "Admins can access the admin dashboard and manage users and lands.\n\n" +
-      "Do you want to continue?"
-    );
-
-    if (!confirmed) {
+    if (!validateForm()) {
       return;
     }
-  }
 
-  try {
-    setSaving(true);
+    const fullName = form.full_name.trim();
+    const email = form.email.trim();
+    const mobile = form.mobile.trim();
+    const role = form.role.trim().toLowerCase();
 
-    const payload = {
-      full_name: fullName,
-      email: email,
-      mobile: mobile,
-      role: role,
-    };
+    // -------------------------------------------------------
+    // Confirm role escalation
+    // -------------------------------------------------------
 
-    console.log("Updating user:", payload);
+    if (
+      role === "admin" &&
+      originalRole !== "admin"
+    ) {
+      const confirmed = window.confirm(
+        "You are giving this user ADMIN access.\n\n" +
+          "Admins can access the admin dashboard and manage users and lands.\n\n" +
+          "Do you want to continue?"
+      );
 
-    const response = await api.put(
-      `/admin/users/${id}`,
-      payload
-    );
+      if (!confirmed) {
+        return;
+      }
+    }
 
-    alert(
-      response.data?.message ||
-        "User updated successfully."
-    );
+    // -------------------------------------------------------
+    // Confirm removing admin privileges
+    // -------------------------------------------------------
 
-    navigate(`/admin/users/${id}`);
-  } catch (error) {
-    console.error(
-      "Failed to update user:",
-      error
-    );
+    if (
+      originalRole === "admin" &&
+      role !== "admin"
+    ) {
+      const confirmed = window.confirm(
+        "You are removing ADMIN privileges from this user.\n\n" +
+          "They will no longer have access to the admin dashboard.\n\n" +
+          "Do you want to continue?"
+      );
 
-    alert(
-      error.response?.data?.detail ||
-        "Failed to update user."
-    );
-  } finally {
-    setSaving(false);
-  }
-};
+      if (!confirmed) {
+        return;
+      }
+    }
 
+    try {
+      setSaving(true);
 
-  
+      const payload = {
+        full_name: fullName,
+        email,
+        mobile,
+        role,
+      };
+
+      console.log(
+        "Updating user:",
+        payload
+      );
+
+      const response = await api.put(
+        `/admin/users/${id}`,
+        payload
+      );
+
+      alert(
+        response.data?.message ||
+          "User updated successfully."
+      );
+
+      navigate(`/admin/users/${id}`);
+
+    } catch (error) {
+      console.error(
+        "Failed to update user:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to update user."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
+
   if (loading) {
     return (
       <div
         style={{
-          textAlign: "center",
-          marginTop: "100px",
+          minHeight: "60vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
           fontSize: "24px",
           color: "#2E7D32",
           fontWeight: "bold",
@@ -167,6 +243,10 @@ function EditUser() {
       </div>
     );
   }
+
+  // =========================================================
+  // UI
+  // =========================================================
 
   return (
     <div
@@ -190,16 +270,30 @@ function EditUser() {
         <h1
           style={{
             color: "#2E7D32",
-            marginBottom: "25px",
+            marginBottom: "10px",
           }}
         >
           ✏️ Edit User
         </h1>
 
-        {/* Full Name */}
+        <p
+          style={{
+            color: "#666",
+            marginBottom: "25px",
+          }}
+        >
+          Update the user's account information.
+        </p>
+
+        <hr />
+
+        {/* ===================================================
+            FULL NAME
+        ==================================================== */}
 
         <div
           style={{
+            marginTop: "25px",
             marginBottom: "18px",
           }}
         >
@@ -212,8 +306,6 @@ function EditUser() {
             name="full_name"
             value={form.full_name}
             onChange={handleChange}
-            required
-            minLength={2}
             disabled={saving}
             style={{
               width: "100%",
@@ -226,7 +318,9 @@ function EditUser() {
           />
         </div>
 
-        {/* Email */}
+        {/* ===================================================
+            EMAIL
+        ==================================================== */}
 
         <div
           style={{
@@ -242,7 +336,6 @@ function EditUser() {
             name="email"
             value={form.email}
             onChange={handleChange}
-            required
             disabled={saving}
             style={{
               width: "100%",
@@ -255,7 +348,9 @@ function EditUser() {
           />
         </div>
 
-        {/* Mobile */}
+        {/* ===================================================
+            MOBILE
+        ==================================================== */}
 
         <div
           style={{
@@ -271,8 +366,8 @@ function EditUser() {
             name="mobile"
             value={form.mobile}
             onChange={handleChange}
-            required
             disabled={saving}
+            maxLength={10}
             style={{
               width: "100%",
               padding: "12px",
@@ -284,7 +379,9 @@ function EditUser() {
           />
         </div>
 
-        {/* Role */}
+        {/* ===================================================
+            ROLE
+        ==================================================== */}
 
         <div
           style={{
@@ -328,7 +425,30 @@ function EditUser() {
           </select>
         </div>
 
-        {/* Buttons */}
+        {/* ===================================================
+            WARNING FOR ADMIN ROLE
+        ==================================================== */}
+
+        {form.role === "admin" &&
+          originalRole !== "admin" && (
+            <div
+              style={{
+                background: "#FFF3E0",
+                color: "#E65100",
+                padding: "12px",
+                borderRadius: "8px",
+                marginBottom: "20px",
+                fontWeight: "bold",
+              }}
+            >
+              ⚠️ This change will give the user
+              administrator privileges.
+            </div>
+          )}
+
+        {/* ===================================================
+            BUTTONS
+        ==================================================== */}
 
         <div
           style={{
