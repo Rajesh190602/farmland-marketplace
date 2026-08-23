@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/Login";
-import AdminLayout from "./components/AdminLayout";
+import AdminRoute from "./components/AdminRoute";
 
 function App() {
   return (
