@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../components/Navbar";
 import api from "../../services/api";
-
+import Navbar from "../../components/Navbar";
+import LandMap from "../../components/LandMap";
 function  LandDetails(){
   const navigate = useNavigate();
 
