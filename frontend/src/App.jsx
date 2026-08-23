@@ -1,4 +1,6 @@
-function App() {
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+function TestPage() {
   return (
     <div
       style={{
@@ -11,8 +13,18 @@ function App() {
         color: "green",
       }}
     >
-      REACT APP IS WORKING
+      REACT ROUTER IS WORKING
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="*" element={<TestPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
