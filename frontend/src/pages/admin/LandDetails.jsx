@@ -1149,4 +1149,4 @@ const paginationButton = {
   fontWeight: "bold",
 };
 
-export default LandDetails();
+export default LandDetails;
