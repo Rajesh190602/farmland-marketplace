@@ -43,7 +43,7 @@ function EditLand() {
       // IMPORTANT:
       // Farmer must use /lands/my/{id}
       // because pending/rejected lands are not public.
-      const response = await api.get(`/lands/my/${id}`);
+      const response = await api.get(`/admin/lands/${id}`);
 
       setForm({
         title: response.data.title || "",
@@ -71,7 +71,7 @@ function EditLand() {
           "Failed to load land."
       );
 
-      navigate("/my-lands");
+      navigate("/admin/lands");
     } finally {
       setLoading(false);
     }
@@ -103,7 +103,7 @@ function EditLand() {
       // IMPORTANT:
       // Farmer uses /lands/{id}
       // NOT /admin/lands/{id}
-      const response = await api.put(`/lands/${id}`, {
+      const response =  await api.put(`/admin/lands/${id}`, {
         title: form.title,
         description: form.description,
 
@@ -150,7 +150,7 @@ function EditLand() {
       }
 
       // Farmer goes back to My Lands
-      navigate("/my-lands");
+      navigate("/admin/lands");
 
     } catch (error) {
       console.error("Failed to update land:", error);
@@ -407,7 +407,7 @@ function EditLand() {
 
         <button
           type="button"
-          onClick={() => navigate("/my-lands")}
+          onClick={() => navigate("/admin/lands")}
           disabled={updating}
           style={{
             width: "100%",
