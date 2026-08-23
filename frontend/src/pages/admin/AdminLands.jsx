@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../components/Navbar";
 import api from "../../services/api";
 
 function AdminLands() {
@@ -352,8 +351,6 @@ function AdminLands() {
 
   if (loading) {
     return (
-      <>
-        <Navbar />
 
         <div
           style={{
@@ -366,7 +363,6 @@ function AdminLands() {
         >
           Loading Lands...
         </div>
-      </>
     );
   }
 
@@ -375,8 +371,6 @@ function AdminLands() {
   // =========================================================
 
   return (
-    <>
-      <Navbar />
 
       <div
         style={{
@@ -1178,7 +1172,7 @@ function AdminLands() {
           )}
         </div>
       </div>
-    </>
+    
   );
 }
 
