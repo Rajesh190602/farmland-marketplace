@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/Login";
-import AdminEditLand from "./pages/admin/EditLand";
+import AdminLayout from "./components/AdminLayout";
 
 function App() {
   return (
