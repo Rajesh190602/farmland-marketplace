@@ -15,31 +15,52 @@ function AdminLands() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
 
-  const [actionLoading, setActionLoading] = useState(null);
+  const [actionLoading, setActionLoading] =
+    useState(null);
 
   const limit = 10;
 
   // =========================================================
-  // Load Lands
+  // LOAD LANDS
   // =========================================================
 
   const fetchLands = async () => {
     try {
       setLoading(true);
 
-      const response = await api.get("/admin/lands", {
-        params: {
-          search,
-          status,
-          page,
-          limit,
-        },
-      });
+      const response = await api.get(
+        "/admin/lands",
+        {
+          params: {
+            search: search.trim(),
+            status,
+            page,
+            limit,
+          },
+        }
+      );
 
-      setLands(response.data.lands || []);
-      setTotal(response.data.total || 0);
+      console.log(
+        "Admin Lands Response:",
+        response.data
+      );
+
+      setLands(
+        Array.isArray(response.data.lands)
+          ? response.data.lands
+          : []
+      );
+
+      setTotal(
+        typeof response.data.total === "number"
+          ? response.data.total
+          : 0
+      );
     } catch (error) {
-      console.error("Failed to load admin lands:", error);
+      console.error(
+        "Failed to load admin lands:",
+        error
+      );
 
       if (error.response?.status === 401) {
         return;
@@ -49,6 +70,9 @@ function AdminLands() {
         error.response?.data?.detail ||
           "Failed to load lands."
       );
+
+      setLands([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -59,26 +83,36 @@ function AdminLands() {
   }, [page, status]);
 
   // =========================================================
-  // Search
+  // SEARCH
   // =========================================================
 
-  const handleSearch = (e) => {
-    e.preventDefault();
+  const handleSearch = (event) => {
+    event.preventDefault();
 
     setPage(1);
+
     fetchLands();
   };
 
   // =========================================================
-  // Approve
+  // VIEW LAND
+  // =========================================================
+
+  const viewLand = (landId) => {
+    navigate(`/admin/lands/${landId}`);
+  };
+
+  // =========================================================
+  // APPROVE LAND
   // =========================================================
 
   const approveLand = async (landId) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to approve this land?"
-      )
-    ) {
+    const confirmed = window.confirm(
+      "Are you sure you want to approve this land?\n\n" +
+        "The land will become visible to buyers."
+    );
+
+    if (!confirmed) {
       return;
     }
 
@@ -89,11 +123,16 @@ function AdminLands() {
         `/admin/lands/${landId}/approve`
       );
 
-      alert("Land approved successfully.");
+      alert(
+        "Land approved successfully."
+      );
 
       await fetchLands();
     } catch (error) {
-      console.error("Approve error:", error);
+      console.error(
+        "Approve error:",
+        error
+      );
 
       alert(
         error.response?.data?.detail ||
@@ -105,7 +144,7 @@ function AdminLands() {
   };
 
   // =========================================================
-  // Request Changes
+  // REQUEST CHANGES
   // =========================================================
 
   const requestChanges = async (landId) => {
@@ -113,7 +152,15 @@ function AdminLands() {
       "Enter the reason for requesting changes:"
     );
 
-    if (!reason || !reason.trim()) {
+    if (reason === null) {
+      return;
+    }
+
+    const trimmedReason =
+      reason.trim();
+
+    if (!trimmedReason) {
+      alert("Reason is required.");
       return;
     }
 
@@ -123,11 +170,13 @@ function AdminLands() {
       await api.put(
         `/admin/lands/${landId}/request-changes`,
         {
-          reason: reason.trim(),
+          reason: trimmedReason,
         }
       );
 
-      alert("Changes requested successfully.");
+      alert(
+        "Changes requested successfully."
+      );
 
       await fetchLands();
     } catch (error) {
@@ -146,7 +195,7 @@ function AdminLands() {
   };
 
   // =========================================================
-  // Reject
+  // REJECT LAND
   // =========================================================
 
   const rejectLand = async (landId) => {
@@ -154,7 +203,15 @@ function AdminLands() {
       "Enter the reason for rejecting this land:"
     );
 
-    if (!reason || !reason.trim()) {
+    if (reason === null) {
+      return;
+    }
+
+    const trimmedReason =
+      reason.trim();
+
+    if (!trimmedReason) {
+      alert("Reason is required.");
       return;
     }
 
@@ -164,15 +221,20 @@ function AdminLands() {
       await api.put(
         `/admin/lands/${landId}/reject`,
         {
-          reason: reason.trim(),
+          reason: trimmedReason,
         }
       );
 
-      alert("Land rejected successfully.");
+      alert(
+        "Land rejected successfully."
+      );
 
       await fetchLands();
     } catch (error) {
-      console.error("Reject error:", error);
+      console.error(
+        "Reject error:",
+        error
+      );
 
       alert(
         error.response?.data?.detail ||
@@ -184,15 +246,16 @@ function AdminLands() {
   };
 
   // =========================================================
-  // Delete
+  // DELETE LAND
   // =========================================================
 
   const deleteLand = async (landId) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to permanently delete this land?"
-      )
-    ) {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this land?\n\n" +
+        "This action cannot be undone."
+    );
+
+    if (!confirmed) {
       return;
     }
 
@@ -203,11 +266,16 @@ function AdminLands() {
         `/admin/lands/${landId}`
       );
 
-      alert("Land deleted successfully.");
+      alert(
+        "Land deleted successfully."
+      );
 
       await fetchLands();
     } catch (error) {
-      console.error("Delete error:", error);
+      console.error(
+        "Delete error:",
+        error
+      );
 
       alert(
         error.response?.data?.detail ||
@@ -219,57 +287,67 @@ function AdminLands() {
   };
 
   // =========================================================
-  // Status Badge
+  // STATUS STYLE
   // =========================================================
 
   const getStatusStyle = (landStatus) => {
-    if (landStatus === "approved") {
-      return {
-        background: "#E8F5E9",
-        color: "#2E7D32",
-      };
-    }
+    switch (
+      landStatus?.toLowerCase()
+    ) {
+      case "approved":
+        return {
+          background: "#E8F5E9",
+          color: "#2E7D32",
+        };
 
-    if (landStatus === "rejected") {
-      return {
-        background: "#FFEBEE",
-        color: "#C62828",
-      };
-    }
+      case "rejected":
+        return {
+          background: "#FFEBEE",
+          color: "#C62828",
+        };
 
-    if (landStatus === "changes_requested") {
-      return {
-        background: "#FFF3E0",
-        color: "#EF6C00",
-      };
-    }
+      case "changes_requested":
+        return {
+          background: "#FFF3E0",
+          color: "#EF6C00",
+        };
 
-    return {
-      background: "#FFF8E1",
-      color: "#F57F17",
-    };
+      case "pending":
+      default:
+        return {
+          background: "#FFF8E1",
+          color: "#F57F17",
+        };
+    }
   };
 
   // =========================================================
-  // Pagination
+  // PAGINATION
   // =========================================================
 
-  const totalPages = Math.ceil(total / limit);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(total / limit)
+  );
 
   const goToPreviousPage = () => {
     if (page > 1) {
-      setPage((previous) => previous - 1);
+      setPage(
+        (previous) => previous - 1
+      );
     }
   };
 
   const goToNextPage = () => {
     if (page < totalPages) {
-      setPage((previous) => previous + 1);
+      setPage(
+        (previous) => previous + 1
+      );
     }
   };
 
   // =========================================================
-  // Loading
+  // LOADING
   // =========================================================
 
   if (loading) {
@@ -293,7 +371,7 @@ function AdminLands() {
   }
 
   // =========================================================
-  // Page
+  // PAGE
   // =========================================================
 
   return (
@@ -313,12 +391,15 @@ function AdminLands() {
             margin: "0 auto",
           }}
         >
-          {/* Header */}
+          {/* =================================================
+              HEADER
+          ================================================= */}
 
           <div
             style={{
               display: "flex",
-              justifyContent: "space-between",
+              justifyContent:
+                "space-between",
               alignItems: "center",
               marginBottom: "20px",
               flexWrap: "wrap",
@@ -351,7 +432,9 @@ function AdminLands() {
             </button>
           </div>
 
-          {/* Search & Filter */}
+          {/* =================================================
+              SEARCH & FILTER
+          ================================================= */}
 
           <div
             style={{
@@ -374,43 +457,56 @@ function AdminLands() {
               <input
                 type="text"
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
+                onChange={(event) =>
+                  setSearch(
+                    event.target.value
+                  )
                 }
                 placeholder="Search land, village, mandal, district..."
                 style={{
                   flex: 1,
                   minWidth: "250px",
                   padding: "10px",
-                  border: "1px solid #ccc",
+                  border:
+                    "1px solid #ccc",
                   borderRadius: "5px",
+                  boxSizing:
+                    "border-box",
                 }}
               />
 
               <select
                 value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
+                onChange={(event) => {
+                  setStatus(
+                    event.target.value
+                  );
                   setPage(1);
                 }}
                 style={{
                   padding: "10px",
-                  border: "1px solid #ccc",
+                  border:
+                    "1px solid #ccc",
                   borderRadius: "5px",
+                  background: "#fff",
                 }}
               >
                 <option value="">
                   All Status
                 </option>
+
                 <option value="pending">
                   Pending
                 </option>
+
                 <option value="approved">
                   Approved
                 </option>
+
                 <option value="rejected">
                   Rejected
                 </option>
+
                 <option value="changes_requested">
                   Changes Requested
                 </option>
@@ -422,7 +518,8 @@ function AdminLands() {
                   background: "#2E7D32",
                   color: "white",
                   border: "none",
-                  padding: "10px 20px",
+                  padding:
+                    "10px 20px",
                   borderRadius: "5px",
                   cursor: "pointer",
                 }}
@@ -432,7 +529,9 @@ function AdminLands() {
             </form>
           </div>
 
-          {/* Lands */}
+          {/* =================================================
+              LANDS
+          ================================================= */}
 
           {lands.length === 0 ? (
             <div
@@ -443,11 +542,32 @@ function AdminLands() {
                 borderRadius: "10px",
               }}
             >
-              <h2>No lands found.</h2>
+              <h2>
+                No lands found.
+              </h2>
+
+              <p
+                style={{
+                  color: "#777",
+                }}
+              >
+                Try changing the
+                search or status
+                filter.
+              </p>
             </div>
           ) : (
             lands.map((land) => {
-              const images = land.images || [];
+              const images =
+                Array.isArray(
+                  land.images
+                )
+                  ? land.images
+                  : [];
+
+              const isLoading =
+                actionLoading ===
+                land.id;
 
               return (
                 <div
@@ -461,16 +581,20 @@ function AdminLands() {
                       "0 2px 10px rgba(0,0,0,0.12)",
                   }}
                 >
-                  {/* Land Header */}
+                  {/* =================================================
+                      LAND HEADER
+                  ================================================= */}
 
                   <div
                     style={{
                       display: "flex",
                       justifyContent:
                         "space-between",
-                      alignItems: "flex-start",
+                      alignItems:
+                        "flex-start",
                       gap: "15px",
-                      flexWrap: "wrap",
+                      flexWrap:
+                        "wrap",
                     }}
                   >
                     <div>
@@ -480,7 +604,8 @@ function AdminLands() {
                           color: "#333",
                         }}
                       >
-                        {land.title}
+                        {land.title ||
+                          "Untitled Land"}
                       </h2>
 
                       <p>
@@ -494,21 +619,24 @@ function AdminLands() {
                         <strong>
                           Farmer:
                         </strong>{" "}
-                        {land.owner_name}
+                        {land.owner_name ||
+                          "N/A"}
                       </p>
 
                       <p>
                         <strong>
                           Mobile:
                         </strong>{" "}
-                        {land.owner_mobile}
+                        {land.owner_mobile ||
+                          "N/A"}
                       </p>
 
                       <p>
                         <strong>
                           Email:
                         </strong>{" "}
-                        {land.owner_email}
+                        {land.owner_email ||
+                          "N/A"}
                       </p>
                     </div>
 
@@ -519,20 +647,27 @@ function AdminLands() {
                         ),
                         padding:
                           "8px 14px",
-                        borderRadius: "20px",
-                        fontWeight: "bold",
+                        borderRadius:
+                          "20px",
+                        fontWeight:
+                          "bold",
                         textTransform:
                           "capitalize",
                       }}
                     >
-                      {land.status.replace(
+                      {(
+                        land.status ||
+                        "unknown"
+                      ).replace(
                         "_",
                         " "
                       )}
                     </span>
                   </div>
 
-                  {/* Gallery */}
+                  {/* =================================================
+                      GALLERY
+                  ================================================= */}
 
                   <div
                     style={{
@@ -548,58 +683,91 @@ function AdminLands() {
                       {images.length})
                     </h3>
 
-                    {images.length > 0 ? (
+                    {images.length >
+                    0 ? (
                       <div
                         style={{
-                          display: "grid",
+                          display:
+                            "grid",
                           gridTemplateColumns:
                             "repeat(auto-fill, minmax(180px, 1fr))",
                           gap: "12px",
                         }}
                       >
                         {images.map(
-                          (image) => (
-                            <div
-                              key={image.id}
-                              style={{
-                                borderRadius:
-                                  "10px",
-                                overflow:
-                                  "hidden",
-                                border:
-                                  "1px solid #ddd",
-                                background:
-                                  "#f5f5f5",
-                              }}
-                            >
-                              <img
-                                src={
-                                  image.image_url
+                          (
+                            image,
+                            index
+                          ) => {
+                            const imageUrl =
+                              typeof image ===
+                              "string"
+                                ? image
+                                : image?.image_url ||
+                                  image?.url;
+
+                            if (
+                              !imageUrl
+                            ) {
+                              return null;
+                            }
+
+                            return (
+                              <div
+                                key={
+                                  image.id ||
+                                  index
                                 }
-                                alt={`${land.title} land`}
                                 style={{
-                                  width: "100%",
-                                  height:
-                                    "180px",
-                                  objectFit:
-                                    "cover",
-                                  display:
-                                    "block",
+                                  borderRadius:
+                                    "10px",
+                                  overflow:
+                                    "hidden",
+                                  border:
+                                    "1px solid #ddd",
+                                  background:
+                                    "#f5f5f5",
                                 }}
-                              />
-                            </div>
-                          )
+                              >
+                                <img
+                                  src={
+                                    imageUrl
+                                  }
+                                  alt={`${land.title || "Land"} land`}
+                                  style={{
+                                    width:
+                                      "100%",
+                                    height:
+                                      "180px",
+                                    objectFit:
+                                      "cover",
+                                    display:
+                                      "block",
+                                  }}
+                                />
+                              </div>
+                            );
+                          }
                         )}
                       </div>
                     ) : land.image_url ? (
                       <img
-                        src={land.image_url}
-                        alt={land.title}
+                        src={
+                          land.image_url
+                        }
+                        alt={
+                          land.title ||
+                          "Land"
+                        }
                         style={{
-                          width: "250px",
-                          height: "180px",
-                          objectFit: "cover",
-                          borderRadius: "10px",
+                          width:
+                            "250px",
+                          height:
+                            "180px",
+                          objectFit:
+                            "cover",
+                          borderRadius:
+                            "10px",
                         }}
                       />
                     ) : (
@@ -610,12 +778,15 @@ function AdminLands() {
                             "italic",
                         }}
                       >
-                        No images uploaded.
+                        No images
+                        uploaded.
                       </p>
                     )}
                   </div>
 
-                  {/* Land Details */}
+                  {/* =================================================
+                      LAND DETAILS
+                  ================================================= */}
 
                   <div
                     style={{
@@ -626,101 +797,143 @@ function AdminLands() {
                       gap: "10px",
                     }}
                   >
-                    <p>
-                      <strong>
-                        Description:
-                      </strong>{" "}
-                      {land.description}
-                    </p>
+                    <Detail
+                      label="Description"
+                      value={
+                        land.description
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Price:
-                      </strong>{" "}
-                      ₹{land.price}
-                    </p>
+                    <Detail
+                      label="Price"
+                      value={
+                        land.price !==
+                        null
+                          ? `₹${land.price}`
+                          : "N/A"
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Area:
-                      </strong>{" "}
-                      {land.area} Acres
-                    </p>
+                    <Detail
+                      label="Area"
+                      value={
+                        land.area !==
+                        null
+                          ? `${land.area} Acres`
+                          : "N/A"
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Village:
-                      </strong>{" "}
-                      {land.village}
-                    </p>
+                    <Detail
+                      label="Village"
+                      value={
+                        land.village
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Mandal:
-                      </strong>{" "}
-                      {land.mandal}
-                    </p>
+                    <Detail
+                      label="Mandal"
+                      value={
+                        land.mandal
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        District:
-                      </strong>{" "}
-                      {land.district}
-                    </p>
+                    <Detail
+                      label="District"
+                      value={
+                        land.district
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        State:
-                      </strong>{" "}
-                      {land.state}
-                    </p>
+                    <Detail
+                      label="State"
+                      value={
+                        land.state
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Pincode:
-                      </strong>{" "}
-                      {land.pincode}
-                    </p>
+                    <Detail
+                      label="Pincode"
+                      value={
+                        land.pincode
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Survey Number:
-                      </strong>{" "}
-                      {land.survey_number}
-                    </p>
+                    <Detail
+                      label="Survey Number"
+                      value={
+                        land.survey_number
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Soil Type:
-                      </strong>{" "}
-                      {land.soil_type}
-                    </p>
+                    <Detail
+                      label="Soil Type"
+                      value={
+                        land.soil_type
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Water Source:
-                      </strong>{" "}
-                      {land.water_source}
-                    </p>
+                    <Detail
+                      label="Water Source"
+                      value={
+                        land.water_source
+                      }
+                    />
 
-                    <p>
-                      <strong>
-                        Crop Type:
-                      </strong>{" "}
-                      {land.crop_type}
-                    </p>
+                    <Detail
+                      label="Crop Type"
+                      value={
+                        land.crop_type
+                      }
+                    />
                   </div>
 
-                  {/* Actions */}
+                  {/* =================================================
+                      ACTIONS
+                  ================================================= */}
 
                   <div
                     style={{
                       display: "flex",
                       gap: "10px",
                       marginTop: "20px",
-                      flexWrap: "wrap",
+                      flexWrap:
+                        "wrap",
                     }}
                   >
+                    {/* VIEW */}
+
+                    <button
+                      onClick={() =>
+                        viewLand(
+                          land.id
+                        )
+                      }
+                      disabled={
+                        isLoading
+                      }
+                      style={{
+                        background:
+                          "#1565C0",
+                        color:
+                          "white",
+                        border:
+                          "none",
+                        padding:
+                          "10px 18px",
+                        borderRadius:
+                          "5px",
+                        cursor:
+                          isLoading
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      👁 View
+                    </button>
+
+                    {/* APPROVE */}
+
                     {land.status !==
                       "approved" && (
                       <button
@@ -730,25 +943,32 @@ function AdminLands() {
                           )
                         }
                         disabled={
-                          actionLoading ===
-                          land.id
+                          isLoading
                         }
                         style={{
                           background:
                             "#2E7D32",
-                          color: "white",
-                          border: "none",
+                          color:
+                            "white",
+                          border:
+                            "none",
                           padding:
                             "10px 18px",
                           borderRadius:
                             "5px",
                           cursor:
-                            "pointer",
+                            isLoading
+                              ? "not-allowed"
+                              : "pointer",
                         }}
                       >
-                        Approve
+                        {isLoading
+                          ? "Processing..."
+                          : "Approve"}
                       </button>
                     )}
+
+                    {/* REQUEST CHANGES */}
 
                     {land.status !==
                       "changes_requested" && (
@@ -759,25 +979,31 @@ function AdminLands() {
                           )
                         }
                         disabled={
-                          actionLoading ===
-                          land.id
+                          isLoading
                         }
                         style={{
                           background:
                             "#EF6C00",
-                          color: "white",
-                          border: "none",
+                          color:
+                            "white",
+                          border:
+                            "none",
                           padding:
                             "10px 18px",
                           borderRadius:
                             "5px",
                           cursor:
-                            "pointer",
+                            isLoading
+                              ? "not-allowed"
+                              : "pointer",
                         }}
                       >
-                        Request Changes
+                        Request
+                        Changes
                       </button>
                     )}
+
+                    {/* REJECT */}
 
                     {land.status !==
                       "rejected" && (
@@ -788,25 +1014,30 @@ function AdminLands() {
                           )
                         }
                         disabled={
-                          actionLoading ===
-                          land.id
+                          isLoading
                         }
                         style={{
                           background:
                             "#C62828",
-                          color: "white",
-                          border: "none",
+                          color:
+                            "white",
+                          border:
+                            "none",
                           padding:
                             "10px 18px",
                           borderRadius:
                             "5px",
                           cursor:
-                            "pointer",
+                            isLoading
+                              ? "not-allowed"
+                              : "pointer",
                         }}
                       >
                         Reject
                       </button>
                     )}
+
+                    {/* DELETE */}
 
                     <button
                       onClick={() =>
@@ -815,31 +1046,40 @@ function AdminLands() {
                         )
                       }
                       disabled={
-                        actionLoading ===
-                        land.id
+                        isLoading
                       }
                       style={{
                         background:
                           "#555",
-                        color: "white",
-                        border: "none",
+                        color:
+                          "white",
+                        border:
+                          "none",
                         padding:
                           "10px 18px",
                         borderRadius:
                           "5px",
                         cursor:
-                          "pointer",
+                          isLoading
+                            ? "not-allowed"
+                            : "pointer",
                       }}
                     >
                       Delete
                     </button>
                   </div>
 
+                  {/* =================================================
+                      REVIEW REASON
+                  ================================================= */}
+
                   {land.rejection_reason && (
                     <div
                       style={{
-                        marginTop: "15px",
-                        padding: "12px",
+                        marginTop:
+                          "15px",
+                        padding:
+                          "12px",
                         background:
                           "#FFF3E0",
                         borderRadius:
@@ -859,7 +1099,9 @@ function AdminLands() {
             })
           )}
 
-          {/* Pagination */}
+          {/* =================================================
+              PAGINATION
+          ================================================= */}
 
           {totalPages > 1 && (
             <div
@@ -867,7 +1109,8 @@ function AdminLands() {
                 display: "flex",
                 justifyContent:
                   "center",
-                alignItems: "center",
+                alignItems:
+                  "center",
                 gap: "15px",
                 marginTop: "25px",
               }}
@@ -878,9 +1121,11 @@ function AdminLands() {
                 }
                 disabled={page === 1}
                 style={{
-                  padding: "10px 18px",
+                  padding:
+                    "10px 18px",
                   border: "none",
-                  borderRadius: "5px",
+                  borderRadius:
+                    "5px",
                   cursor:
                     page === 1
                       ? "not-allowed"
@@ -905,18 +1150,23 @@ function AdminLands() {
                   goToNextPage
                 }
                 disabled={
-                  page === totalPages
+                  page ===
+                  totalPages
                 }
                 style={{
-                  padding: "10px 18px",
+                  padding:
+                    "10px 18px",
                   border: "none",
-                  borderRadius: "5px",
+                  borderRadius:
+                    "5px",
                   cursor:
-                    page === totalPages
+                    page ===
+                    totalPages
                       ? "not-allowed"
                       : "pointer",
                   background:
-                    page === totalPages
+                    page ===
+                    totalPages
                       ? "#ccc"
                       : "#1565C0",
                   color: "white",
@@ -929,6 +1179,31 @@ function AdminLands() {
         </div>
       </div>
     </>
+  );
+}
+
+// =========================================================
+// DETAIL COMPONENT
+// =========================================================
+
+function Detail({
+  label,
+  value,
+}) {
+  return (
+    <p
+      style={{
+        margin: 0,
+        padding: "10px",
+        background: "#F8F9FA",
+        borderRadius: "6px",
+      }}
+    >
+      <strong>
+        {label}:
+      </strong>{" "}
+      {value || "N/A"}
+    </p>
   );
 }
 

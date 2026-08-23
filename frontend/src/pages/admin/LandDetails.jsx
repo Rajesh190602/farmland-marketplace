@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import api from "../../services/api";
 
-function AdminLands() {
+function  LandDetails(){
   const navigate = useNavigate();
 
   const [lands, setLands] = useState([]);
@@ -1149,4 +1149,4 @@ const paginationButton = {
   fontWeight: "bold",
 };
 
-export default AdminLands;
+export default LandDetails();
