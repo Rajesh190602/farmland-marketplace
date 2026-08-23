@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-
+import AdminLandDetails from "./pages/admin/LandDetails";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -220,6 +220,11 @@ function App() {
             path="lands"
             element={<AdminLands />}
           />
+          <Route
+            path="lands/:id"
+            element={<AdminLandDetails />}
+          />
+
 
           {/* /admin/pending-lands */}
           <Route
