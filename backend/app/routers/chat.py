@@ -858,8 +858,106 @@ def my_conversations(
         )
 
     return result
+# =========================================================
+# GET CONVERSATION DETAILS
+# =========================================================
 
+@router.get("/conversation/{conversation_id}")
+def get_conversation_details(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # ----------------------------------
+    # Find conversation
+    # ----------------------------------
 
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id == conversation_id
+        )
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    # ----------------------------------
+    # Only participants can access
+    # ----------------------------------
+
+    if (
+        conversation.buyer_id != current_user
+        and
+        conversation.farmer_id != current_user
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You are not a participant in this conversation"
+        )
+
+    # ----------------------------------
+    # Find the OTHER user
+    # ----------------------------------
+
+    if conversation.buyer_id == current_user:
+
+        other_user = (
+            db.query(User)
+            .filter(
+                User.id == conversation.farmer_id
+            )
+            .first()
+        )
+
+    else:
+
+        other_user = (
+            db.query(User)
+            .filter(
+                User.id == conversation.buyer_id
+            )
+            .first()
+        )
+
+    if not other_user:
+        raise HTTPException(
+            status_code=404,
+            detail="Other user not found"
+        )
+
+    # ----------------------------------
+    # Find land
+    # ----------------------------------
+
+    land = (
+        db.query(Land)
+        .filter(
+            Land.id == conversation.land_id
+        )
+        .first()
+    )
+
+    # ----------------------------------
+    # Return details
+    # ----------------------------------
+
+    return {
+        "conversation_id": conversation.id,
+        "other_user_id": other_user.id,
+        "other_user_name": other_user.full_name,
+        "other_user_role": other_user.role,
+        "land_id": conversation.land_id,
+        "land_title": (
+            land.title
+            if land
+            else ""
+        )
+    }
 # =========================================================
 # UPDATE ONLINE PRESENCE
 # =========================================================
