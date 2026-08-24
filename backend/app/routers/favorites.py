@@ -163,6 +163,9 @@ def add_favorite(
 # =========================================================
 # REMOVE FAVORITE
 # =========================================================
+# =========================================================
+# REMOVE FAVORITE
+# =========================================================
 
 @router.delete("/{land_id}")
 def remove_favorite(
@@ -170,6 +173,34 @@ def remove_favorite(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # ----------------------------------
+    # Get current buyer
+    # ----------------------------------
+
+    buyer = (
+        db.query(User)
+        .filter(
+            User.id == current_user
+        )
+        .first()
+    )
+
+    if not buyer:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # ----------------------------------
+    # Only buyers can remove favorites
+    # ----------------------------------
+
+    if buyer.role != "buyer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only buyers can remove lands from favorites"
+        )
+
     # ----------------------------------
     # Find favorite belonging to current user
     # ----------------------------------
@@ -190,7 +221,7 @@ def remove_favorite(
         )
 
     # ----------------------------------
-    # Get land for activity log
+    # Get land
     # ----------------------------------
 
     land = (
@@ -201,11 +232,13 @@ def remove_favorite(
         .first()
     )
 
-    land_title = (
-        land.title
-        if land
-        else str(land_id)
-    )
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    land_title = land.title
 
     # ----------------------------------
     # Delete favorite
@@ -229,6 +262,27 @@ def remove_favorite(
     )
 
     db.add(activity_log)
+
+    # ----------------------------------
+    # Notification for land owner
+    # ----------------------------------
+
+    notification = Notification(
+        user_id=land.owner_id,
+        title="Favorite Removed",
+        message=(
+            f"{buyer.full_name} removed your land "
+            f"'{land.title}' from favorites."
+        ),
+        target_type="land",
+        target_id=land.id
+    )
+
+    db.add(notification)
+
+    # ----------------------------------
+    # Save all changes
+    # ----------------------------------
 
     db.commit()
 
