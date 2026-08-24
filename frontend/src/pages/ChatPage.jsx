@@ -8,7 +8,9 @@ export default function ChatPage() {
   const navigate = useNavigate();
 
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const shouldScrollToBottomRef = useRef(true);
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -44,12 +46,35 @@ export default function ChatPage() {
         `/chat/conversation/${conversationId}`
       );
 
+      const data = response.data || {};
+
+      const resolvedOtherUserId =
+        data.other_user_id ??
+        data.otherUserId ??
+        data.other_user?.id ??
+        data.otherUser?.id ??
+        data.user?.id ??
+        null;
+
+      const resolvedOtherUserName =
+        data.other_user_name ||
+        data.otherUserName ||
+        data.other_user?.full_name ||
+        data.other_user?.name ||
+        data.otherUser?.full_name ||
+        data.otherUser?.name ||
+        data.user?.full_name ||
+        data.user?.name ||
+        data.full_name ||
+        data.name ||
+        "User";
+
       setOtherUserId(
-        response.data.other_user_id
+        resolvedOtherUserId
       );
 
       setOtherUserName(
-        response.data.other_user_name || "User"
+        resolvedOtherUserName
       );
     } catch (error) {
       console.error(
@@ -69,7 +94,54 @@ export default function ChatPage() {
         `/chat/messages/${conversationId}`
       );
 
-      setMessages(response.data || []);
+      const newMessages = response.data || [];
+      const container = messagesContainerRef.current;
+
+      if (container) {
+        const distanceFromBottom =
+          container.scrollHeight -
+          container.scrollTop -
+          container.clientHeight;
+
+        // Only follow new messages when the user is already near
+        // the bottom. If they are reading older messages, preserve
+        // their current scroll position.
+        shouldScrollToBottomRef.current =
+          distanceFromBottom <= 150;
+      } else {
+        // Initial render: show the newest messages.
+        shouldScrollToBottomRef.current = true;
+      }
+
+      // If the conversation endpoint does not include the other user's
+      // name, use sender metadata from the messages when available.
+      const candidate = newMessages.find(
+        (message) =>
+          Number(message.sender_id) !== myUserId &&
+          (
+            message.sender_name ||
+            message.sender_full_name ||
+            message.user_name ||
+            message.user?.full_name ||
+            message.user?.name
+          )
+      );
+
+      if (
+        (otherUserName === "User" || !otherUserName) &&
+        candidate
+      ) {
+        setOtherUserName(
+          candidate.sender_name ||
+          candidate.sender_full_name ||
+          candidate.user_name ||
+          candidate.user?.full_name ||
+          candidate.user?.name ||
+          "User"
+        );
+      }
+
+      setMessages(newMessages);
     } catch (error) {
       console.error(
         "Failed to load messages:",
@@ -140,8 +212,38 @@ export default function ChatPage() {
       updateMyPresence();
     }, 3000);
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        updateMyPresence();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      updateMyPresence();
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    window.addEventListener(
+      "focus",
+      handleWindowFocus
+    );
+
     return () => {
       clearInterval(messageInterval);
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+
+      window.removeEventListener(
+        "focus",
+        handleWindowFocus
+      );
     };
   }, [conversationId]);
 
@@ -170,8 +272,16 @@ export default function ChatPage() {
   // =====================================================
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
+    if (!shouldScrollToBottomRef.current) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "auto",
+      });
+
+      shouldScrollToBottomRef.current = false;
     });
   }, [messages]);
 
@@ -196,6 +306,9 @@ export default function ChatPage() {
       setShowEmoji(false);
 
       await updateMyPresence();
+
+      shouldScrollToBottomRef.current = true;
+
       await loadMessages();
     } catch (error) {
       console.error(
@@ -312,6 +425,9 @@ export default function ChatPage() {
       );
 
       await updateMyPresence();
+
+      shouldScrollToBottomRef.current = true;
+
       await loadMessages();
     } catch (error) {
       console.error(
@@ -1065,6 +1181,7 @@ export default function ChatPage() {
           ===================================================== */}
 
           <div
+            ref={messagesContainerRef}
             style={{
               flex: 1,
               overflowY: "auto",
