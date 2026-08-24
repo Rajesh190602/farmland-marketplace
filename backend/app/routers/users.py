@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.models import User, EmailVerification
+import cloudinary.uploader
 from app.database import get_db
 from app.auth import get_current_user
 from app.models import User
@@ -447,8 +448,92 @@ def get_profile(
         "full_name": user.full_name,
         "email": user.email,
         "mobile": user.mobile,
-        "role": user.role
+        "role": user.role,
+        "profile_image": user.profile_image
     }
+# =========================================================
+# UPLOAD PROFILE PHOTO
+# =========================================================
+
+@router.post("/profile/photo")
+async def upload_profile_photo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # ----------------------------------
+    # Get current user
+    # ----------------------------------
+
+    user = (
+        db.query(User)
+        .filter(
+            User.id == current_user
+        )
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # ----------------------------------
+    # Validate file type
+    # ----------------------------------
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a valid image file"
+        )
+
+    # ----------------------------------
+    # Upload to Cloudinary
+    # ----------------------------------
+
+    try:
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder=f"farmland-marketplace/profiles/{current_user}"
+        )
+
+        profile_image_url = result["secure_url"]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload profile photo: {str(e)}"
+        )
+
+    # ----------------------------------
+    # Update user profile image
+    # ----------------------------------
+
+    user.profile_image = profile_image_url
+
+    # ----------------------------------
+    # Activity log
+    # ----------------------------------
+
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="PROFILE_PHOTO_UPDATED",
+        description="Updated profile photo.",
+        target_type="USER",
+        target_id=current_user
+    )
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "Profile photo updated successfully",
+        "profile_image": user.profile_image
+    }
+
 from app.schemas import ProfileUpdate
 
 # =========================================================
