@@ -10,23 +10,67 @@ function LandDetails() {
 
   const [land, setLand] = useState(null);
   const [deletingImageId, setDeletingImageId] = useState(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
 
   // Logged-in user's ID
-  const currentUserId = Number(sessionStorage.getItem("user_id"));
+  const currentUserId = Number(
+    sessionStorage.getItem("user_id")
+  );
 
   useEffect(() => {
     fetchLand();
   }, [id]);
 
+  // =========================================================
+  // LOAD LAND
+  // =========================================================
+
   const fetchLand = async () => {
     try {
       const response = await api.get(`/lands/${id}`);
+
       setLand(response.data);
+
+      // Check whether current user already favorited this land
+      await checkFavoriteStatus(id);
     } catch (error) {
-      console.log(error);
-      alert("Failed to load land details.");
+      console.error("Failed to load land:", error);
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load land details."
+      );
     }
   };
+
+  // =========================================================
+  // CHECK FAVORITE STATUS
+  // =========================================================
+
+  const checkFavoriteStatus = async (landId) => {
+    try {
+      const response = await api.get(
+        `/favorites/check/${landId}`
+      );
+
+      setIsFavorite(
+        response.data?.is_favorite === true
+      );
+    } catch (error) {
+      console.error(
+        "Failed to check favorite status:",
+        error
+      );
+
+      // Do not break the Land Details page if this request fails
+      setIsFavorite(false);
+    }
+  };
+
+  // =========================================================
+  // START CHAT
+  // =========================================================
 
   const startChat = async () => {
     try {
@@ -34,9 +78,11 @@ function LandDetails() {
         land_id: land.id,
       });
 
-      navigate(`/chat/${response.data.conversation_id}`);
+      navigate(
+        `/chat/${response.data.conversation_id}`
+      );
     } catch (error) {
-      console.log(error);
+      console.error("Failed to start conversation:", error);
 
       alert(
         error.response?.data?.detail ||
@@ -45,21 +91,52 @@ function LandDetails() {
     }
   };
 
-  const addFavorite = async () => {
-    try {
-      await api.post(`/favorites/${land.id}`);
+  // =========================================================
+  // ADD / REMOVE FAVORITE
+  // =========================================================
 
-      alert("Land added to Favorites.");
+  const toggleFavorite = async () => {
+    if (favoriteLoading) {
+      return;
+    }
+
+    try {
+      setFavoriteLoading(true);
+
+      if (isFavorite) {
+        await api.delete(
+          `/favorites/${land.id}`
+        );
+
+        setIsFavorite(false);
+
+        alert("Land removed from Favorites.");
+      } else {
+        await api.post(
+          `/favorites/${land.id}`
+        );
+
+        setIsFavorite(true);
+
+        alert("Land added to Favorites.");
+      }
     } catch (error) {
+      console.error(
+        "Favorite update failed:",
+        error
+      );
+
       alert(
         error.response?.data?.detail ||
-          "Unable to add favorite."
+          "Unable to update favorite."
       );
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
   // =========================================================
-  // Delete Individual Land Image
+  // DELETE INDIVIDUAL LAND IMAGE
   // =========================================================
 
   const deleteImage = async (imageId) => {
@@ -83,7 +160,10 @@ function LandDetails() {
       // Reload land data after deletion
       await fetchLand();
     } catch (error) {
-      console.error(error);
+      console.error(
+        "Failed to delete image:",
+        error
+      );
 
       alert(
         error.response?.data?.detail ||
@@ -93,6 +173,10 @@ function LandDetails() {
       setDeletingImageId(null);
     }
   };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
 
   if (!land) {
     return (
@@ -113,7 +197,8 @@ function LandDetails() {
               background: "#fff",
               padding: "50px",
               borderRadius: "20px",
-              boxShadow: "0 12px 35px rgba(0,0,0,.15)",
+              boxShadow:
+                "0 12px 35px rgba(0,0,0,.15)",
               textAlign: "center",
               width: "360px",
             }}
@@ -165,11 +250,12 @@ function LandDetails() {
           background: "#fff",
           borderRadius: "20px",
           overflow: "hidden",
-          boxShadow: "0 10px 30px rgba(0,0,0,.15)",
+          boxShadow:
+            "0 10px 30px rgba(0,0,0,.15)",
         }}
       >
         {/* =====================================================
-            Primary Land Image
+            PRIMARY LAND IMAGE
         ====================================================== */}
 
         {land.image_url && (
@@ -191,7 +277,7 @@ function LandDetails() {
           }}
         >
           {/* =====================================================
-              Land Title
+              LAND TITLE
           ====================================================== */}
 
           <h1
@@ -205,7 +291,7 @@ function LandDetails() {
           </h1>
 
           {/* =====================================================
-              Price
+              PRICE
           ====================================================== */}
 
           <div
@@ -224,7 +310,7 @@ function LandDetails() {
           </div>
 
           {/* =====================================================
-              Land Badges
+              LAND BADGES
           ====================================================== */}
 
           <div
@@ -254,98 +340,104 @@ function LandDetails() {
           </div>
 
           {/* =====================================================
-              Image Gallery
+              IMAGE GALLERY
           ====================================================== */}
 
-          {land.images && land.images.length > 0 && (
-            <div
-              style={{
-                background: "#FFFFFF",
-                padding: "25px",
-                marginTop: "20px",
-                borderRadius: "15px",
-                boxShadow: "0 5px 20px rgba(0,0,0,.08)",
-              }}
-            >
-              <h2
-                style={{
-                  color: "#2E7D32",
-                  marginBottom: "20px",
-                }}
-              >
-                🖼️ Land Image Gallery
-              </h2>
-
+          {land.images &&
+            land.images.length > 0 && (
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: "20px",
+                  background: "#FFFFFF",
+                  padding: "25px",
+                  marginTop: "20px",
+                  borderRadius: "15px",
+                  boxShadow:
+                    "0 5px 20px rgba(0,0,0,.08)",
                 }}
               >
-                {land.images.map((image) => (
-                  <div
-                    key={image.id}
-                    style={{
-                      background: "#f5f5f5",
-                      borderRadius: "12px",
-                      padding: "10px",
-                      boxShadow:
-                        "0 3px 10px rgba(0,0,0,0.12)",
-                    }}
-                  >
-                    <img
-                      src={image.image_url}
-                      alt={`${land.title} ${image.id}`}
-                      style={{
-                        width: "100%",
-                        height: "220px",
-                        objectFit: "cover",
-                        borderRadius: "8px",
-                      }}
-                    />
+                <h2
+                  style={{
+                    color: "#2E7D32",
+                    marginBottom: "20px",
+                  }}
+                >
+                  🖼️ Land Image Gallery
+                </h2>
 
-                    {/* Delete button ONLY for land owner */}
-                    {isLandOwner && (
-                      <button
-                        onClick={() =>
-                          deleteImage(image.id)
-                        }
-                        disabled={
-                          deletingImageId === image.id
-                        }
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: "20px",
+                  }}
+                >
+                  {land.images.map((image) => (
+                    <div
+                      key={image.id}
+                      style={{
+                        background: "#f5f5f5",
+                        borderRadius: "12px",
+                        padding: "10px",
+                        boxShadow:
+                          "0 3px 10px rgba(0,0,0,0.12)",
+                      }}
+                    >
+                      <img
+                        src={image.image_url}
+                        alt={`${land.title} ${image.id}`}
                         style={{
                           width: "100%",
-                          marginTop: "10px",
-                          padding: "10px",
-                          background:
-                            deletingImageId === image.id
-                              ? "#999"
-                              : "#D32F2F",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "6px",
-                          cursor:
-                            deletingImageId === image.id
-                              ? "not-allowed"
-                              : "pointer",
-                          fontWeight: "bold",
+                          height: "220px",
+                          objectFit: "cover",
+                          borderRadius: "8px",
                         }}
-                      >
-                        {deletingImageId === image.id
-                          ? "Deleting..."
-                          : "🗑️ Delete Image"}
-                      </button>
-                    )}
-                  </div>
-                ))}
+                      />
+
+                      {/* Delete button ONLY for land owner */}
+                      {isLandOwner && (
+                        <button
+                          onClick={() =>
+                            deleteImage(image.id)
+                          }
+                          disabled={
+                            deletingImageId ===
+                            image.id
+                          }
+                          style={{
+                            width: "100%",
+                            marginTop: "10px",
+                            padding: "10px",
+                            background:
+                              deletingImageId ===
+                              image.id
+                                ? "#999"
+                                : "#D32F2F",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "6px",
+                            cursor:
+                              deletingImageId ===
+                              image.id
+                                ? "not-allowed"
+                                : "pointer",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {deletingImageId ===
+                          image.id
+                            ? "Deleting..."
+                            : "🗑️ Delete Image"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* =====================================================
-              Property Information
+              PROPERTY INFORMATION
           ====================================================== */}
 
           <div
@@ -354,7 +446,8 @@ function LandDetails() {
               padding: "25px",
               marginTop: "30px",
               borderRadius: "15px",
-              boxShadow: "0 5px 20px rgba(0,0,0,.08)",
+              boxShadow:
+                "0 5px 20px rgba(0,0,0,.08)",
               lineHeight: "30px",
             }}
           >
@@ -373,7 +466,8 @@ function LandDetails() {
             </p>
 
             <p>
-              <strong>📏 Area:</strong> {land.area} Acres
+              <strong>📏 Area:</strong>{" "}
+              {land.area} Acres
             </p>
 
             <p>
@@ -425,7 +519,7 @@ function LandDetails() {
           </div>
 
           {/* =====================================================
-              Land Location
+              LAND LOCATION
           ====================================================== */}
 
           <div
@@ -434,7 +528,8 @@ function LandDetails() {
               marginTop: "30px",
               padding: "25px",
               borderRadius: "15px",
-              boxShadow: "0 5px 20px rgba(0,0,0,.08)",
+              boxShadow:
+                "0 5px 20px rgba(0,0,0,.08)",
             }}
           >
             <h2
@@ -449,7 +544,8 @@ function LandDetails() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns:
+                  "1fr 1fr",
                 gap: "15px",
                 marginBottom: "20px",
               }}
@@ -467,42 +563,47 @@ function LandDetails() {
               </div>
             </div>
 
-            {land.latitude && land.longitude && (
-              <>
-                <LandMap
-                  latitude={Number(land.latitude)}
-                  longitude={Number(land.longitude)}
-                  title={land.title}
-                />
+            {land.latitude &&
+              land.longitude && (
+                <>
+                  <LandMap
+                    latitude={Number(
+                      land.latitude
+                    )}
+                    longitude={Number(
+                      land.longitude
+                    )}
+                    title={land.title}
+                  />
 
-                <div
-                  style={{
-                    marginTop: "20px",
-                  }}
-                >
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${land.latitude},${land.longitude}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <div
                     style={{
-                      display: "inline-block",
-                      background: "#1976D2",
-                      color: "#fff",
-                      padding: "12px 24px",
-                      borderRadius: "8px",
-                      textDecoration: "none",
-                      fontWeight: "bold",
+                      marginTop: "20px",
                     }}
                   >
-                    🧭 Get Directions
-                  </a>
-                </div>
-              </>
-            )}
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${land.latitude},${land.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-block",
+                        background: "#1976D2",
+                        color: "#fff",
+                        padding: "12px 24px",
+                        borderRadius: "8px",
+                        textDecoration: "none",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      🧭 Get Directions
+                    </a>
+                  </div>
+                </>
+              )}
           </div>
 
           {/* =====================================================
-              Seller Information
+              SELLER INFORMATION
           ====================================================== */}
 
           <div
@@ -511,7 +612,8 @@ function LandDetails() {
               marginTop: "30px",
               padding: "25px",
               borderRadius: "15px",
-              boxShadow: "0 5px 20px rgba(0,0,0,.08)",
+              boxShadow:
+                "0 5px 20px rgba(0,0,0,.08)",
             }}
           >
             <h2
@@ -526,7 +628,8 @@ function LandDetails() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns:
+                  "1fr 1fr",
                 gap: "20px",
                 marginBottom: "25px",
               }}
@@ -562,6 +665,7 @@ function LandDetails() {
                   borderRadius: "8px",
                   textDecoration: "none",
                   fontWeight: "bold",
+                  textAlign: "center",
                 }}
               >
                 📞 Call
@@ -579,6 +683,7 @@ function LandDetails() {
                   borderRadius: "8px",
                   textDecoration: "none",
                   fontWeight: "bold",
+                  textAlign: "center",
                 }}
               >
                 💬 WhatsApp
@@ -602,18 +707,30 @@ function LandDetails() {
 
               {/* Favorite */}
               <button
-                onClick={addFavorite}
+                onClick={toggleFavorite}
+                disabled={favoriteLoading}
                 style={{
-                  background: "#E91E63",
+                  background: isFavorite
+                    ? "#757575"
+                    : "#E91E63",
                   color: "#fff",
                   padding: "12px 20px",
                   border: "none",
                   borderRadius: "8px",
-                  cursor: "pointer",
+                  cursor: favoriteLoading
+                    ? "not-allowed"
+                    : "pointer",
                   fontWeight: "bold",
+                  opacity: favoriteLoading
+                    ? 0.7
+                    : 1,
                 }}
               >
-                ❤️ Favorite
+                {favoriteLoading
+                  ? "Updating..."
+                  : isFavorite
+                  ? "💔 Remove Favorite"
+                  : "❤️ Favorite"}
               </button>
 
               {/* Share */}
@@ -655,7 +772,7 @@ function LandDetails() {
           </div>
 
           {/* =====================================================
-              Back
+              BACK
           ====================================================== */}
 
           <div
@@ -669,7 +786,9 @@ function LandDetails() {
             }}
           >
             <button
-              onClick={() => navigate("/all-lands")}
+              onClick={() =>
+                navigate("/all-lands")
+              }
               style={{
                 background: "#424242",
                 color: "#fff",
@@ -690,7 +809,8 @@ function LandDetails() {
                 fontSize: "14px",
               }}
             >
-              🌾 Thank you for using Farmland Marketplace
+              🌾 Thank you for using Farmland
+              Marketplace
             </div>
           </div>
         </div>
