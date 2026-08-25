@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Farmland Marketplace</string>
+    <string name="title_activity_main">Farmland Marketplace</string>
+    <string name="package_name">com.farmlandmarketplace.app</string>
+    <string name="custom_url_scheme">com.farmlandmarketplace.app</string>
+</resources>

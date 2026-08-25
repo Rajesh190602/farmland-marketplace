@@ -22,6 +22,11 @@ app = FastAPI(
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=[
+        "https://localhost",
+        "http://localhost",
+        "capacitor://localhost",
+    ],
     allow_origin_regex=r"https://farmland-marketplace.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
