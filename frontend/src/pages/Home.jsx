@@ -213,10 +213,7 @@ function Home() {
           response.data.notifications || 0,
       });
 
-      // -----------------------------------------------
       // Recent Activity
-      // -----------------------------------------------
-
       setRecentActivity(
         response.data.recent_activity || []
       );
@@ -364,6 +361,16 @@ function Home() {
     minWidth: "180px",
   };
 
+  const dashboardCardStyle = {
+    ...cardStyle,
+    border: "none",
+    width: "100%",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+    transition:
+      "transform 0.2s ease, box-shadow 0.2s ease",
+  };
+
   const quickButton = (color) => ({
     background: color,
     color: "#fff",
@@ -383,6 +390,9 @@ function Home() {
 
   return (
     <>
+      {/* IMPORTANT:
+          Navbar and hamburger menu are unchanged.
+      */}
       <Navbar />
 
       <div
@@ -392,7 +402,6 @@ function Home() {
           padding: "25px",
         }}
       >
-
         {/* =================================================
             WELCOME
         ================================================= */}
@@ -458,59 +467,209 @@ function Home() {
             gap: "20px",
           }}
         >
-          <div style={cardStyle}>
+          {/* TOTAL USERS */}
+          <button
+            type="button"
+            disabled={userRole !== "admin"}
+            onClick={() => {
+              if (userRole === "admin") {
+                navigate("/admin/users");
+              }
+            }}
+            style={{
+              ...dashboardCardStyle,
+              cursor:
+                userRole === "admin"
+                  ? "pointer"
+                  : "default",
+              opacity:
+                userRole === "admin"
+                  ? 1
+                  : 0.75,
+            }}
+          >
             <FaUsers
               size={42}
               color="#1565C0"
             />
-            <h3>Total Users</h3>
-            <h1>{stats.total_users}</h1>
-          </div>
 
-          <div style={cardStyle}>
+            <h3>Total Users</h3>
+
+            <h1>{stats.total_users}</h1>
+
+            {userRole === "admin" && (
+              <div
+                style={{
+                  marginTop: "10px",
+                  color: "#1565C0",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                }}
+              >
+                Manage Users →
+              </div>
+            )}
+          </button>
+
+          {/* TOTAL LANDS */}
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/all-lands")
+            }
+            style={{
+              ...dashboardCardStyle,
+              cursor: "pointer",
+            }}
+          >
             <FaSeedling
               size={42}
               color="#2E7D32"
             />
-            <h3>Total Lands</h3>
-            <h1>{stats.total_lands}</h1>
-          </div>
 
-          <div style={cardStyle}>
+            <h3>Total Lands</h3>
+
+            <h1>{stats.total_lands}</h1>
+
+            <div
+              style={{
+                marginTop: "10px",
+                color: "#2E7D32",
+                fontSize: "14px",
+                fontWeight: "bold",
+              }}
+            >
+              Browse Lands →
+            </div>
+          </button>
+
+          {/* MY LANDS */}
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/my-lands")
+            }
+            style={{
+              ...dashboardCardStyle,
+              cursor: "pointer",
+            }}
+          >
             <FaMapMarkedAlt
               size={42}
               color="#EF6C00"
             />
-            <h3>My Lands</h3>
-            <h1>{stats.my_lands}</h1>
-          </div>
 
-          <div style={cardStyle}>
+            <h3>My Lands</h3>
+
+            <h1>{stats.my_lands}</h1>
+
+            <div
+              style={{
+                marginTop: "10px",
+                color: "#EF6C00",
+                fontSize: "14px",
+                fontWeight: "bold",
+              }}
+            >
+              View My Lands →
+            </div>
+          </button>
+
+          {/* FAVORITES */}
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/favorites")
+            }
+            style={{
+              ...dashboardCardStyle,
+              cursor: "pointer",
+            }}
+          >
             <FaHeart
               size={42}
               color="#D81B60"
             />
-            <h3>Favorites</h3>
-            <h1>{stats.favorites}</h1>
-          </div>
 
-          <div style={cardStyle}>
+            <h3>Favorites</h3>
+
+            <h1>{stats.favorites}</h1>
+
+            <div
+              style={{
+                marginTop: "10px",
+                color: "#D81B60",
+                fontSize: "14px",
+                fontWeight: "bold",
+              }}
+            >
+              View Favorites →
+            </div>
+          </button>
+
+          {/* CHATS */}
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/my-chats")
+            }
+            style={{
+              ...dashboardCardStyle,
+              cursor: "pointer",
+            }}
+          >
             <FaComments
               size={42}
               color="#6A1B9A"
             />
-            <h3>Chats</h3>
-            <h1>{stats.chats}</h1>
-          </div>
 
-          <div style={cardStyle}>
+            <h3>Chats</h3>
+
+            <h1>{stats.chats}</h1>
+
+            <div
+              style={{
+                marginTop: "10px",
+                color: "#6A1B9A",
+                fontSize: "14px",
+                fontWeight: "bold",
+              }}
+            >
+              Open Chats →
+            </div>
+          </button>
+
+          {/* NOTIFICATIONS */}
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/notifications")
+            }
+            style={{
+              ...dashboardCardStyle,
+              cursor: "pointer",
+            }}
+          >
             <FaBell
               size={42}
               color="#F9A825"
             />
+
             <h3>Notifications</h3>
+
             <h1>{stats.notifications}</h1>
-          </div>
+
+            <div
+              style={{
+                marginTop: "10px",
+                color: "#F9A825",
+                fontSize: "14px",
+                fontWeight: "bold",
+              }}
+            >
+              View Notifications →
+            </div>
+          </button>
         </div>
 
         {/* =================================================
@@ -621,7 +780,6 @@ function Home() {
                     position: "relative",
                   }}
                 >
-
                   {/* LAND IMAGE */}
 
                   <div
