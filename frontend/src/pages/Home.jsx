@@ -514,9 +514,13 @@ function Home() {
           {/* TOTAL LANDS */}
           <button
             type="button"
-            onClick={() =>
-              navigate("/all-lands")
-            }
+            onClick={() => {
+              if (userRole === "farmer") {
+                navigate("/my-lands");
+              } else {
+                navigate("/all-lands");
+              }
+            }}
             style={{
               ...dashboardCardStyle,
               cursor: "pointer",
@@ -539,7 +543,9 @@ function Home() {
                 fontWeight: "bold",
               }}
             >
-              Browse Lands →
+              {userRole === "farmer"
+                ? "View My Lands →"
+                : "Browse Lands →"}
             </div>
           </button>
 
@@ -713,10 +719,20 @@ function Home() {
           </button>
 
           <button
-            style={quickButton("#EF6C00")}
-            onClick={() =>
-              navigate("/all-lands")
-            }
+            style={{
+              ...quickButton("#EF6C00"),
+              opacity: userRole === "farmer" ? 0.5 : 1,
+              cursor:
+                userRole === "farmer"
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+            disabled={userRole === "farmer"}
+            onClick={() => {
+              if (userRole !== "farmer") {
+                navigate("/all-lands");
+              }
+            }}
           >
             <FaSearch /> Browse Lands
           </button>
@@ -905,11 +921,12 @@ function Home() {
                     </p>
 
                     <button
-                      onClick={() =>
-                        navigate(
-                          `/land/${land.id}`
-                        )
-                      }
+                      disabled={userRole === "farmer"}
+                      onClick={() => {
+                        if (userRole !== "farmer") {
+                          navigate(`/land/${land.id}`);
+                        }
+                      }}
                       style={{
                         marginTop: "15px",
                         width: "100%",
@@ -920,9 +937,16 @@ function Home() {
                         padding: "12px",
                         borderRadius:
                           "10px",
-                        cursor: "pointer",
+                        cursor:
+                          userRole === "farmer"
+                            ? "not-allowed"
+                            : "pointer",
                         fontWeight:
                           "bold",
+                        opacity:
+                          userRole === "farmer"
+                            ? 0.5
+                            : 1,
                       }}
                     >
                       View Details
