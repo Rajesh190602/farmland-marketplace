@@ -20,10 +20,6 @@ router = APIRouter(
 # Create Land
 # ==========================
 
-# ==========================
-# Create Land
-# ==========================
-
 @router.post("/")
 def create_land(
     land: LandCreate,
@@ -94,8 +90,9 @@ def create_land(
         "land_id": new_land.id
     }
 
+
 # ==========================
-# Get All Approved Lands
+# Get Lands
 # ==========================
 
 @router.get("/")
@@ -105,13 +102,28 @@ def get_all_lands(
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
     db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
 ):
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # Buyers and admins can see approved marketplace lands.
+    # Farmers can see only their own lands.
     query = db.query(models.Land)
 
-    # Only approved lands are publicly visible
-    query = query.filter(
-        models.Land.status == "approved"
-    )
+    if user.role == "farmer":
+        query = query.filter(
+            models.Land.owner_id == current_user
+        )
+    else:
+        query = query.filter(
+            models.Land.status == "approved"
+        )
 
     if search:
         query = query.filter(
@@ -162,12 +174,29 @@ def search_lands(
     max_price: float | None = Query(None),
     min_area: float | None = Query(None),
     max_area: float | None = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
 ):
-    # Only approved lands are searchable
-    query = db.query(Land).filter(
-        Land.status == "approved"
-    )
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # Buyers and admins can search approved marketplace lands.
+    # Farmers are restricted to their own lands only.
+    query = db.query(Land)
+
+    if user.role == "farmer":
+        query = query.filter(
+            Land.owner_id == current_user
+        )
+    else:
+        query = query.filter(
+            Land.status == "approved"
+        )
 
     if district:
         query = query.filter(
@@ -219,7 +248,9 @@ def search_lands(
             Land.area <= max_area
         )
 
-    return query.all()
+    return query.order_by(
+        Land.id.desc()
+    ).all()
 
 
 # ==========================
@@ -276,6 +307,8 @@ def get_my_lands(
         }
         for land in lands
     ]
+
+
 # ==========================
 # Get My Land By ID
 # ==========================
@@ -346,6 +379,7 @@ def get_my_land_by_id(
         "owner_mobile": owner.mobile if owner else ""
     }
 
+
 # ==========================
 # Get Land By ID
 # ==========================
@@ -353,14 +387,21 @@ def get_my_land_by_id(
 @router.get("/{land_id}")
 def get_land(
     land_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
 ):
-    # Only approved lands are publicly visible
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
     land = (
         db.query(Land)
         .filter(
-            Land.id == land_id,
-            Land.status == "approved"
+            Land.id == land_id
         )
         .first()
     )
@@ -371,52 +412,63 @@ def get_land(
             detail="Land not found"
         )
 
+    # Farmers may access only their own land.
+    if user.role == "farmer":
+        if land.owner_id != current_user:
+            raise HTTPException(
+                status_code=403,
+                detail="Farmers can access only their own lands"
+            )
+    else:
+        # Buyers/admins can view only approved marketplace lands.
+        if land.status != "approved":
+            raise HTTPException(
+                status_code=404,
+                detail="Land not found"
+            )
+
     owner = (
         db.query(User)
         .filter(User.id == land.owner_id)
         .first()
     )
+
     return {
-    "id": land.id,
-    "title": land.title,
-    "description": land.description,
-    "image_url": land.image_url,
-    "price": land.price,
-    "area": land.area,
-    "village": land.village,
-    "mandal": land.mandal,
-    "district": land.district,
-    "state": land.state,
-    "pincode": land.pincode,
-    "survey_number": land.survey_number,
-    "soil_type": land.soil_type,
-    "water_source": land.water_source,
-    "crop_type": land.crop_type,
-    "latitude": land.latitude,
-    "longitude": land.longitude,
-    "status": land.status,
-    "rejection_reason": land.rejection_reason,
-    "owner_id": land.owner_id,
+        "id": land.id,
+        "title": land.title,
+        "description": land.description,
+        "image_url": land.image_url,
+        "price": land.price,
+        "area": land.area,
+        "village": land.village,
+        "mandal": land.mandal,
+        "district": land.district,
+        "state": land.state,
+        "pincode": land.pincode,
+        "survey_number": land.survey_number,
+        "soil_type": land.soil_type,
+        "water_source": land.water_source,
+        "crop_type": land.crop_type,
+        "latitude": land.latitude,
+        "longitude": land.longitude,
+        "status": land.status,
+        "rejection_reason": land.rejection_reason,
+        "owner_id": land.owner_id,
 
-    # Multiple land images
-    "images": [
-        {
-            "id": image.id,
-            "image_url": image.image_url,
-        }
-        for image in land.images
-    ],
+        # Multiple land images
+        "images": [
+            {
+                "id": image.id,
+                "image_url": image.image_url,
+            }
+            for image in land.images
+        ],
 
-    "owner_name": owner.full_name if owner else "",
-    "owner_mobile": owner.mobile if owner else "",
-}
-
-    
+        "owner_name": owner.full_name if owner else "",
+        "owner_mobile": owner.mobile if owner else "",
+    }
 
 
-# ==========================
-# Update Land
-# ==========================
 # ==========================
 # Update Land
 # ==========================
@@ -524,11 +576,6 @@ def update_land(
     }
 
 
-
-
-# ==========================
-# Delete Land
-# ==========================
 # ==========================
 # Delete Land
 # ==========================
