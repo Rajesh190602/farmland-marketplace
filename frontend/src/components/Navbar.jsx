@@ -1,75 +1,100 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { FaBars, FaTimes } from "react-icons/fa";
-import api from "../services/api";
 
 function Navbar() {
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 1200);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  const userName = "Farmer";
-
-useEffect(() => {
-  const handleResize = () => {
-  console.log("Screen Width:", window.innerWidth);
-
-    setIsMobile(window.innerWidth <= 1200);
-
-    if (window.innerWidth > 1200) {
-      setMenuOpen(false);
-    }
-  };
-
-  handleResize();
-  fetchUnreadCount();
-  const interval = setInterval(() => {
-    fetchUnreadCount();
-  }, 30000);
-
-  window.addEventListener("resize", handleResize);
-  return () => {
-
-    window.removeEventListener("resize", handleResize);
-    clearInterval(interval);
-  };
-}, []);
-useEffect(() => {
-  const handleNotificationsUpdated = () => {
-    fetchUnreadCount();
-  };
-
-  window.addEventListener(
-    "notificationsUpdated",
-    handleNotificationsUpdated
+  const [isMobile, setIsMobile] = useState(
+    window.innerWidth <= 1200
   );
 
-  return () => {
-    window.removeEventListener(
-      "notificationsUpdated",
-      handleNotificationsUpdated
-    );
-  };
-}, []);
-const fetchUnreadCount = async () => {
-  try {
-    const response = await api.get("/notifications/unread-count");
-    setUnreadCount(response.data.unread_count);
-  } catch (error) {
-    console.log(error);
-  }
-};
+  // =====================================================
+  // USER DETAILS
+  // =====================================================
+
+  const userName =
+    sessionStorage.getItem("full_name") || "Farmer";
+
+  const storedUser = (() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("user") || "{}"
+      );
+    } catch {
+      return {};
+    }
+  })();
+
+  const userRole = (
+    sessionStorage.getItem("role") ||
+    storedUser.role ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  // =====================================================
+  // RESPONSIVE NAVBAR
+  // =====================================================
+
+  useEffect(() => {
+    const handleResize = () => {
+      console.log("Screen Width:", window.innerWidth);
+
+      setIsMobile(window.innerWidth <= 1200);
+
+      if (window.innerWidth > 1200) {
+        setMenuOpen(false);
+      }
+    };
+
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+
+    return () =>
+      window.removeEventListener(
+        "resize",
+        handleResize
+      );
+  }, []);
+
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+
   const logout = () => {
-   sessionStorage.removeItem("token");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user_id");
+    sessionStorage.removeItem("full_name");
+    sessionStorage.removeItem("role");
+
+    localStorage.removeItem("token");
+
     navigate("/");
   };
 
+  // =====================================================
+  // SEARCH
+  // Buyers/Admins ONLY
+  // =====================================================
+
   const handleSearch = () => {
+    // Farmers are not allowed to search other farmers' lands.
+    if (userRole === "farmer") {
+      return;
+    }
+
     if (!search.trim()) {
       navigate("/search");
+
+      if (isMobile) {
+        setMenuOpen(false);
+      }
+
       return;
     }
 
@@ -81,6 +106,19 @@ const fetchUnreadCount = async () => {
       setMenuOpen(false);
     }
   };
+
+  // =====================================================
+  // NAVIGATION LINK STYLE
+  // =====================================================
+
+  const desktopLinkStyle = ({ isActive }) => ({
+    ...linkStyle,
+    color: isActive ? "#FFD54F" : "#fff",
+  });
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <>
@@ -95,7 +133,9 @@ const fetchUnreadCount = async () => {
           boxShadow: "0 6px 18px rgba(0,0,0,.18)",
         }}
       >
-        {/* Top Navbar */}
+        {/* =================================================
+            TOP NAVBAR
+        ================================================= */}
 
         <div
           style={{
@@ -105,7 +145,9 @@ const fetchUnreadCount = async () => {
             padding: "14px 22px",
           }}
         >
-          {/* Logo */}
+          {/* =================================================
+              LOGO
+          ================================================= */}
 
           <div
             style={{
@@ -144,7 +186,7 @@ const fetchUnreadCount = async () => {
                 style={{
                   color: "#fff",
                   fontSize: "12px",
-                  opacity: .85,
+                  opacity: 0.85,
                 }}
               >
                 Buy • Sell • Connect
@@ -152,7 +194,9 @@ const fetchUnreadCount = async () => {
             </div>
           </div>
 
-          {/* Desktop Navigation */}
+          {/* =================================================
+              DESKTOP NAVIGATION
+          ================================================= */}
 
           {!isMobile && (
             <div
@@ -162,143 +206,156 @@ const fetchUnreadCount = async () => {
                 gap: "18px",
               }}
             >
-              <input
-                type="text"
-                placeholder="🔍 Search lands..."
-                value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSearch();
-                  }
-                }}
-                style={{
-                  padding: "10px 16px",
-                  borderRadius: "25px",
-                  border: "none",
-                  width: "220px",
-                  outline: "none",
-                }}
-              />
 
-              <button
-                onClick={handleSearch}
-                style={{
-                  background: "#FFD54F",
-                  color: "#1B5E20",
-                  border: "none",
-                  padding: "10px 18px",
-                  borderRadius: "25px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                Search
-              </button>
-                            <NavLink
+              {/* =================================================
+                  SEARCH
+                  IMPORTANT:
+                  Farmers DO NOT see this.
+              ================================================= */}
+
+              {userRole !== "farmer" && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="🔍 Search lands..."
+                    value={search}
+                    onChange={(e) =>
+                      setSearch(e.target.value)
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleSearch();
+                      }
+                    }}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: "25px",
+                      border: "none",
+                      width: "220px",
+                      outline: "none",
+                    }}
+                  />
+
+                  <button
+                    onClick={handleSearch}
+                    style={{
+                      background: "#FFD54F",
+                      color: "#1B5E20",
+                      border: "none",
+                      padding: "10px 18px",
+                      borderRadius: "25px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Search
+                  </button>
+                </>
+              )}
+
+              {/* HOME */}
+
+              <NavLink
                 to="/home"
-                style={({ isActive }) => ({
-                  ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
-                })}
+                style={desktopLinkStyle}
               >
                 🏠 Home
               </NavLink>
 
+              {/* ADD LAND */}
+
               <NavLink
                 to="/add-land"
-                style={({ isActive }) => ({
-                  ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
-                })}
+                style={desktopLinkStyle}
               >
                 ➕ Add Land
               </NavLink>
 
+              {/* MY LANDS */}
+
               <NavLink
                 to="/my-lands"
-                style={({ isActive }) => ({
-                  ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
-                })}
+                style={desktopLinkStyle}
               >
                 🌾 My Lands
               </NavLink>
 
+              {/* =================================================
+                  BROWSE
+                  Farmers cannot access Browse.
+              ================================================= */}
+
               <NavLink
-                to="/all-lands"
+                to={
+                  userRole === "farmer"
+                    ? "/home"
+                    : "/all-lands"
+                }
+                onClick={(e) => {
+                  if (userRole === "farmer") {
+                    e.preventDefault();
+                  }
+                }}
+                aria-disabled={
+                  userRole === "farmer"
+                }
                 style={({ isActive }) => ({
                   ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
+                  color: isActive
+                    ? "#FFD54F"
+                    : "#fff",
+                  opacity:
+                    userRole === "farmer"
+                      ? 0.55
+                      : 1,
+                  cursor:
+                    userRole === "farmer"
+                      ? "not-allowed"
+                      : "pointer",
                 })}
               >
                 🔍 Browse
               </NavLink>
 
+              {/* FAVORITES */}
+
               <NavLink
                 to="/favorites"
-                style={({ isActive }) => ({
-                  ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
-                })}
+                style={desktopLinkStyle}
               >
                 ❤️ Favorites
               </NavLink>
 
+              {/* CHATS */}
+
               <NavLink
                 to="/my-chats"
-                style={({ isActive }) => ({
-                  ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
-                })}
+                style={desktopLinkStyle}
               >
                 💬 Chats
               </NavLink>
 
-              <NavLink
-  to="/notifications"
-  style={({ isActive }) => ({
-    ...linkStyle,
-    color: isActive ? "#FFD54F" : "#fff",
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-  })}
->
-  <span>🔔 Notifications</span>
+              {/* NOTIFICATIONS */}
 
-  {unreadCount > 0 && (
-    <span
-      style={{
-        background: "#D32F2F",
-        color: "#fff",
-        borderRadius: "50%",
-        minWidth: "22px",
-        height: "22px",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        fontSize: "12px",
-        fontWeight: "bold",
-      }}
-    >
-      {unreadCount}
-    </span>
-  )}
-</NavLink>
+              <NavLink
+                to="/notifications"
+                style={desktopLinkStyle}
+              >
+                🔔 Notifications
+              </NavLink>
+
+              {/* PROFILE */}
 
               <NavLink
                 to="/profile"
-                style={({ isActive }) => ({
-                  ...linkStyle,
-                  color: isActive ? "#FFD54F" : "#fff",
-                })}
+                style={desktopLinkStyle}
               >
                 👤 Profile
               </NavLink>
+
+              {/* =================================================
+                  USER + LOGOUT
+              ================================================= */}
 
               <div
                 style={{
@@ -313,7 +370,8 @@ const fetchUnreadCount = async () => {
                     display: "flex",
                     alignItems: "center",
                     gap: "10px",
-                    background: "rgba(255,255,255,.15)",
+                    background:
+                      "rgba(255,255,255,.15)",
                     padding: "8px 14px",
                     borderRadius: "30px",
                     color: "#fff",
@@ -372,11 +430,16 @@ const fetchUnreadCount = async () => {
             </div>
           )}
 
-          {/* Mobile Hamburger */}
+          {/* =================================================
+              MOBILE HAMBURGER
+              PRESERVED
+          ================================================= */}
 
           {isMobile && (
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
+              onClick={() =>
+                setMenuOpen(!menuOpen)
+              }
               style={{
                 background: "transparent",
                 border: "none",
@@ -385,12 +448,18 @@ const fetchUnreadCount = async () => {
                 cursor: "pointer",
               }}
             >
-              {menuOpen ? <FaTimes /> : <FaBars />}
+              {menuOpen ? (
+                <FaTimes />
+              ) : (
+                <FaBars />
+              )}
             </button>
           )}
         </div>
 
-        {/* Mobile Menu */}
+        {/* =================================================
+            MOBILE MENU
+        ================================================= */}
 
         {isMobile && menuOpen && (
           <div
@@ -402,61 +471,174 @@ const fetchUnreadCount = async () => {
               gap: "18px",
             }}
           >
-            <input
-              type="text"
-              placeholder="🔍 Search lands..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{
-                padding: "12px",
-                borderRadius: "8px",
-                border: "none",
-              }}
-            />
 
-            <button
-              onClick={handleSearch}
-              style={{
-                background: "#FFD54F",
-                color: "#1B5E20",
-                border: "none",
-                padding: "12px",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                cursor: "pointer",
-              }}
-            >
-              Search
-            </button>
+            {/* =================================================
+                MOBILE SEARCH
+                Farmers DO NOT SEE IT.
+            ================================================= */}
 
-            <NavLink to="/home" style={mobileLinkStyle}>🏠 Home</NavLink>
-            <NavLink to="/add-land" style={mobileLinkStyle}>➕ Add Land</NavLink>
-            <NavLink to="/my-lands" style={mobileLinkStyle}>🌾 My Lands</NavLink>
-            <NavLink to="/all-lands" style={mobileLinkStyle}>🔍 Browse</NavLink>
-            <NavLink to="/favorites" style={mobileLinkStyle}>❤️ Favorites</NavLink>
-            <NavLink to="/my-chats" style={mobileLinkStyle}>💬 Chats</NavLink>
+            {userRole !== "farmer" && (
+              <>
+                <input
+                  type="text"
+                  placeholder="🔍 Search lands..."
+                  value={search}
+                  onChange={(e) =>
+                    setSearch(e.target.value)
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSearch();
+                    }
+                  }}
+                  style={{
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "none",
+                  }}
+                />
+
+                <button
+                  onClick={handleSearch}
+                  style={{
+                    background: "#FFD54F",
+                    color: "#1B5E20",
+                    border: "none",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                  }}
+                >
+                  Search
+                </button>
+              </>
+            )}
+
+            {/* HOME */}
+
             <NavLink
-  to="/notifications"
-  style={mobileLinkStyle}
->
-  🔔 Notifications
-  {unreadCount > 0 && (
-    <span
-      style={{
-        marginLeft: "10px",
-        background: "#D32F2F",
-        color: "#fff",
-        borderRadius: "50%",
-        padding: "2px 8px",
-        fontSize: "12px",
-        fontWeight: "bold",
-      }}
-    >
-      {unreadCount}
-    </span>
-  )}
-</NavLink>
-           <NavLink to="/profile" style={mobileLinkStyle}>👤 Profile</NavLink>
+              to="/home"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              🏠 Home
+            </NavLink>
+
+            {/* ADD LAND */}
+
+            <NavLink
+              to="/add-land"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              ➕ Add Land
+            </NavLink>
+
+            {/* MY LANDS */}
+
+            <NavLink
+              to="/my-lands"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              🌾 My Lands
+            </NavLink>
+
+            {/* =================================================
+                BROWSE
+                Farmers cannot access.
+            ================================================= */}
+
+            <NavLink
+              to={
+                userRole === "farmer"
+                  ? "/home"
+                  : "/all-lands"
+              }
+              onClick={(e) => {
+                if (userRole === "farmer") {
+                  e.preventDefault();
+                  return;
+                }
+
+                setMenuOpen(false);
+              }}
+              aria-disabled={
+                userRole === "farmer"
+              }
+              style={() => ({
+                ...mobileLinkStyle({
+                  isActive: false,
+                }),
+                opacity:
+                  userRole === "farmer"
+                    ? 0.55
+                    : 1,
+                cursor:
+                  userRole === "farmer"
+                    ? "not-allowed"
+                    : "pointer",
+              })}
+            >
+              🔍 Browse
+            </NavLink>
+
+            {/* FAVORITES */}
+
+            <NavLink
+              to="/favorites"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              ❤️ Favorites
+            </NavLink>
+
+            {/* CHATS */}
+
+            <NavLink
+              to="/my-chats"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              💬 Chats
+            </NavLink>
+
+            {/* NOTIFICATIONS */}
+
+            <NavLink
+              to="/notifications"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              🔔 Notifications
+            </NavLink>
+
+            {/* PROFILE */}
+
+            <NavLink
+              to="/profile"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              👤 Profile
+            </NavLink>
+
+            {/* LOGOUT */}
 
             <button
               onClick={logout}
@@ -479,6 +661,10 @@ const fetchUnreadCount = async () => {
   );
 }
 
+// =====================================================
+// DESKTOP LINK STYLE
+// =====================================================
+
 const linkStyle = {
   color: "#fff",
   textDecoration: "none",
@@ -486,6 +672,10 @@ const linkStyle = {
   fontSize: "15px",
   transition: ".3s",
 };
+
+// =====================================================
+// MOBILE LINK STYLE
+// =====================================================
 
 const mobileLinkStyle = ({ isActive }) => ({
   color: isActive ? "#FFD54F" : "#fff",

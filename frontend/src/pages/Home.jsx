@@ -43,8 +43,9 @@ function Home() {
   const userName =
     sessionStorage.getItem("full_name") || "Farmer";
 
-  const userRole =
-    sessionStorage.getItem("role") || "";
+  const userRole = (
+    sessionStorage.getItem("role") || ""
+  ).trim().toLowerCase();
 
   const [featuredLands, setFeaturedLands] = useState([]);
 
@@ -61,7 +62,12 @@ function Home() {
 
   useEffect(() => {
     fetchDashboard();
-    fetchFeaturedLands();
+
+    // Farmers must not load other farmers' public lands on Home.
+    // Buyers and admins can load featured lands.
+    if (userRole !== "farmer") {
+      fetchFeaturedLands();
+    }
   }, []);
 
   // =====================================================
@@ -213,13 +219,98 @@ function Home() {
           response.data.notifications || 0,
       });
 
+      // -----------------------------------------------
       // Recent Activity
+      // -----------------------------------------------
+
       setRecentActivity(
         response.data.recent_activity || []
       );
     } catch (error) {
       console.log(error);
     }
+  };
+
+  // =====================================================
+  // DASHBOARD CARD NAVIGATION
+  // =====================================================
+
+  const handleDashboardCardClick = (card) => {
+    switch (card) {
+      case "total_users":
+        // Only admin can access Manage Users
+        if (userRole === "admin") {
+          navigate("/admin/users");
+        }
+        break;
+
+      case "total_lands":
+        if (userRole === "farmer") {
+          navigate("/my-lands");
+        } else {
+          navigate("/all-lands");
+        }
+        break;
+
+      case "my_lands":
+        navigate("/my-lands");
+        break;
+
+      case "favorites":
+        navigate("/favorites");
+        break;
+
+      case "chats":
+        navigate("/my-chats");
+        break;
+
+      case "notifications":
+        navigate("/notifications");
+        break;
+
+      default:
+        break;
+    }
+  };
+
+  // =====================================================
+  // DASHBOARD CARD STYLE
+  // =====================================================
+
+  const dashboardCardStyle = (clickable) => ({
+    background: "#fff",
+    borderRadius: "15px",
+    padding: "25px",
+    boxShadow:
+      "0 6px 18px rgba(0,0,0,0.12)",
+    textAlign: "center",
+    flex: "1",
+    minWidth: "180px",
+    cursor: clickable ? "pointer" : "default",
+    transition:
+      "transform 0.2s ease, box-shadow 0.2s ease",
+    border: "none",
+    width: "100%",
+  });
+
+  const handleCardMouseEnter = (event, clickable) => {
+    if (!clickable) return;
+
+    event.currentTarget.style.transform =
+      "translateY(-4px)";
+
+    event.currentTarget.style.boxShadow =
+      "0 10px 24px rgba(0,0,0,0.18)";
+  };
+
+  const handleCardMouseLeave = (event, clickable) => {
+    if (!clickable) return;
+
+    event.currentTarget.style.transform =
+      "translateY(0)";
+
+    event.currentTarget.style.boxShadow =
+      "0 6px 18px rgba(0,0,0,0.12)";
   };
 
   // =====================================================
@@ -347,29 +438,8 @@ function Home() {
   };
 
   // =====================================================
-  // STYLES
+  // QUICK ACTION BUTTON STYLE
   // =====================================================
-
-  const cardStyle = {
-    background: "#fff",
-    borderRadius: "15px",
-    padding: "25px",
-    boxShadow:
-      "0 6px 18px rgba(0,0,0,0.12)",
-    textAlign: "center",
-    flex: "1",
-    minWidth: "180px",
-  };
-
-  const dashboardCardStyle = {
-    ...cardStyle,
-    border: "none",
-    width: "100%",
-    fontFamily: "inherit",
-    boxSizing: "border-box",
-    transition:
-      "transform 0.2s ease, box-shadow 0.2s ease",
-  };
 
   const quickButton = (color) => ({
     background: color,
@@ -390,9 +460,6 @@ function Home() {
 
   return (
     <>
-      {/* IMPORTANT:
-          Navbar and hamburger menu are unchanged.
-      */}
       <Navbar />
 
       <div
@@ -402,6 +469,7 @@ function Home() {
           padding: "25px",
         }}
       >
+
         {/* =================================================
             WELCOME
         ================================================= */}
@@ -467,26 +535,57 @@ function Home() {
             gap: "20px",
           }}
         >
+
           {/* TOTAL USERS */}
-          <button
-            type="button"
-            disabled={userRole !== "admin"}
-            onClick={() => {
-              if (userRole === "admin") {
-                navigate("/admin/users");
+
+          <div
+            role={
+              userRole === "admin"
+                ? "button"
+                : undefined
+            }
+            tabIndex={
+              userRole === "admin"
+                ? 0
+                : undefined
+            }
+            onClick={() =>
+              handleDashboardCardClick(
+                "total_users"
+              )
+            }
+            onKeyDown={(event) => {
+              if (
+                userRole === "admin" &&
+                (event.key === "Enter" ||
+                  event.key === " ")
+              ) {
+                event.preventDefault();
+                handleDashboardCardClick(
+                  "total_users"
+                );
               }
             }}
-            style={{
-              ...dashboardCardStyle,
-              cursor:
+            onMouseEnter={(event) =>
+              handleCardMouseEnter(
+                event,
                 userRole === "admin"
-                  ? "pointer"
-                  : "default",
-              opacity:
+              )
+            }
+            onMouseLeave={(event) =>
+              handleCardMouseLeave(
+                event,
                 userRole === "admin"
-                  ? 1
-                  : 0.75,
-            }}
+              )
+            }
+            style={dashboardCardStyle(
+              userRole === "admin"
+            )}
+            title={
+              userRole === "admin"
+                ? "Manage Users"
+                : "Total users"
+            }
           >
             <FaUsers
               size={42}
@@ -500,31 +599,46 @@ function Home() {
             {userRole === "admin" && (
               <div
                 style={{
-                  marginTop: "10px",
                   color: "#1565C0",
-                  fontSize: "14px",
                   fontWeight: "bold",
+                  fontSize: "13px",
+                  marginTop: "8px",
                 }}
               >
                 Manage Users →
               </div>
             )}
-          </button>
+          </div>
 
           {/* TOTAL LANDS */}
-          <button
-            type="button"
-            onClick={() => {
-              if (userRole === "farmer") {
-                navigate("/my-lands");
-              } else {
-                navigate("/all-lands");
+
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              handleDashboardCardClick(
+                "total_lands"
+              )
+            }
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
+                event.preventDefault();
+                handleDashboardCardClick(
+                  "total_lands"
+                );
               }
             }}
-            style={{
-              ...dashboardCardStyle,
-              cursor: "pointer",
-            }}
+            onMouseEnter={(event) =>
+              handleCardMouseEnter(event, true)
+            }
+            onMouseLeave={(event) =>
+              handleCardMouseLeave(event, true)
+            }
+            style={dashboardCardStyle(true)}
+            title="Browse Lands"
           >
             <FaSeedling
               size={42}
@@ -537,28 +651,45 @@ function Home() {
 
             <div
               style={{
-                marginTop: "10px",
                 color: "#2E7D32",
-                fontSize: "14px",
                 fontWeight: "bold",
+                fontSize: "13px",
+                marginTop: "8px",
               }}
             >
-              {userRole === "farmer"
-                ? "View My Lands →"
-                : "Browse Lands →"}
+              Browse Lands →
             </div>
-          </button>
+          </div>
 
           {/* MY LANDS */}
-          <button
-            type="button"
+
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() =>
-              navigate("/my-lands")
+              handleDashboardCardClick(
+                "my_lands"
+              )
             }
-            style={{
-              ...dashboardCardStyle,
-              cursor: "pointer",
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
+                event.preventDefault();
+                handleDashboardCardClick(
+                  "my_lands"
+                );
+              }
             }}
+            onMouseEnter={(event) =>
+              handleCardMouseEnter(event, true)
+            }
+            onMouseLeave={(event) =>
+              handleCardMouseLeave(event, true)
+            }
+            style={dashboardCardStyle(true)}
+            title="Open My Lands"
           >
             <FaMapMarkedAlt
               size={42}
@@ -571,26 +702,45 @@ function Home() {
 
             <div
               style={{
-                marginTop: "10px",
                 color: "#EF6C00",
-                fontSize: "14px",
                 fontWeight: "bold",
+                fontSize: "13px",
+                marginTop: "8px",
               }}
             >
-              View My Lands →
+              Open My Lands →
             </div>
-          </button>
+          </div>
 
           {/* FAVORITES */}
-          <button
-            type="button"
+
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() =>
-              navigate("/favorites")
+              handleDashboardCardClick(
+                "favorites"
+              )
             }
-            style={{
-              ...dashboardCardStyle,
-              cursor: "pointer",
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
+                event.preventDefault();
+                handleDashboardCardClick(
+                  "favorites"
+                );
+              }
             }}
+            onMouseEnter={(event) =>
+              handleCardMouseEnter(event, true)
+            }
+            onMouseLeave={(event) =>
+              handleCardMouseLeave(event, true)
+            }
+            style={dashboardCardStyle(true)}
+            title="Open Favorites"
           >
             <FaHeart
               size={42}
@@ -603,26 +753,45 @@ function Home() {
 
             <div
               style={{
-                marginTop: "10px",
                 color: "#D81B60",
-                fontSize: "14px",
                 fontWeight: "bold",
+                fontSize: "13px",
+                marginTop: "8px",
               }}
             >
-              View Favorites →
+              Open Favorites →
             </div>
-          </button>
+          </div>
 
           {/* CHATS */}
-          <button
-            type="button"
+
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() =>
-              navigate("/my-chats")
+              handleDashboardCardClick(
+                "chats"
+              )
             }
-            style={{
-              ...dashboardCardStyle,
-              cursor: "pointer",
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
+                event.preventDefault();
+                handleDashboardCardClick(
+                  "chats"
+                );
+              }
             }}
+            onMouseEnter={(event) =>
+              handleCardMouseEnter(event, true)
+            }
+            onMouseLeave={(event) =>
+              handleCardMouseLeave(event, true)
+            }
+            style={dashboardCardStyle(true)}
+            title="Open Chats"
           >
             <FaComments
               size={42}
@@ -635,26 +804,45 @@ function Home() {
 
             <div
               style={{
-                marginTop: "10px",
                 color: "#6A1B9A",
-                fontSize: "14px",
                 fontWeight: "bold",
+                fontSize: "13px",
+                marginTop: "8px",
               }}
             >
               Open Chats →
             </div>
-          </button>
+          </div>
 
           {/* NOTIFICATIONS */}
-          <button
-            type="button"
+
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() =>
-              navigate("/notifications")
+              handleDashboardCardClick(
+                "notifications"
+              )
             }
-            style={{
-              ...dashboardCardStyle,
-              cursor: "pointer",
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
+                event.preventDefault();
+                handleDashboardCardClick(
+                  "notifications"
+                );
+              }
             }}
+            onMouseEnter={(event) =>
+              handleCardMouseEnter(event, true)
+            }
+            onMouseLeave={(event) =>
+              handleCardMouseLeave(event, true)
+            }
+            style={dashboardCardStyle(true)}
+            title="Open Notifications"
           >
             <FaBell
               size={42}
@@ -667,15 +855,15 @@ function Home() {
 
             <div
               style={{
-                marginTop: "10px",
                 color: "#F9A825",
-                fontSize: "14px",
                 fontWeight: "bold",
+                fontSize: "13px",
+                marginTop: "8px",
               }}
             >
-              View Notifications →
+              Open Notifications →
             </div>
-          </button>
+          </div>
         </div>
 
         {/* =================================================
@@ -719,15 +907,16 @@ function Home() {
           </button>
 
           <button
+            disabled={userRole === "farmer"}
             style={{
               ...quickButton("#EF6C00"),
-              opacity: userRole === "farmer" ? 0.5 : 1,
+              opacity:
+                userRole === "farmer" ? 0.5 : 1,
               cursor:
                 userRole === "farmer"
                   ? "not-allowed"
                   : "pointer",
             }}
-            disabled={userRole === "farmer"}
             onClick={() => {
               if (userRole !== "farmer") {
                 navigate("/all-lands");
@@ -796,6 +985,7 @@ function Home() {
                     position: "relative",
                   }}
                 >
+
                   {/* LAND IMAGE */}
 
                   <div
@@ -924,7 +1114,9 @@ function Home() {
                       disabled={userRole === "farmer"}
                       onClick={() => {
                         if (userRole !== "farmer") {
-                          navigate(`/land/${land.id}`);
+                          navigate(
+                            `/land/${land.id}`
+                          );
                         }
                       }}
                       style={{
