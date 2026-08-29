@@ -278,19 +278,20 @@ function Home() {
   // =====================================================
 
   const dashboardCardStyle = (clickable) => ({
-    background: "#fff",
-    borderRadius: "15px",
-    padding: "25px",
+    background: "rgba(255,255,255,.97)",
+    borderRadius: "18px",
+    padding: "24px 20px",
     boxShadow:
-      "0 6px 18px rgba(0,0,0,0.12)",
+      "0 5px 18px rgba(31,72,35,.09)",
     textAlign: "center",
     flex: "1",
     minWidth: "180px",
     cursor: clickable ? "pointer" : "default",
     transition:
-      "transform 0.2s ease, box-shadow 0.2s ease",
-    border: "none",
+      "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
+    border: "1px solid #E3ECE4",
     width: "100%",
+    boxSizing: "border-box",
   });
 
   const handleCardMouseEnter = (event, clickable) => {
@@ -300,7 +301,9 @@ function Home() {
       "translateY(-4px)";
 
     event.currentTarget.style.boxShadow =
-      "0 10px 24px rgba(0,0,0,0.18)";
+      "0 14px 28px rgba(31,72,35,0.16)";
+    event.currentTarget.style.borderColor =
+      "#B8D8BD";
   };
 
   const handleCardMouseLeave = (event, clickable) => {
@@ -310,7 +313,9 @@ function Home() {
       "translateY(0)";
 
     event.currentTarget.style.boxShadow =
-      "0 6px 18px rgba(0,0,0,0.12)";
+      "0 5px 18px rgba(31,72,35,0.09)";
+    event.currentTarget.style.borderColor =
+      "#E3ECE4";
   };
 
   // =====================================================
@@ -445,13 +450,20 @@ function Home() {
     background: color,
     color: "#fff",
     border: "none",
-    borderRadius: "10px",
-    padding: "15px",
+    borderRadius: "12px",
+    padding: "13px 18px",
     cursor: "pointer",
-    fontSize: "16px",
-    fontWeight: "bold",
+    fontSize: "15px",
+    fontWeight: "700",
     width: "100%",
     maxWidth: "280px",
+    minHeight: "48px",
+    boxShadow: "0 6px 14px rgba(0,0,0,.10)",
+    transition: "transform .2s ease, box-shadow .2s ease",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
   });
 
   // =====================================================
@@ -462,11 +474,35 @@ function Home() {
     <>
       <Navbar />
 
+        <style>{`
+          @media (max-width: 700px) {
+            .home-dashboard-card-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+            .home-quick-actions {
+              display: grid !important;
+              grid-template-columns: 1fr 1fr;
+            }
+            .home-quick-actions button {
+              max-width: none !important;
+            }
+          }
+          @media (max-width: 480px) {
+            .home-dashboard-card-grid {
+              grid-template-columns: 1fr !important;
+            }
+            .home-quick-actions {
+              grid-template-columns: 1fr;
+            }
+          }
+        `}</style>
+
       <div
         style={{
           minHeight: "100vh",
-          background: "#F5F7FA",
-          padding: "25px",
+          background: "linear-gradient(180deg,#F7FAF7 0%,#F5F7FA 55%,#EEF4EF 100%)",
+          padding: "clamp(16px,3vw,32px)",
+          boxSizing: "border-box",
         }}
       >
 
@@ -477,11 +513,14 @@ function Home() {
         <div
           style={{
             background:
-              "linear-gradient(135deg,#2E7D32,#43A047)",
+              "linear-gradient(135deg,#1B5E20 0%,#2E7D32 55%,#43A047 100%)",
             color: "#fff",
-            borderRadius: "20px",
-            padding: "24px",
-            marginBottom: "35px",
+            borderRadius: "24px",
+            padding: "clamp(24px,4vw,38px)",
+            marginBottom: "34px",
+            boxShadow: "0 14px 35px rgba(46,125,50,.18)",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
           <h1
@@ -528,11 +567,12 @@ function Home() {
         </h2>
 
         <div
+          className="home-dashboard-card-grid"
           style={{
             display: "grid",
             gridTemplateColumns:
-              "repeat(auto-fit,minmax(220px,1fr))",
-            gap: "20px",
+              "repeat(auto-fit,minmax(200px,1fr))",
+            gap: "18px",
           }}
         >
 
@@ -872,20 +912,22 @@ function Home() {
 
         <h2
           style={{
-            marginTop: "50px",
-            color: "#2E7D32",
+            marginTop: "46px",
+            color: "#1B5E20",
+            fontWeight: "800",
           }}
         >
           Quick Actions
         </h2>
 
         <div
+          className="home-quick-actions"
           style={{
             display: "flex",
             flexWrap: "wrap",
             justifyContent: "center",
             gap: "20px",
-            marginTop: "25px",
+            marginTop: "20px",
           }}
         >
           <button
@@ -942,7 +984,7 @@ function Home() {
 
         <div
           style={{
-            marginTop: "60px",
+            marginTop: "48px",
           }}
         >
           <h2
@@ -980,9 +1022,11 @@ function Home() {
                     borderRadius: "18px",
                     overflow: "hidden",
                     boxShadow:
-                      "0 8px 20px rgba(0,0,0,.12)",
+                      "0 8px 24px rgba(31,72,35,.11)",
+                    border: "1px solid #E2EBE3",
                     transition: ".3s",
                     position: "relative",
+                    background: "#fff",
                   }}
                 >
 
@@ -1001,8 +1045,9 @@ function Home() {
                       alt={land.title}
                       style={{
                         width: "100%",
-                        height: "220px",
+                        height: "clamp(190px,22vw,230px)",
                         objectFit: "cover",
+                        display: "block",
                       }}
                     />
 
@@ -1071,14 +1116,16 @@ function Home() {
 
                   <div
                     style={{
-                      padding: "20px",
+                      padding: "20px 20px 22px",
                     }}
                   >
                     <h3
                       style={{
                         marginBottom:
                           "10px",
-                        color: "#2E7D32",
+                        color: "#1B5E20",
+                        fontSize: "20px",
+                        lineHeight: "1.3",
                       }}
                     >
                       {land.title}
@@ -1103,8 +1150,10 @@ function Home() {
                     <p
                       style={{
                         color: "#E65100",
-                        fontWeight: "bold",
-                        fontSize: "20px",
+                        fontWeight: "800",
+                        fontSize: "21px",
+                        marginTop: "12px",
+                        marginBottom: "8px",
                       }}
                     >
                       ₹{land.price}
@@ -1157,11 +1206,12 @@ function Home() {
         <div
           style={{
             marginTop: "60px",
-            background: "#fff",
-            borderRadius: "18px",
-            padding: "30px",
+            background: "rgba(255,255,255,.97)",
+            borderRadius: "20px",
+            padding: "clamp(20px,3vw,30px)",
             boxShadow:
-              "0 6px 18px rgba(0,0,0,0.10)",
+              "0 8px 24px rgba(31,72,35,.09)",
+            border: "1px solid #E3ECE4",
           }}
         >
           <div
@@ -1177,8 +1227,9 @@ function Home() {
           >
             <h2
               style={{
-                color: "#2E7D32",
+                color: "#1B5E20",
                 margin: 0,
+                fontWeight: "800",
               }}
             >
               🌱 Recent Activity
@@ -1192,8 +1243,8 @@ function Home() {
                 background: "#1976D2",
                 color: "#fff",
                 border: "none",
-                borderRadius: "8px",
-                padding: "9px 15px",
+                borderRadius: "10px",
+                padding: "10px 16px",
                 cursor: "pointer",
                 fontWeight: "bold",
               }}
