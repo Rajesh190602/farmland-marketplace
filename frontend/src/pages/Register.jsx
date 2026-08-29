@@ -147,6 +147,17 @@ function Register() {
   // ===============================
 
   const sendOTP = async () => {
+    // =====================================================
+    // MOBILE VALIDATION MUST HAPPEN BEFORE EMAIL OTP
+    // =====================================================
+
+    const mobile = formData.mobile.trim();
+
+    if (!/^\d{10}$/.test(mobile)) {
+      alert("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+
     if (!formData.email.trim()) {
       alert("Please enter your email.");
       return;
@@ -225,8 +236,8 @@ function Register() {
       return;
     }
 
-    if (formData.mobile.length !== 10) {
-      alert("Please enter a valid mobile number.");
+    if (!/^\d{10}$/.test(formData.mobile.trim())) {
+      alert("Please enter a valid 10-digit mobile number.");
       return;
     }
 
@@ -471,19 +482,28 @@ function Register() {
               placeholder="10-digit Mobile Number"
               value={formData.mobile}
               onChange={(e) => {
-                const value =
-                  e.target.value.replace(
-                    /\D/g,
-                    ""
-                  );
+                const value = e.target.value;
 
-                if (value.length <= 10) {
+                // Reject letters and symbols instead of silently
+                // stripping them from the entered value.
+                if (!/^\d*$/.test(value)) {
+                  alert(
+                    "Mobile number must contain digits only."
+                  );
+                  return;
+                }
+
+                // Allow extra digits to remain visible so that
+                // 11+ digits can be explicitly rejected.
+                if (value.length <= 15) {
                   setFormData((prev) => ({
                     ...prev,
                     mobile: value,
                   }));
                 }
               }}
+              inputMode="numeric"
+              autoComplete="tel"
               required
               style={modernInput}
             />
