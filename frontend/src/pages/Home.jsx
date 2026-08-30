@@ -195,9 +195,32 @@ function Home() {
 
   const fetchDashboard = async () => {
     try {
+      // Keep the existing dashboard data for users, lands,
+      // favorites and recent activity.
       const response = await api.get(
         "/dashboard"
       );
+
+      // Home badges show NEW/UNREAD items.
+      // Notifications already have a dedicated unread-count
+      // endpoint. Chats now return unread_count per conversation.
+      const [
+        notificationCountResponse,
+        conversationsResponse,
+      ] = await Promise.all([
+        api.get("/notifications/unread-count"),
+        api.get("/chat/my-conversations"),
+      ]);
+
+      const conversations =
+        conversationsResponse.data || [];
+
+      // Count unread CONVERSATIONS, not total messages.
+      // Example: 3 unread messages in one chat = Chats 1.
+      const unreadChats = conversations.filter(
+        (conversation) =>
+          Number(conversation.unread_count || 0) > 0
+      ).length;
 
       setStats({
         total_users:
@@ -212,11 +235,12 @@ function Home() {
         favorites:
           response.data.favorites || 0,
 
-        chats:
-          response.data.chats || 0,
+        chats: unreadChats,
 
         notifications:
-          response.data.notifications || 0,
+          Number(
+            notificationCountResponse.data.unread_count
+          ) || 0,
       });
 
       // -----------------------------------------------

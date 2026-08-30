@@ -824,6 +824,40 @@ def my_conversations(
             .first()
         )
 
+        # ----------------------------------
+        # Count unread messages
+        # ----------------------------------
+        #
+        # Only messages sent by the OTHER participant
+        # are unread for the current user.
+        #
+        # This is intentionally a conversation-level
+        # count for the Home dashboard:
+        #
+        #   0 unread messages -> conversation is not new
+        #   1+ unread messages -> conversation is new
+        #
+        # Therefore, if one conversation has 5 unread
+        # messages, Home Chats counts it as 1 unread chat,
+        # not 5.
+        #
+        # The existing /messages/{conversation_id}
+        # endpoint continues to mark incoming messages
+        # as read when the conversation is opened.
+        # ----------------------------------
+
+        unread_count = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id ==
+                conversation.id,
+                Message.sender_id !=
+                current_user,
+                Message.is_read == False
+            )
+            .count()
+        )
+
         result.append(
             {
                 "conversation_id":
@@ -853,7 +887,12 @@ def my_conversations(
                 "last_message_time":
                     last_message.created_at
                     if last_message
-                    else None
+                    else None,
+
+                # Number of unread incoming messages
+                # in this conversation.
+                "unread_count":
+                    unread_count
             }
         )
 
