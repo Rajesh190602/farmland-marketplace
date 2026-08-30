@@ -474,6 +474,27 @@ function Home() {
     <>
       <Navbar />
 
+      <style>{`
+        .home-page{min-height:100vh;background:radial-gradient(circle at 8% 0%,rgba(76,175,80,.09),transparent 28%),radial-gradient(circle at 92% 10%,rgba(33,150,243,.06),transparent 25%),#f4f7f4}
+        .home-container{max-width:1400px;margin:0 auto}
+        .home-hero{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:30px;min-height:220px;padding:clamp(28px,5vw,48px);border-radius:28px;background:linear-gradient(120deg,#174d1c 0%,#2e7d32 55%,#4caf50 100%);box-shadow:0 18px 45px rgba(30,91,35,.20);margin-bottom:38px}
+        .home-hero::after{content:"";position:absolute;width:260px;height:260px;border:1px solid rgba(255,255,255,.14);border-radius:50%;right:-70px;top:-90px;box-shadow:0 0 0 35px rgba(255,255,255,.035),0 0 0 70px rgba(255,255,255,.025)}
+        .home-hero-content{position:relative;z-index:1;max-width:780px}
+        .home-eyebrow{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.20);font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:14px}
+        .home-hero h1{letter-spacing:-1px}.home-hero h2{font-size:clamp(20px,3vw,28px);margin:12px 0 8px!important}.home-hero p{max-width:680px;opacity:.92;line-height:1.6;margin-bottom:0}
+        .home-hero-art{position:relative;z-index:1;width:130px;height:130px;flex:0 0 130px;border-radius:34px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.15);font-size:62px}
+        .home-section-title{display:flex;align-items:end;justify-content:space-between;gap:16px;margin:42px 0 18px}.home-section-title h2{margin:0!important;color:#174d1c!important;font-weight:850!important;letter-spacing:-.4px}.home-section-title span{color:#6b786d;font-size:13px}
+        .home-dashboard-card{position:relative;overflow:hidden;text-align:left!important}.home-dashboard-card::before{content:"";position:absolute;left:0;top:0;width:5px;height:100%;background:var(--card-accent,#2e7d32);opacity:.9}
+        .home-dashboard-card h3{margin:14px 0 4px!important;color:#26352a;font-size:15px;font-weight:750}.home-dashboard-card h1{margin:0!important;color:#142219;font-size:clamp(30px,4vw,38px);line-height:1.1}
+        .home-stat-icon{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#f2f7f2}
+        .home-quick-actions{align-items:stretch!important}.home-quick-actions button{box-shadow:0 8px 18px rgba(31,55,35,.12)!important;transition:transform .2s ease,box-shadow .2s ease}.home-quick-actions button:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(31,55,35,.17)!important}
+        .home-land-section{margin-top:44px!important}.home-land-card{display:flex;flex-direction:column;height:100%;background:#fff!important;border:1px solid #dfe9e1!important;box-shadow:0 10px 28px rgba(31,72,35,.10)!important;transition:transform .25s ease,box-shadow .25s ease}.home-land-card:hover{transform:translateY(-4px);box-shadow:0 18px 34px rgba(31,72,35,.15)!important}
+        .home-land-image-wrap{background:#e9f0ea}.home-land-details{flex:1;display:flex;flex-direction:column}.home-land-details p{margin:7px 0;color:#536057;font-size:14px}.home-land-details strong{color:#34463a}.home-view-button{margin-top:auto!important;min-height:46px;font-size:15px;border-radius:11px!important}
+        .home-activity{margin-top:44px!important;background:rgba(255,255,255,.98)!important;border:1px solid #dfe9e1!important;box-shadow:0 10px 28px rgba(31,72,35,.08)!important}.home-activity-row{background:#f7faf7!important;border-color:#e2ebe3!important;transition:transform .2s ease,background .2s ease}.home-activity-row:hover{transform:translateX(3px);background:#f1f7f1!important}
+        @media(max-width:700px){.home-hero{min-height:auto;padding:25px;border-radius:22px}.home-hero-art{display:none}.home-section-title{align-items:flex-start;flex-direction:column;gap:4px}.home-dashboard-card{padding:20px 18px!important}.home-land-grid{grid-template-columns:1fr!important}}
+        @media(max-width:480px){.home-hero h1{font-size:28px!important}.home-hero h2{font-size:20px!important}.home-quick-actions{display:grid!important;grid-template-columns:1fr!important}.home-quick-actions button{max-width:none!important}}
+      `}</style>
+
         <style>{`
           @media (max-width: 700px) {
             .home-dashboard-card-grid {
@@ -498,6 +519,7 @@ function Home() {
         `}</style>
 
       <div
+        className="home-page"
         style={{
           minHeight: "100vh",
           background: "linear-gradient(180deg,#F7FAF7 0%,#F5F7FA 55%,#EEF4EF 100%)",
@@ -506,65 +528,29 @@ function Home() {
         }}
       >
 
+        <div className="home-container">
+
         {/* =================================================
             WELCOME
         ================================================= */}
 
-        <div
-          style={{
-            background:
-              "linear-gradient(135deg,#1B5E20 0%,#2E7D32 55%,#43A047 100%)",
-            color: "#fff",
-            borderRadius: "24px",
-            padding: "clamp(24px,4vw,38px)",
-            marginBottom: "34px",
-            boxShadow: "0 14px 35px rgba(46,125,50,.18)",
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <h1
-            style={{
-              margin: 0,
-              fontSize:
-                "clamp(28px, 5vw, 38px)",
-            }}
-          >
-            🌾 Farmland Marketplace
-          </h1>
-
-          <h2
-            style={{
-              marginTop: "15px",
-            }}
-          >
-            Welcome Back, {userName}! 👋
-          </h2>
-
-          <p
-            style={{
-              fontSize:
-                "clamp(15px, 2.5vw, 18px)",
-              marginTop: "10px",
-            }}
-          >
-            Manage your farmland, connect with
-            buyers, and grow your farming business.
-          </p>
+        <div className="home-hero">
+          <div className="home-hero-content">
+            <div className="home-eyebrow">🌾 Farmland Marketplace</div>
+            <h1 style={{margin:0,fontSize:"clamp(30px,5vw,44px)"}}>Welcome Back, {userName}! 👋</h1>
+            <h2>Your farmland dashboard</h2>
+            <p>Manage your farmland, connect with buyers, and grow your farming business from one place.</p>
+          </div>
+          <div className="home-hero-art" aria-hidden="true">🌱</div>
         </div>
 
         {/* =================================================
             STATISTICS
         ================================================= */}
 
-        <h2
-          style={{
-            marginBottom: "20px",
-            color: "#2E7D32",
-          }}
-        >
-          Dashboard Overview
-        </h2>
+        <div className="home-section-title">
+          <div><h2>Dashboard Overview</h2><span>Your account at a glance</span></div>
+        </div>
 
         <div
           className="home-dashboard-card-grid"
@@ -618,19 +604,15 @@ function Home() {
                 userRole === "admin"
               )
             }
-            style={dashboardCardStyle(
-              userRole === "admin"
-            )}
+            className="home-dashboard-card"
+            style={{...dashboardCardStyle(userRole === "admin"),"--card-accent":"#1565C0"}}
             title={
               userRole === "admin"
                 ? "Manage Users"
                 : "Total users"
             }
           >
-            <FaUsers
-              size={42}
-              color="#1565C0"
-            />
+            <div className="home-stat-icon"><FaUsers size={26} color="#1565C0" /></div>
 
             <h3>Total Users</h3>
 
@@ -677,13 +659,11 @@ function Home() {
             onMouseLeave={(event) =>
               handleCardMouseLeave(event, true)
             }
-            style={dashboardCardStyle(true)}
+            className="home-dashboard-card"
+            style={{...dashboardCardStyle(true),"--card-accent":"#2E7D32"}}
             title="Browse Lands"
           >
-            <FaSeedling
-              size={42}
-              color="#2E7D32"
-            />
+            <div className="home-stat-icon"><FaSeedling size={26} color="#2E7D32" /></div>
 
             <h3>Total Lands</h3>
 
@@ -728,13 +708,11 @@ function Home() {
             onMouseLeave={(event) =>
               handleCardMouseLeave(event, true)
             }
-            style={dashboardCardStyle(true)}
+            className="home-dashboard-card"
+            style={{...dashboardCardStyle(true),"--card-accent":"#EF6C00"}}
             title="Open My Lands"
           >
-            <FaMapMarkedAlt
-              size={42}
-              color="#EF6C00"
-            />
+            <div className="home-stat-icon"><FaMapMarkedAlt size={26} color="#EF6C00" /></div>
 
             <h3>My Lands</h3>
 
@@ -779,13 +757,11 @@ function Home() {
             onMouseLeave={(event) =>
               handleCardMouseLeave(event, true)
             }
-            style={dashboardCardStyle(true)}
+            className="home-dashboard-card"
+            style={{...dashboardCardStyle(true),"--card-accent":"#D81B60"}}
             title="Open Favorites"
           >
-            <FaHeart
-              size={42}
-              color="#D81B60"
-            />
+            <div className="home-stat-icon"><FaHeart size={26} color="#D81B60" /></div>
 
             <h3>Favorites</h3>
 
@@ -830,13 +806,11 @@ function Home() {
             onMouseLeave={(event) =>
               handleCardMouseLeave(event, true)
             }
-            style={dashboardCardStyle(true)}
+            className="home-dashboard-card"
+            style={{...dashboardCardStyle(true),"--card-accent":"#6A1B9A"}}
             title="Open Chats"
           >
-            <FaComments
-              size={42}
-              color="#6A1B9A"
-            />
+            <div className="home-stat-icon"><FaComments size={26} color="#6A1B9A" /></div>
 
             <h3>Chats</h3>
 
@@ -881,13 +855,11 @@ function Home() {
             onMouseLeave={(event) =>
               handleCardMouseLeave(event, true)
             }
-            style={dashboardCardStyle(true)}
+            className="home-dashboard-card"
+            style={{...dashboardCardStyle(true),"--card-accent":"#F9A825"}}
             title="Open Notifications"
           >
-            <FaBell
-              size={42}
-              color="#F9A825"
-            />
+            <div className="home-stat-icon"><FaBell size={26} color="#F9A825" /></div>
 
             <h3>Notifications</h3>
 
@@ -910,15 +882,9 @@ function Home() {
             QUICK ACTIONS
         ================================================= */}
 
-        <h2
-          style={{
-            marginTop: "46px",
-            color: "#1B5E20",
-            fontWeight: "800",
-          }}
-        >
-          Quick Actions
-        </h2>
+        <div className="home-section-title">
+          <div><h2>Quick Actions</h2><span>Common tasks and shortcuts</span></div>
+        </div>
 
         <div
           className="home-quick-actions"
@@ -982,27 +948,18 @@ function Home() {
             FEATURED LANDS
         ================================================= */}
 
-        <div
-          style={{
-            marginTop: "48px",
-          }}
-        >
-          <h2
-            style={{
-              color: "#2E7D32",
-              marginBottom: "25px",
-              textAlign: "center",
-            }}
-          >
-            ⭐ Featured Lands
-          </h2>
+        <div className="home-land-section">
+          <div className="home-section-title">
+            <div><h2>⭐ Featured Lands</h2><span>Explore available farmland</span></div>
+          </div>
 
           <div
+            className="home-land-grid"
             style={{
               display: "grid",
               gridTemplateColumns:
                 "repeat(auto-fit,minmax(300px,1fr))",
-              gap: "25px",
+              gap: "22px",
             }}
           >
             {featuredLands.map((land) => {
@@ -1017,6 +974,7 @@ function Home() {
               return (
                 <div
                   key={land.id}
+                  className="home-land-card"
                   style={{
                     background: "#fff",
                     borderRadius: "18px",
@@ -1033,6 +991,7 @@ function Home() {
                   {/* LAND IMAGE */}
 
                   <div
+                    className="home-land-image-wrap"
                     style={{
                       position: "relative",
                     }}
@@ -1115,6 +1074,7 @@ function Home() {
                   {/* LAND DETAILS */}
 
                   <div
+                    className="home-land-details"
                     style={{
                       padding: "20px 20px 22px",
                     }}
@@ -1168,6 +1128,7 @@ function Home() {
                           );
                         }
                       }}
+                      className="home-view-button"
                       style={{
                         marginTop: "15px",
                         width: "100%",
@@ -1204,6 +1165,7 @@ function Home() {
         ================================================= */}
 
         <div
+          className="home-activity"
           style={{
             marginTop: "60px",
             background: "rgba(255,255,255,.97)",
@@ -1295,6 +1257,7 @@ function Home() {
                   return (
                     <div
                       key={activity.id}
+                      className="home-activity-row"
                       onClick={() =>
                         clickable &&
                         openActivity(
@@ -1443,6 +1406,7 @@ function Home() {
               activities
             </div>
           )}
+        </div>
         </div>
       </div>
     </>
