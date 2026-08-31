@@ -178,7 +178,9 @@ class LandResponse(BaseModel):
 
 class ConversationCreate(BaseModel):
     land_id: int
-
+class FarmerReplyConversationCreate(BaseModel):
+    land_id: int
+    buyer_id: int
 
 class MessageCreate(BaseModel):
     conversation_id: int

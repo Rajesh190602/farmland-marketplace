@@ -27,7 +27,8 @@ from app.models import (
 
 from app.schemas import (
     ConversationCreate,
-    MessageCreate
+    MessageCreate,
+    FarmerReplyConversationCreate
 )
 
 
@@ -180,7 +181,135 @@ def start_chat(
         "message": "Conversation created successfully"
     }
 
+# =========================================================
+# FARMER REPLY TO BUYER
+# =========================================================
 
+@router.post("/reply")
+def reply_to_buyer(
+    data: FarmerReplyConversationCreate,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # ----------------------------------
+    # Get current user
+    # ----------------------------------
+
+    farmer = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not farmer:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # ----------------------------------
+    # Only farmers can use this endpoint
+    # ----------------------------------
+
+    if farmer.role != "farmer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only farmers can reply to buyers"
+        )
+
+    # ----------------------------------
+    # Get land
+    # ----------------------------------
+
+    land = (
+        db.query(Land)
+        .filter(
+            Land.id == data.land_id,
+            Land.owner_id == current_user
+        )
+        .first()
+    )
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found or you are not the owner"
+        )
+
+    
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.land_id == land.id,
+            Conversation.buyer_id == data.buyer_id,
+            Conversation.farmer_id == current_user
+        )
+        .first()
+    )
+
+    # ----------------------------------
+    # If conversation exists
+    # ----------------------------------
+
+    if conversation:
+        return {
+            "conversation_id": conversation.id,
+            "message": "Conversation already exists"
+        }
+
+    # ----------------------------------
+    # Verify buyer
+    # ----------------------------------
+
+    buyer = (
+        db.query(User)
+        .filter(
+            User.id == data.buyer_id,
+            User.role == "buyer"
+        )
+        .first()
+    )
+
+    if not buyer:
+        raise HTTPException(
+            status_code=404,
+            detail="Buyer not found"
+        )
+
+    # ----------------------------------
+    # Create conversation
+    # ----------------------------------
+
+    conversation = Conversation(
+        buyer_id=buyer.id,
+        farmer_id=current_user,
+        land_id=land.id
+    )
+
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+
+    # ----------------------------------
+    # Notify buyer
+    # ----------------------------------
+
+    notification = Notification(
+        user_id=buyer.id,
+        title="💬 New Message",
+        message=(
+            f"{farmer.full_name} started a conversation "
+            f"about your land '{land.title}'."
+        )
+    )
+
+    db.add(notification)
+    db.commit()
+
+    return {
+        "conversation_id": conversation.id,
+        "message": "Conversation created successfully"
+    }
 # =========================================================
 # SEND TEXT MESSAGE
 # =========================================================
