@@ -1,5 +1,5 @@
 import os
-
+from app.routers.marketplace import router as marketplace_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +45,7 @@ app.mount(
 # Register routers
 app.include_router(users.router)
 app.include_router(lands.router)
+app.include_router(marketplace_router)
 app.include_router(upload.router)
 app.include_router(land_images.router)
 app.include_router(dashboard.router)

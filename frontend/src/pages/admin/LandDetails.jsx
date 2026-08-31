@@ -1,356 +1,411 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../../services/api";
+import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import LandMap from "../../components/LandMap";
-function  LandDetails(){
+import api from "../../services/api";
+
+function LandDetails() {
+  const { id } = useParams();
   const navigate = useNavigate();
 
-  const [lands, setLands] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [land, setLand] = useState(null);
+  const [deletingImageId, setDeletingImageId] = useState(null);
 
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-
-  const [actionLoading, setActionLoading] = useState(null);
-
-  const limit = 10;
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
 
   // =========================================================
-  // LOAD LANDS
+  // PHASE 1 - MARKETPLACE STATE
   // =========================================================
 
-  const fetchLands = async () => {
-    try {
-      setLoading(true);
+  const [availability, setAvailability] = useState(null);
+  const [marketplaceLoading, setMarketplaceLoading] =
+    useState(false);
 
-      const response = await api.get("/admin/lands", {
-        params: {
-          search: search.trim(),
-          status,
-          page,
-          limit,
-        },
-      });
+  const [inquiryMessage, setInquiryMessage] = useState("");
+  const [offerAmount, setOfferAmount] = useState("");
+  const [offerMessage, setOfferMessage] = useState("");
 
-      console.log(
-        "Admin Lands Response:",
-        response.data
-      );
+  const [visitDate, setVisitDate] = useState("");
+  const [visitMessage, setVisitMessage] = useState("");
 
-      setLands(
-        Array.isArray(response.data.lands)
-          ? response.data.lands
-          : []
-      );
-
-      setTotal(
-        typeof response.data.total === "number"
-          ? response.data.total
-          : 0
-      );
-    } catch (error) {
-      console.error(
-        "Failed to load admin lands:",
-        error
-      );
-
-      if (error.response?.status === 401) {
-        return;
-      }
-
-      alert(
-        error.response?.data?.detail ||
-          "Failed to load lands."
-      );
-
-      setLands([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLands();
-  }, [page, status]);
-
-  // =========================================================
-  // SEARCH
-  // =========================================================
-
-  const handleSearch = (event) => {
-    event.preventDefault();
-
-    setPage(1);
-
-    fetchLands();
-  };
-
-  // =========================================================
-  // VIEW LAND
-  // =========================================================
-
-  const viewLand = (landId) => {
-    navigate(`/admin/lands/${landId}`);
-  };
-
-  // =========================================================
-  // EDIT LAND
-  // =========================================================
-
-  const editLand = (landId) => {
-    navigate(`/admin/edit-land/${landId}`);
-  };
-
-  // =========================================================
-  // APPROVE
-  // =========================================================
-
-  const approveLand = async (landId) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to approve this land?\n\n" +
-        "The land will become visible to buyers."
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setActionLoading(landId);
-
-      await api.put(
-        `/admin/lands/${landId}/approve`
-      );
-
-      alert(
-        "Land approved successfully."
-      );
-
-      await fetchLands();
-    } catch (error) {
-      console.error(
-        "Approve error:",
-        error
-      );
-
-      alert(
-        error.response?.data?.detail ||
-          "Failed to approve land."
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // =========================================================
-  // REQUEST CHANGES
-  // =========================================================
-
-  const requestChanges = async (landId) => {
-    const reason = window.prompt(
-      "Enter the reason for requesting changes:"
-    );
-
-    if (reason === null) {
-      return;
-    }
-
-    const trimmedReason =
-      reason.trim();
-
-    if (!trimmedReason) {
-      alert(
-        "Reason is required."
-      );
-      return;
-    }
-
-    try {
-      setActionLoading(landId);
-
-      await api.put(
-        `/admin/lands/${landId}/request-changes`,
-        {
-          reason: trimmedReason,
-        }
-      );
-
-      alert(
-        "Changes requested successfully."
-      );
-
-      await fetchLands();
-    } catch (error) {
-      console.error(
-        "Request changes error:",
-        error
-      );
-
-      alert(
-        error.response?.data?.detail ||
-          "Failed to request changes."
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // =========================================================
-  // REJECT
-  // =========================================================
-
-  const rejectLand = async (landId) => {
-    const reason = window.prompt(
-      "Enter the reason for rejecting this land:"
-    );
-
-    if (reason === null) {
-      return;
-    }
-
-    const trimmedReason =
-      reason.trim();
-
-    if (!trimmedReason) {
-      alert(
-        "Reason is required."
-      );
-      return;
-    }
-
-    try {
-      setActionLoading(landId);
-
-      await api.put(
-        `/admin/lands/${landId}/reject`,
-        {
-          reason: trimmedReason,
-        }
-      );
-
-      alert(
-        "Land rejected successfully."
-      );
-
-      await fetchLands();
-    } catch (error) {
-      console.error(
-        "Reject error:",
-        error
-      );
-
-      alert(
-        error.response?.data?.detail ||
-          "Failed to reject land."
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // =========================================================
-  // DELETE
-  // =========================================================
-
-  const deleteLand = async (landId) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to permanently delete this land?\n\n" +
-        "This action cannot be undone."
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setActionLoading(landId);
-
-      await api.delete(
-        `/admin/lands/${landId}`
-      );
-
-      alert(
-        "Land deleted successfully."
-      );
-
-      await fetchLands();
-    } catch (error) {
-      console.error(
-        "Delete error:",
-        error
-      );
-
-      alert(
-        error.response?.data?.detail ||
-          "Failed to delete land."
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // =========================================================
-  // STATUS STYLE
-  // =========================================================
-
-  const getStatusStyle = (landStatus) => {
-    switch (
-      landStatus?.toLowerCase()
-    ) {
-      case "approved":
-        return {
-          background: "#E8F5E9",
-          color: "#2E7D32",
-        };
-
-      case "rejected":
-        return {
-          background: "#FFEBEE",
-          color: "#C62828",
-        };
-
-      case "changes_requested":
-        return {
-          background: "#FFF3E0",
-          color: "#EF6C00",
-        };
-
-      case "pending":
-      default:
-        return {
-          background: "#FFF8E1",
-          color: "#F57F17",
-        };
-    }
-  };
-
-  // =========================================================
-  // PAGINATION
-  // =========================================================
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(total / limit)
+  // Logged-in user's information
+  const currentUserId = Number(
+    sessionStorage.getItem("user_id")
   );
 
-  const goToPreviousPage = () => {
-    if (page > 1) {
-      setPage(
-        (previous) => previous - 1
+  const currentRole =
+    sessionStorage.getItem("role");
+
+  // =========================================================
+  // LOAD LAND
+  // =========================================================
+
+  useEffect(() => {
+    fetchLand();
+  }, [id]);
+
+  const fetchLand = async () => {
+    try {
+      const response = await api.get(
+        `/lands/${id}`
+      );
+
+      setLand(response.data);
+
+      await checkFavoriteStatus(id);
+
+      // Availability is a Phase 1 marketplace feature.
+      // If this request fails, do not break the existing
+      // Land Details page.
+      await fetchAvailability(id);
+    } catch (error) {
+      console.error(
+        "Failed to load land:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load land details."
       );
     }
   };
 
-  const goToNextPage = () => {
-    if (page < totalPages) {
-      setPage(
-        (previous) => previous + 1
+  // =========================================================
+  // PHASE 1 - GET AVAILABILITY
+  // =========================================================
+
+  const fetchAvailability = async (landId) => {
+    try {
+      const response = await api.get(
+        `/marketplace/lands/${landId}/availability`
       );
+
+      setAvailability(response.data);
+    } catch (error) {
+      console.error(
+        "Failed to load land availability:",
+        error
+      );
+
+      // Existing Land Details functionality should
+      // continue even if marketplace availability
+      // is unavailable.
+      setAvailability(null);
+    }
+  };
+
+  // =========================================================
+  // CHECK FAVORITE STATUS
+  // =========================================================
+
+  const checkFavoriteStatus = async (landId) => {
+    try {
+      const response = await api.get(
+        `/favorites/check/${landId}`
+      );
+
+      setIsFavorite(
+        response.data?.is_favorite === true
+      );
+    } catch (error) {
+      console.error(
+        "Failed to check favorite status:",
+        error
+      );
+
+      setIsFavorite(false);
+    }
+  };
+
+  // =========================================================
+  // START CHAT
+  // =========================================================
+
+  const startChat = async () => {
+    try {
+      const response = await api.post(
+        "/chat/start",
+        {
+          land_id: land.id,
+        }
+      );
+
+      navigate(
+        `/chat/${response.data.conversation_id}`
+      );
+    } catch (error) {
+      console.error(
+        "Failed to start conversation:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to start conversation."
+      );
+    }
+  };
+
+  // =========================================================
+  // ADD / REMOVE FAVORITE
+  // =========================================================
+
+  const toggleFavorite = async () => {
+    if (favoriteLoading) {
+      return;
+    }
+
+    try {
+      setFavoriteLoading(true);
+
+      if (isFavorite) {
+        await api.delete(
+          `/favorites/${land.id}`
+        );
+
+        setIsFavorite(false);
+
+        alert(
+          "Land removed from Favorites."
+        );
+      } else {
+        await api.post(
+          `/favorites/${land.id}`
+        );
+
+        setIsFavorite(true);
+
+        alert(
+          "Land added to Favorites."
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Favorite update failed:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to update favorite."
+      );
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
+  // =========================================================
+  // DELETE INDIVIDUAL LAND IMAGE
+  // =========================================================
+
+  const deleteImage = async (imageId) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this image?"
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      setDeletingImageId(imageId);
+
+      await api.delete(
+        `/lands/${land.id}/images/${imageId}`
+      );
+
+      alert(
+        "Image deleted successfully."
+      );
+
+      await fetchLand();
+    } catch (error) {
+      console.error(
+        "Failed to delete image:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to delete image."
+      );
+    } finally {
+      setDeletingImageId(null);
+    }
+  };
+
+  // =========================================================
+  // PHASE 1 - SEND INQUIRY
+  // =========================================================
+
+  const sendInquiry = async () => {
+    const message =
+      inquiryMessage.trim();
+
+    if (!message) {
+      alert(
+        "Please enter a message before sending the inquiry."
+      );
+      return;
+    }
+
+    try {
+      setMarketplaceLoading(true);
+
+      await api.post(
+        "/marketplace/inquiries",
+        {
+          land_id: land.id,
+          message,
+        }
+      );
+
+      alert(
+        "Your inquiry has been sent to the farmer."
+      );
+
+      setInquiryMessage("");
+
+      await fetchAvailability(
+        land.id
+      );
+    } catch (error) {
+      console.error(
+        "Failed to send inquiry:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to send inquiry."
+      );
+    } finally {
+      setMarketplaceLoading(false);
+    }
+  };
+
+  // =========================================================
+  // PHASE 1 - MAKE OFFER
+  // =========================================================
+
+  const makeOffer = async () => {
+    const amount =
+      Number(offerAmount);
+
+    if (!offerAmount || amount <= 0) {
+      alert(
+        "Please enter a valid offer amount."
+      );
+      return;
+    }
+
+    try {
+      setMarketplaceLoading(true);
+
+      await api.post(
+        "/marketplace/offers",
+        {
+          land_id: land.id,
+          amount,
+          message:
+            offerMessage.trim() || null,
+        }
+      );
+
+      alert(
+        "Your offer has been sent to the farmer."
+      );
+
+      setOfferAmount("");
+      setOfferMessage("");
+
+      await fetchAvailability(
+        land.id
+      );
+    } catch (error) {
+      console.error(
+        "Failed to make offer:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to submit offer."
+      );
+    } finally {
+      setMarketplaceLoading(false);
+    }
+  };
+
+  // =========================================================
+  // PHASE 1 - REQUEST SITE VISIT
+  // =========================================================
+
+  const requestSiteVisit = async () => {
+    if (!visitDate) {
+      alert(
+        "Please select a site visit date and time."
+      );
+      return;
+    }
+
+    const selectedDate =
+      new Date(visitDate);
+
+    if (
+      Number.isNaN(
+        selectedDate.getTime()
+      )
+    ) {
+      alert(
+        "Please select a valid date and time."
+      );
+      return;
+    }
+
+    if (
+      selectedDate <= new Date()
+    ) {
+      alert(
+        "Site visit date must be in the future."
+      );
+      return;
+    }
+
+    try {
+      setMarketplaceLoading(true);
+
+      await api.post(
+        "/marketplace/site-visits",
+        {
+          land_id: land.id,
+          requested_date:
+            selectedDate.toISOString(),
+          message:
+            visitMessage.trim() || null,
+        }
+      );
+
+      alert(
+        "Your site visit request has been sent to the farmer."
+      );
+
+      setVisitDate("");
+      setVisitMessage("");
+    } catch (error) {
+      console.error(
+        "Failed to request site visit:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to request site visit."
+      );
+    } finally {
+      setMarketplaceLoading(false);
     }
   };
 
@@ -358,29 +413,96 @@ function  LandDetails(){
   // LOADING
   // =========================================================
 
-  if (loading) {
+  if (!land) {
     return (
       <>
         <Navbar />
 
         <div
           style={{
-            textAlign: "center",
-            marginTop: "80px",
-            fontSize: "22px",
-            color: "#2E7D32",
-            fontWeight: "bold",
+            minHeight: "100vh",
+            background: "#F4F7F8",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
           }}
         >
-          Loading Lands...
+          <div
+            style={{
+              background: "#fff",
+              padding: "50px",
+              borderRadius: "20px",
+              boxShadow:
+                "0 12px 35px rgba(0,0,0,.15)",
+              textAlign: "center",
+              width: "360px",
+            }}
+          >
+            <h1
+              style={{
+                color: "#2E7D32",
+                marginBottom: "10px",
+              }}
+            >
+              🌾
+            </h1>
+
+            <h2
+              style={{
+                color: "#2E7D32",
+                marginBottom: "10px",
+              }}
+            >
+              🌾 Loading Land Details...
+            </h2>
+
+            <p
+              style={{
+                color: "#666",
+                marginBottom: 0,
+              }}
+            >
+              Please wait while we load the
+              property.
+            </p>
+          </div>
         </div>
       </>
     );
   }
 
-  // =========================================================
-  // PAGE
-  // =========================================================
+  // Only the owner should see image deletion buttons.
+  const isLandOwner =
+    currentUserId ===
+    Number(land.owner_id);
+
+  const isBuyer =
+    currentRole === "buyer";
+
+  const isFarmer =
+    currentRole === "farmer";
+
+  const isOwnLand =
+    isLandOwner;
+
+  const isApproved =
+    land.status === "approved";
+
+  const availabilityStatus =
+    availability?.status ||
+    "available";
+
+  const isAvailable =
+    availabilityStatus ===
+    "available";
+
+  const isReserved =
+    availabilityStatus ===
+    "reserved";
+
+  const isSold =
+    availabilityStatus ===
+    "sold";
 
   return (
     <>
@@ -388,765 +510,1342 @@ function  LandDetails(){
 
       <div
         style={{
-          minHeight: "100vh",
-          background: "#f4f4f4",
-          padding: "30px",
+          maxWidth: "1200px",
+          margin: "40px auto",
+          background: "#fff",
+          borderRadius: "20px",
+          overflow: "hidden",
+          boxShadow:
+            "0 10px 30px rgba(0,0,0,.15)",
         }}
       >
+        {/* =====================================================
+            PRIMARY LAND IMAGE
+        ====================================================== */}
+
+        {land.image_url && (
+          <img
+            src={land.image_url}
+            alt={land.title}
+            style={{
+              width: "100%",
+              height: "520px",
+              objectFit: "cover",
+            }}
+          />
+        )}
+
         <div
           style={{
-            maxWidth: "1400px",
-            margin: "0 auto",
+            padding: "35px",
+            paddingBottom: "10px",
           }}
         >
-          {/* =================================================
-              HEADER
-          ================================================= */}
+          {/* =====================================================
+              LAND TITLE
+          ====================================================== */}
+
+          <h1
+            style={{
+              margin: 0,
+              fontSize: "40px",
+              color: "#2E7D32",
+            }}
+          >
+            🌾 {land.title}
+          </h1>
+
+          {/* =====================================================
+              PRICE
+          ====================================================== */}
 
           <div
             style={{
-              background:
-                "linear-gradient(135deg,#2E7D32,#66BB6A)",
-              color: "#fff",
-              padding: "25px",
-              borderRadius: "15px",
-              marginBottom: "25px",
+              marginTop: "20px",
+              display: "inline-block",
+              background: "#E8F5E9",
+              color: "#2E7D32",
+              padding: "12px 25px",
+              borderRadius: "30px",
+              fontWeight: "bold",
+              fontSize: "30px",
             }}
           >
-            <h1
-              style={{
-                margin: 0,
-              }}
-            >
-              🌾 Manage Lands
-            </h1>
-
-            <p
-              style={{
-                marginBottom: 0,
-              }}
-            >
-              View, edit, approve, reject and
-              manage farmland listings.
-            </p>
+            💰 ₹ {land.price}
           </div>
 
-          {/* =================================================
-              SEARCH AND FILTER
-          ================================================= */}
+          {/* =====================================================
+              AVAILABILITY
+          ====================================================== */}
 
           <div
             style={{
-              background: "#fff",
-              padding: "20px",
-              borderRadius: "12px",
-              marginBottom: "20px",
-              boxShadow:
-                "0 4px 12px rgba(0,0,0,0.08)",
+              marginTop: "20px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "10px",
+              flexWrap: "wrap",
             }}
           >
-            <form
-              onSubmit={handleSearch}
-              style={{
-                display: "flex",
-                gap: "10px",
-                flexWrap: "wrap",
-              }}
-            >
-              <input
-                type="text"
-                placeholder="Search lands..."
-                value={search}
-                onChange={(event) =>
-                  setSearch(
-                    event.target.value
-                  )
-                }
-                style={{
-                  flex: 1,
-                  minWidth: "250px",
-                  padding: "12px",
-                  border:
-                    "1px solid #ccc",
-                  borderRadius: "8px",
-                  fontSize: "15px",
-                  boxSizing:
-                    "border-box",
-                }}
-              />
-
-              <select
-                value={status}
-                onChange={(event) => {
-                  setPage(1);
-                  setStatus(
-                    event.target.value
-                  );
-                }}
-                style={{
-                  padding: "12px",
-                  border:
-                    "1px solid #ccc",
-                  borderRadius: "8px",
-                  minWidth: "180px",
-                  background: "#fff",
-                }}
-              >
-                <option value="">
-                  All Status
-                </option>
-
-                <option value="pending">
-                  Pending
-                </option>
-
-                <option value="approved">
-                  Approved
-                </option>
-
-                <option value="changes_requested">
-                  Changes Requested
-                </option>
-
-                <option value="rejected">
-                  Rejected
-                </option>
-              </select>
-
-              <button
-                type="submit"
-                style={{
-                  background: "#1976D2",
-                  color: "#fff",
-                  border: "none",
-                  padding:
-                    "12px 25px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                Search
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setStatus("");
-                  setPage(1);
-                }}
-                style={{
-                  background: "#757575",
-                  color: "#fff",
-                  border: "none",
-                  padding:
-                    "12px 25px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                Reset
-              </button>
-            </form>
-          </div>
-
-          {/* =================================================
-              SUMMARY
-          ================================================= */}
-
-          <div
-            style={{
-              background: "#fff",
-              padding: "20px",
-              borderRadius: "12px",
-              marginBottom: "20px",
-              boxShadow:
-                "0 4px 12px rgba(0,0,0,0.08)",
-            }}
-          >
-            <strong>
-              Total Lands: {total}
-            </strong>
-
             <span
               style={{
-                marginLeft: "20px",
-                color: "#666",
+                ...availabilityBadgeStyle(
+                  availabilityStatus
+                ),
               }}
             >
-              Page {page} of{" "}
-              {totalPages}
+              {availabilityStatus ===
+                "available" &&
+                "🟢 Available"}
+
+              {availabilityStatus ===
+                "reserved" &&
+                "🟠 Reserved"}
+
+              {availabilityStatus ===
+                "sold" &&
+                "🔴 Sold"}
+            </span>
+
+            {!isApproved && (
+              <span
+                style={{
+                  background: "#FFF3E0",
+                  color: "#EF6C00",
+                  padding: "8px 16px",
+                  borderRadius: "20px",
+                  fontWeight: "bold",
+                }}
+              >
+                ⏳ {land.status}
+              </span>
+            )}
+          </div>
+
+          {/* =====================================================
+              LAND BADGES
+          ====================================================== */}
+
+          <div
+            style={{
+              display: "flex",
+              gap: "15px",
+              flexWrap: "wrap",
+              marginTop: "25px",
+              marginBottom: "35px",
+            }}
+          >
+            <span style={badgeStyle}>
+              🌱 {land.crop_type}
+            </span>
+
+            <span style={badgeStyle}>
+              📏 {land.area} Acres
+            </span>
+
+            <span style={badgeStyle}>
+              🌍 {land.soil_type}
+            </span>
+
+            <span style={badgeStyle}>
+              💧 {land.water_source}
             </span>
           </div>
 
-          {/* =================================================
-              NO LANDS
-          ================================================= */}
+          {/* =====================================================
+              PHASE 1 - BUYER ACTIONS
+          ====================================================== */}
 
-          {lands.length === 0 ? (
-            <div
-              style={{
-                background: "#fff",
-                padding: "60px 20px",
-                borderRadius: "12px",
-                textAlign: "center",
-                boxShadow:
-                  "0 4px 12px rgba(0,0,0,0.08)",
-              }}
-            >
-              <h2>
-                No Lands Found
-              </h2>
-
-              <p
+          {isBuyer &&
+            !isOwnLand &&
+            isApproved &&
+            isAvailable && (
+              <div
                 style={{
-                  color: "#777",
+                  background:
+                    "linear-gradient(135deg,#F1F8E9,#FFFFFF)",
+                  padding: "25px",
+                  marginTop: "10px",
+                  marginBottom: "30px",
+                  borderRadius: "16px",
+                  border:
+                    "1px solid #C8E6C9",
+                  boxShadow:
+                    "0 5px 18px rgba(0,0,0,.08)",
                 }}
               >
-                No lands match the
-                selected filters.
-              </p>
-            </div>
-          ) : (
-            /* =================================================
-               TABLE
-            ================================================= */
+                <h2
+                  style={{
+                    color: "#2E7D32",
+                    marginTop: 0,
+                    marginBottom: "10px",
+                  }}
+                >
+                  🤝 Interested in this land?
+                </h2>
 
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: "12px",
-                overflowX: "auto",
-                boxShadow:
-                  "0 4px 12px rgba(0,0,0,0.08)",
-              }}
-            >
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse:
-                    "collapse",
-                  minWidth:
-                    "1500px",
-                }}
-              >
-                <thead>
-                  <tr
+                <p
+                  style={{
+                    color: "#666",
+                    marginBottom: "25px",
+                  }}
+                >
+                  Contact the farmer, send an
+                  inquiry, make an offer, or
+                  request a site visit.
+                </p>
+
+                {/* INQUIRY */}
+
+                <div
+                  style={{
+                    background: "#fff",
+                    padding: "20px",
+                    borderRadius: "12px",
+                    marginBottom: "18px",
+                    border:
+                      "1px solid #eee",
+                  }}
+                >
+                  <h3
                     style={{
-                      background:
-                        "#E8F5E9",
+                      color: "#2E7D32",
+                      marginTop: 0,
                     }}
                   >
-                    <th style={thStyle}>
-                      ID
-                    </th>
+                    💬 Send Inquiry
+                  </h3>
 
-                    <th style={thStyle}>
-                      Image
-                    </th>
+                  <textarea
+                    value={inquiryMessage}
+                    onChange={(event) =>
+                      setInquiryMessage(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Write a message to the farmer..."
+                    rows={4}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px",
+                      border:
+                        "1px solid #ccc",
+                      borderRadius: "8px",
+                      resize: "vertical",
+                      fontFamily:
+                        "inherit",
+                    }}
+                  />
 
-                    <th style={thStyle}>
-                      Owner
-                    </th>
+                  <button
+                    onClick={sendInquiry}
+                    disabled={
+                      marketplaceLoading
+                    }
+                    style={{
+                      marginTop: "12px",
+                      background: "#2E7D32",
+                      color: "#fff",
+                      padding:
+                        "11px 22px",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor:
+                        marketplaceLoading
+                          ? "not-allowed"
+                          : "pointer",
+                      fontWeight: "bold",
+                      opacity:
+                        marketplaceLoading
+                          ? 0.7
+                          : 1,
+                    }}
+                  >
+                    {marketplaceLoading
+                      ? "Sending..."
+                      : "Send Inquiry"}
+                  </button>
+                </div>
 
-                    <th style={thStyle}>
-                      Email
-                    </th>
+                {/* OFFER */}
 
-                    <th style={thStyle}>
-                      Title
-                    </th>
+                <div
+                  style={{
+                    background: "#fff",
+                    padding: "20px",
+                    borderRadius: "12px",
+                    marginBottom: "18px",
+                    border:
+                      "1px solid #eee",
+                  }}
+                >
+                  <h3
+                    style={{
+                      color: "#1565C0",
+                      marginTop: 0,
+                    }}
+                  >
+                    💰 Make an Offer
+                  </h3>
 
-                    <th style={thStyle}>
-                      Village
-                    </th>
+                  <input
+                    type="number"
+                    min="1"
+                    value={offerAmount}
+                    onChange={(event) =>
+                      setOfferAmount(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Offer amount (₹)"
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px",
+                      border:
+                        "1px solid #ccc",
+                      borderRadius: "8px",
+                      marginBottom: "10px",
+                    }}
+                  />
 
-                    <th style={thStyle}>
-                      District
-                    </th>
+                  <textarea
+                    value={offerMessage}
+                    onChange={(event) =>
+                      setOfferMessage(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Optional message..."
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px",
+                      border:
+                        "1px solid #ccc",
+                      borderRadius: "8px",
+                      resize: "vertical",
+                      fontFamily:
+                        "inherit",
+                    }}
+                  />
 
-                    <th style={thStyle}>
-                      Area
-                    </th>
+                  <button
+                    onClick={makeOffer}
+                    disabled={
+                      marketplaceLoading
+                    }
+                    style={{
+                      marginTop: "12px",
+                      background: "#1565C0",
+                      color: "#fff",
+                      padding:
+                        "11px 22px",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor:
+                        marketplaceLoading
+                          ? "not-allowed"
+                          : "pointer",
+                      fontWeight: "bold",
+                      opacity:
+                        marketplaceLoading
+                          ? 0.7
+                          : 1,
+                    }}
+                  >
+                    {marketplaceLoading
+                      ? "Submitting..."
+                      : "Submit Offer"}
+                  </button>
+                </div>
 
-                    <th style={thStyle}>
-                      Price
-                    </th>
+                {/* SITE VISIT */}
 
-                    <th style={thStyle}>
-                      Status
-                    </th>
+                <div
+                  style={{
+                    background: "#fff",
+                    padding: "20px",
+                    borderRadius: "12px",
+                    border:
+                      "1px solid #eee",
+                  }}
+                >
+                  <h3
+                    style={{
+                      color: "#EF6C00",
+                      marginTop: 0,
+                    }}
+                  >
+                    📅 Request Site Visit
+                  </h3>
 
-                    <th style={thStyle}>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
+                  <input
+                    type="datetime-local"
+                    value={visitDate}
+                    onChange={(event) =>
+                      setVisitDate(
+                        event.target.value
+                      )
+                    }
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px",
+                      border:
+                        "1px solid #ccc",
+                      borderRadius: "8px",
+                      marginBottom: "10px",
+                    }}
+                  />
 
-                <tbody>
-                  {lands.map(
-                    (land) => {
-                      const isLoading =
-                        actionLoading ===
-                        land.id;
+                  <textarea
+                    value={visitMessage}
+                    onChange={(event) =>
+                      setVisitMessage(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Optional message..."
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px",
+                      border:
+                        "1px solid #ccc",
+                      borderRadius: "8px",
+                      resize: "vertical",
+                      fontFamily:
+                        "inherit",
+                    }}
+                  />
 
-                      const currentStatus =
-                        land.status?.toLowerCase();
+                  <button
+                    onClick={
+                      requestSiteVisit
+                    }
+                    disabled={
+                      marketplaceLoading
+                    }
+                    style={{
+                      marginTop: "12px",
+                      background: "#EF6C00",
+                      color: "#fff",
+                      padding:
+                        "11px 22px",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor:
+                        marketplaceLoading
+                          ? "not-allowed"
+                          : "pointer",
+                      fontWeight: "bold",
+                      opacity:
+                        marketplaceLoading
+                          ? 0.7
+                          : 1,
+                    }}
+                  >
+                    {marketplaceLoading
+                      ? "Submitting..."
+                      : "Request Site Visit"}
+                  </button>
+                </div>
+              </div>
+            )}
 
-                      return (
-                        <tr
-                          key={
-                            land.id
+          {/* =====================================================
+              RESERVED / SOLD MESSAGE FOR BUYER
+          ====================================================== */}
+
+          {isBuyer &&
+            !isOwnLand &&
+            isApproved &&
+            (isReserved || isSold) && (
+              <div
+                style={{
+                  background:
+                    isSold
+                      ? "#FFEBEE"
+                      : "#FFF3E0",
+                  color:
+                    isSold
+                      ? "#C62828"
+                      : "#EF6C00",
+                  padding: "18px 20px",
+                  borderRadius: "12px",
+                  marginBottom: "30px",
+                  fontWeight: "600",
+                }}
+              >
+                {isSold
+                  ? "🔴 This land has already been sold."
+                  : "🟠 This land is currently reserved."}
+              </div>
+            )}
+
+          {/* =====================================================
+              FARMER - AVAILABILITY CONTROL
+          ====================================================== */}
+
+          {isFarmer &&
+            isOwnLand &&
+            isApproved && (
+              <FarmerAvailability
+                land={land}
+                availabilityStatus={
+                  availabilityStatus
+                }
+                marketplaceLoading={
+                  marketplaceLoading
+                }
+                onUpdated={async () => {
+                  await fetchAvailability(
+                    land.id
+                  );
+                }}
+                setMarketplaceLoading={
+                  setMarketplaceLoading
+                }
+              />
+            )}
+
+          {/* =====================================================
+              IMAGE GALLERY
+          ====================================================== */}
+
+          {land.images &&
+            land.images.length > 0 && (
+              <div
+                style={{
+                  background: "#FFFFFF",
+                  padding: "25px",
+                  marginTop: "20px",
+                  borderRadius: "15px",
+                  boxShadow:
+                    "0 5px 20px rgba(0,0,0,.08)",
+                }}
+              >
+                <h2
+                  style={{
+                    color: "#2E7D32",
+                    marginBottom: "20px",
+                  }}
+                >
+                  🖼️ Land Image Gallery
+                </h2>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: "20px",
+                  }}
+                >
+                  {land.images.map(
+                    (image) => (
+                      <div
+                        key={image.id}
+                        style={{
+                          background:
+                            "#f5f5f5",
+                          borderRadius:
+                            "12px",
+                          padding: "10px",
+                          boxShadow:
+                            "0 3px 10px rgba(0,0,0,0.12)",
+                        }}
+                      >
+                        <img
+                          src={
+                            image.image_url
                           }
-                        >
-                          {/* ID */}
+                          alt={`${land.title} ${image.id}`}
+                          style={{
+                            width: "100%",
+                            height: "220px",
+                            objectFit: "cover",
+                            borderRadius:
+                              "8px",
+                          }}
+                        />
 
-                          <td
-                            style={
-                              tdStyle
+                        {isLandOwner && (
+                          <button
+                            onClick={() =>
+                              deleteImage(
+                                image.id
+                              )
                             }
-                          >
-                            {
-                              land.id
+                            disabled={
+                              deletingImageId ===
+                              image.id
                             }
-                          </td>
-
-                          {/* IMAGE */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            {land.image_url ? (
-                              <img
-                                src={
-                                  land.image_url
-                                }
-                                alt={
-                                  land.title ||
-                                  "Land"
-                                }
-                                width="80"
-                                height="60"
-                                style={{
-                                  objectFit:
-                                    "cover",
-                                  borderRadius:
-                                    "6px",
-                                }}
-                              />
-                            ) : (
-                              <span
-                                style={{
-                                  color:
-                                    "#777",
-                                }}
-                              >
-                                No Image
-                              </span>
-                            )}
-                          </td>
-
-                          {/* OWNER */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            {
-                              land.owner_name ||
-                              "Unknown"
-                            }
-                          </td>
-
-                          {/* EMAIL */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            {
-                              land.owner_email ||
-                              "N/A"
-                            }
-                          </td>
-
-                          {/* TITLE */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            {
-                              land.title ||
-                              "N/A"
-                            }
-                          </td>
-
-                          {/* VILLAGE */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            {
-                              land.village ||
-                              "N/A"
-                            }
-                          </td>
-
-                          {/* DISTRICT */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            {
-                              land.district ||
-                              "N/A"
-                            }
-                          </td>
-
-                          {/* AREA */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            {land.area ||
-                              0}{" "}
-                            Acres
-                          </td>
-
-                          {/* PRICE */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            ₹{" "}
-                            {land.price ||
-                              0}
-                          </td>
-
-                          {/* STATUS */}
-
-                          <td
-                            style={
-                              tdStyle
-                            }
-                          >
-                            <span
-                              style={{
-                                ...getStatusStyle(
-                                  land.status
-                                ),
-                                display:
-                                  "inline-block",
-                                padding:
-                                  "7px 12px",
-                                borderRadius:
-                                  "20px",
-                                fontWeight:
-                                  "bold",
-                                whiteSpace:
-                                  "nowrap",
-                              }}
-                            >
-                              {currentStatus ===
-                              "changes_requested"
-                                ? "Changes Requested"
-                                : land.status ||
-                                  "Unknown"}
-                            </span>
-                          </td>
-
-                          {/* ACTIONS */}
-
-                          <td
                             style={{
-                              ...tdStyle,
-                              minWidth:
-                                "320px",
+                              width: "100%",
+                              marginTop:
+                                "10px",
+                              padding: "10px",
+                              background:
+                                deletingImageId ===
+                                image.id
+                                  ? "#999"
+                                  : "#D32F2F",
+                              color: "white",
+                              border: "none",
+                              borderRadius:
+                                "6px",
+                              cursor:
+                                deletingImageId ===
+                                image.id
+                                  ? "not-allowed"
+                                  : "pointer",
+                              fontWeight:
+                                "bold",
                             }}
                           >
-                            {/* VIEW */}
-
-                            <button
-                              onClick={() =>
-                                viewLand(
-                                  land.id
-                                )
-                              }
-                              disabled={
-                                isLoading
-                              }
-                              style={{
-                                ...actionButton,
-                                background:
-                                  "#455A64",
-                              }}
-                            >
-                              👁 View
-                            </button>
-
-                            {/* EDIT */}
-
-                            <button
-                              onClick={() =>
-                                editLand(
-                                  land.id
-                                )
-                              }
-                              disabled={
-                                isLoading
-                              }
-                              style={{
-                                ...actionButton,
-                                background:
-                                  "#1976D2",
-                              }}
-                            >
-                              ✏️ Edit
-                            </button>
-
-                            {/* APPROVE */}
-
-                            {(currentStatus ===
-                              "pending" ||
-                              currentStatus ===
-                                "changes_requested") && (
-                              <button
-                                onClick={() =>
-                                  approveLand(
-                                    land.id
-                                  )
-                                }
-                                disabled={
-                                  isLoading
-                                }
-                                style={{
-                                  ...actionButton,
-                                  background:
-                                    "#2E7D32",
-                                }}
-                              >
-                                {isLoading
-                                  ? "..."
-                                  : "✓ Approve"}
-                              </button>
-                            )}
-
-                            {/* REQUEST CHANGES */}
-
-                            {currentStatus ===
-                              "pending" && (
-                              <button
-                                onClick={() =>
-                                  requestChanges(
-                                    land.id
-                                  )
-                                }
-                                disabled={
-                                  isLoading
-                                }
-                                style={{
-                                  ...actionButton,
-                                  background:
-                                    "#EF6C00",
-                                }}
-                              >
-                                ⚠ Changes
-                              </button>
-                            )}
-
-                            {/* REJECT */}
-
-                            {(currentStatus ===
-                              "pending" ||
-                              currentStatus ===
-                                "changes_requested") && (
-                              <button
-                                onClick={() =>
-                                  rejectLand(
-                                    land.id
-                                  )
-                                }
-                                disabled={
-                                  isLoading
-                                }
-                                style={{
-                                  ...actionButton,
-                                  background:
-                                    "#D32F2F",
-                                }}
-                              >
-                                ✕ Reject
-                              </button>
-                            )}
-
-                            {/* DELETE */}
-
-                            <button
-                              onClick={() =>
-                                deleteLand(
-                                  land.id
-                                )
-                              }
-                              disabled={
-                                isLoading
-                              }
-                              style={{
-                                ...actionButton,
-                                background:
-                                  "#B71C1C",
-                              }}
-                            >
-                              🗑 Delete
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
+                            {deletingImageId ===
+                            image.id
+                              ? "Deleting..."
+                              : "🗑️ Delete Image"}
+                          </button>
+                        )}
+                      </div>
+                    )
                   )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                </div>
+              </div>
+            )}
 
-          {/* =================================================
-              PAGINATION
-          ================================================= */}
+          {/* =====================================================
+              PROPERTY INFORMATION
+          ====================================================== */}
 
-          {total > 0 && (
+          <div
+            style={{
+              background: "#FFFFFF",
+              padding: "25px",
+              marginTop: "30px",
+              borderRadius: "15px",
+              boxShadow:
+                "0 5px 20px rgba(0,0,0,.08)",
+              lineHeight: "30px",
+            }}
+          >
+            <h2
+              style={{
+                color: "#2E7D32",
+                marginBottom: "20px",
+              }}
+            >
+              📋 Property Information
+            </h2>
+
+            <p>
+              <strong>
+                📝 Description:
+              </strong>{" "}
+              {land.description}
+            </p>
+
+            <p>
+              <strong>📏 Area:</strong>{" "}
+              {land.area} Acres
+            </p>
+
+            <p>
+              <strong>
+                🌱 Crop Type:
+              </strong>{" "}
+              {land.crop_type}
+            </p>
+
+            <p>
+              <strong>
+                🌍 Soil Type:
+              </strong>{" "}
+              {land.soil_type}
+            </p>
+
+            <p>
+              <strong>
+                💧 Water Source:
+              </strong>{" "}
+              {land.water_source}
+            </p>
+
+            <hr />
+
+            <p>
+              <strong>
+                📍 Village:
+              </strong>{" "}
+              {land.village}
+            </p>
+
+            <p>
+              <strong>
+                🏛 Mandal:
+              </strong>{" "}
+              {land.mandal}
+            </p>
+
+            <p>
+              <strong>
+                🏙 District:
+              </strong>{" "}
+              {land.district}
+            </p>
+
+            <p>
+              <strong>
+                🌎 State:
+              </strong>{" "}
+              {land.state}
+            </p>
+
+            <p>
+              <strong>
+                📮 Pincode:
+              </strong>{" "}
+              {land.pincode}
+            </p>
+
+            <p>
+              <strong>
+                📑 Survey Number:
+              </strong>{" "}
+              {land.survey_number}
+            </p>
+          </div>
+
+          {/* =====================================================
+              LAND LOCATION
+          ====================================================== */}
+
+          <div
+            style={{
+              background: "#FFFFFF",
+              marginTop: "30px",
+              padding: "25px",
+              borderRadius: "15px",
+              boxShadow:
+                "0 5px 20px rgba(0,0,0,.08)",
+            }}
+          >
+            <h2
+              style={{
+                color: "#2E7D32",
+                marginBottom: "20px",
+              }}
+            >
+              📍 Land Location
+            </h2>
+
             <div
               style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "1fr 1fr",
+                gap: "15px",
+                marginBottom: "20px",
+              }}
+            >
+              <div>
+                <strong>Latitude</strong>
+                <br />
+                {land.latitude}
+              </div>
+
+              <div>
+                <strong>Longitude</strong>
+                <br />
+                {land.longitude}
+              </div>
+            </div>
+
+            {land.latitude &&
+              land.longitude && (
+                <>
+                  <LandMap
+                    latitude={Number(
+                      land.latitude
+                    )}
+                    longitude={Number(
+                      land.longitude
+                    )}
+                    title={land.title}
+                  />
+
+                  <div
+                    style={{
+                      marginTop: "20px",
+                    }}
+                  >
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${land.latitude},${land.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display:
+                          "inline-block",
+                        background:
+                          "#1976D2",
+                        color: "#fff",
+                        padding:
+                          "12px 24px",
+                        borderRadius: "8px",
+                        textDecoration:
+                          "none",
+                        fontWeight:
+                          "bold",
+                      }}
+                    >
+                      🧭 Get Directions
+                    </a>
+                  </div>
+                </>
+              )}
+          </div>
+
+          {/* =====================================================
+              SELLER INFORMATION
+          ====================================================== */}
+
+          <div
+            style={{
+              background: "#FFFFFF",
+              marginTop: "30px",
+              padding: "25px",
+              borderRadius: "15px",
+              boxShadow:
+                "0 5px 20px rgba(0,0,0,.08)",
+            }}
+          >
+            <h2
+              style={{
+                color: "#2E7D32",
+                marginBottom: "20px",
+              }}
+            >
+              👤 Seller Information
+            </h2>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "1fr 1fr",
+                gap: "20px",
+                marginBottom: "25px",
+              }}
+            >
+              <div>
+                <strong>
+                  Seller Name
+                </strong>
+                <br />
+                {land.owner_name}
+              </div>
+
+              <div>
+                <strong>
+                  Mobile Number
+                </strong>
+                <br />
+                {land.owner_mobile}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(160px,1fr))",
+                gap: "15px",
+              }}
+            >
+              {/* Call */}
+
+              <a
+                href={`tel:${land.owner_mobile}`}
+                style={{
+                  background: "#2E7D32",
+                  color: "#fff",
+                  padding: "12px 20px",
+                  borderRadius: "8px",
+                  textDecoration:
+                    "none",
+                  fontWeight: "bold",
+                  textAlign: "center",
+                }}
+              >
+                📞 Call
+              </a>
+
+              {/* WhatsApp */}
+
+              <a
+                href={`https://wa.me/91${land.owner_mobile}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  background: "#25D366",
+                  color: "#fff",
+                  padding: "12px 20px",
+                  borderRadius: "8px",
+                  textDecoration:
+                    "none",
+                  fontWeight: "bold",
+                  textAlign: "center",
+                }}
+              >
+                💬 WhatsApp
+              </a>
+
+              {/* Chat */}
+
+              <button
+                onClick={startChat}
+                style={{
+                  background: "#1976D2",
+                  color: "#fff",
+                  padding: "12px 20px",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                💬 Chat
+              </button>
+
+              {/* Favorite */}
+
+              <button
+                onClick={toggleFavorite}
+                disabled={
+                  favoriteLoading
+                }
+                style={{
+                  background:
+                    isFavorite
+                      ? "#757575"
+                      : "#E91E63",
+                  color: "#fff",
+                  padding: "12px 20px",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor:
+                    favoriteLoading
+                      ? "not-allowed"
+                      : "pointer",
+                  fontWeight: "bold",
+                  opacity:
+                    favoriteLoading
+                      ? 0.7
+                      : 1,
+                }}
+              >
+                {favoriteLoading
+                  ? "Updating..."
+                  : isFavorite
+                  ? "💔 Remove Favorite"
+                  : "❤️ Favorite"}
+              </button>
+
+              {/* Share */}
+
+              <button
+                onClick={() => {
+                  if (
+                    navigator.share
+                  ) {
+                    navigator.share({
+                      title:
+                        land.title,
+                      text:
+                        land.description,
+                      url:
+                        window.location
+                          .href,
+                    });
+                  }
+
+                  try {
+                    navigator.clipboard.writeText(
+                      window.location.href
+                    );
+
+                    alert(
+                      "Link copied!"
+                    );
+                  } catch {
+                    alert(
+                      "Sharing is not supported."
+                    );
+                  }
+                }}
+                style={{
+                  background: "#FF9800",
+                  color: "#fff",
+                  padding: "12px 20px",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                📤 Share
+              </button>
+            </div>
+          </div>
+
+          {/* =====================================================
+              MARKETPLACE ACTIVITY
+          ====================================================== */}
+
+          {(isBuyer ||
+            isFarmer) && (
+            <div
+              style={{
+                marginTop: "25px",
                 display: "flex",
                 justifyContent:
                   "center",
-                alignItems:
-                  "center",
-                gap: "20px",
-                marginTop: "25px",
-                padding: "20px",
-                background:
-                  "#fff",
-                borderRadius:
-                  "12px",
               }}
             >
               <button
-                onClick={
-                  goToPreviousPage
-                }
-                disabled={page === 1}
-                style={{
-                  ...paginationButton,
-                  background:
-                    page === 1
-                      ? "#ddd"
-                      : "#1976D2",
-                  color:
-                    page === 1
-                      ? "#777"
-                      : "#fff",
-                  cursor:
-                    page === 1
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                ← Previous
-              </button>
-
-              <strong>
-                Page {page} of{" "}
-                {totalPages}
-              </strong>
-
-              <button
-                onClick={
-                  goToNextPage
-                }
-                disabled={
-                  page >=
-                  totalPages
+                onClick={() =>
+                  navigate(
+                    "/marketplace-activity"
+                  )
                 }
                 style={{
-                  ...paginationButton,
                   background:
-                    page >=
-                    totalPages
-                      ? "#ddd"
-                      : "#1976D2",
-                  color:
-                    page >=
-                    totalPages
-                      ? "#777"
-                      : "#fff",
-                  cursor:
-                    page >=
-                    totalPages
-                      ? "not-allowed"
-                      : "pointer",
+                    "#6A1B9A",
+                  color: "#fff",
+                  padding:
+                    "13px 25px",
+                  border: "none",
+                  borderRadius:
+                    "10px",
+                  cursor: "pointer",
+                  fontWeight:
+                    "bold",
+                  fontSize: "15px",
                 }}
               >
-                Next →
+                🤝 View Marketplace Activity
               </button>
             </div>
           )}
+
+          {/* =====================================================
+              BACK
+          ====================================================== */}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent:
+                "space-between",
+              alignItems: "center",
+              marginTop: "35px",
+              flexWrap: "wrap",
+              gap: "15px",
+            }}
+          >
+            <button
+              onClick={() =>
+                navigate("/all-lands")
+              }
+              style={{
+                background: "#424242",
+                color: "#fff",
+                padding: "14px 28px",
+                border: "none",
+                borderRadius: "10px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                fontSize: "16px",
+              }}
+            >
+              ⬅ Back to Marketplace
+            </button>
+
+            <div
+              style={{
+                color: "#666",
+                fontSize: "14px",
+              }}
+            >
+              🌾 Thank you for using
+              Farmland Marketplace
+            </div>
+          </div>
         </div>
       </div>
     </>
   );
 }
 
+
+// =========================================================
+// FARMER AVAILABILITY COMPONENT
+// =========================================================
+
+function FarmerAvailability({
+  land,
+  availabilityStatus,
+  marketplaceLoading,
+  onUpdated,
+  setMarketplaceLoading,
+}) {
+  const updateAvailability = async (
+    newStatus
+  ) => {
+    try {
+      setMarketplaceLoading(true);
+
+      await api.put(
+        `/marketplace/lands/${land.id}/availability`,
+        {
+          land_id: land.id,
+          status: newStatus,
+        }
+      );
+
+      alert(
+        `Land marked as ${newStatus}.`
+      );
+
+      await onUpdated();
+    } catch (error) {
+      console.error(
+        "Failed to update availability:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to update land availability."
+      );
+    } finally {
+      setMarketplaceLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        background: "#F5F7FA",
+        padding: "22px",
+        marginTop: "10px",
+        marginBottom: "30px",
+        borderRadius: "15px",
+        border: "1px solid #ddd",
+      }}
+    >
+      <h2
+        style={{
+          color: "#2E7D32",
+          marginTop: 0,
+        }}
+      >
+        🏷️ Land Availability
+      </h2>
+
+      <p
+        style={{
+          color: "#666",
+        }}
+      >
+        Current marketplace status:
+        {" "}
+        <strong>
+          {availabilityStatus}
+        </strong>
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "10px",
+        }}
+      >
+        <button
+          disabled={
+            marketplaceLoading ||
+            availabilityStatus ===
+              "available"
+          }
+          onClick={() =>
+            updateAvailability(
+              "available"
+            )
+          }
+          style={{
+            background: "#2E7D32",
+            color: "#fff",
+            padding:
+              "10px 18px",
+            border: "none",
+            borderRadius: "8px",
+            cursor:
+              marketplaceLoading
+                ? "not-allowed"
+                : "pointer",
+            fontWeight: "bold",
+            opacity:
+              marketplaceLoading ||
+              availabilityStatus ===
+                "available"
+                ? 0.6
+                : 1,
+          }}
+        >
+          🟢 Available
+        </button>
+
+        <button
+          disabled={
+            marketplaceLoading ||
+            availabilityStatus ===
+              "reserved"
+          }
+          onClick={() =>
+            updateAvailability(
+              "reserved"
+            )
+          }
+          style={{
+            background: "#EF6C00",
+            color: "#fff",
+            padding:
+              "10px 18px",
+            border: "none",
+            borderRadius: "8px",
+            cursor:
+              marketplaceLoading
+                ? "not-allowed"
+                : "pointer",
+            fontWeight: "bold",
+            opacity:
+              marketplaceLoading ||
+              availabilityStatus ===
+                "reserved"
+                ? 0.6
+                : 1,
+          }}
+        >
+          🟠 Reserved
+        </button>
+
+        <button
+          disabled={
+            marketplaceLoading ||
+            availabilityStatus ===
+              "sold"
+          }
+          onClick={() =>
+            updateAvailability(
+              "sold"
+            )
+          }
+          style={{
+            background: "#C62828",
+            color: "#fff",
+            padding:
+              "10px 18px",
+            border: "none",
+            borderRadius: "8px",
+            cursor:
+              marketplaceLoading
+                ? "not-allowed"
+                : "pointer",
+            fontWeight: "bold",
+            opacity:
+              marketplaceLoading ||
+              availabilityStatus ===
+                "sold"
+                ? 0.6
+                : 1,
+          }}
+        >
+          🔴 Sold
+        </button>
+      </div>
+
+      {availabilityStatus ===
+        "sold" && (
+        <p
+          style={{
+            marginBottom: 0,
+            marginTop: "15px",
+            color: "#C62828",
+            fontWeight: "600",
+          }}
+        >
+          A sold listing cannot be
+          reopened directly.
+        </p>
+      )}
+    </div>
+  );
+}
+
+
 // =========================================================
 // STYLES
 // =========================================================
 
-const thStyle = {
-  padding: "14px",
-  textAlign: "left",
-  borderBottom:
-    "1px solid #ddd",
-  whiteSpace: "nowrap",
-};
-
-const tdStyle = {
-  padding: "12px",
-  borderBottom:
-    "1px solid #eee",
-  verticalAlign:
-    "middle",
-};
-
-const actionButton = {
-  color: "#fff",
-  border: "none",
-  padding: "8px 11px",
-  marginRight: "6px",
-  marginBottom: "6px",
-  borderRadius: "5px",
-  cursor: "pointer",
+const badgeStyle = {
+  background: "#E8F5E9",
+  color: "#2E7D32",
+  padding: "8px 18px",
+  borderRadius: "25px",
   fontWeight: "bold",
+  fontSize: "16px",
 };
 
-const paginationButton = {
-  border: "none",
-  padding: "10px 18px",
-  borderRadius: "7px",
-  fontWeight: "bold",
+
+const availabilityBadgeStyle = (
+  status
+) => {
+  if (status === "sold") {
+    return {
+      background: "#FFEBEE",
+      color: "#C62828",
+      padding: "9px 18px",
+      borderRadius: "22px",
+      fontWeight: "bold",
+    };
+  }
+
+  if (status === "reserved") {
+    return {
+      background: "#FFF3E0",
+      color: "#EF6C00",
+      padding: "9px 18px",
+      borderRadius: "22px",
+      fontWeight: "bold",
+    };
+  }
+
+  return {
+    background: "#E8F5E9",
+    color: "#2E7D32",
+    padding: "9px 18px",
+    borderRadius: "22px",
+    fontWeight: "bold",
+  };
 };
+
 
 export default LandDetails;

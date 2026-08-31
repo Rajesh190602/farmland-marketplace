@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List,Literal
+from datetime import datetime
+from typing import Optional
 class ProfileUpdate(BaseModel):
     full_name: str
     mobile: str
@@ -192,12 +194,113 @@ class MessageResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
 class ConversationResponse(BaseModel):
-    id: int
-    buyer_id: int
-    farmer_id: int
+    id: int 
+    buyer_id: int 
+    farmer_id: int 
+    land_id: int 
+ 
+    class Config: 
+        from_attributes = True
+
+
+# =========================================================
+# PHASE 1 - MARKETPLACE SCHEMAS
+# =========================================================
+
+
+# =========================================================
+# LAND AVAILABILITY
+# =========================================================
+
+class LandAvailabilityResponse(BaseModel):
     land_id: int
+    status: str
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+# =========================================================
+# LAND INQUIRY
+# =========================================================
+
+class LandInquiryCreate(BaseModel):
+    land_id: int
+    message: str
+
+
+class LandInquiryResponse(BaseModel):
+    id: int
+    land_id: int
+    buyer_id: int
+    message: str
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class LandInquiryStatusUpdate(BaseModel):
+    status: str
+
+
+# =========================================================
+# LAND OFFER
+# =========================================================
+
+class LandOfferCreate(BaseModel):
+    land_id: int
+    amount: float
+    message: Optional[str] = None
+
+
+class LandOfferResponse(BaseModel):
+    id: int
+    land_id: int
+    buyer_id: int
+    amount: float
+    message: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class LandOfferStatusUpdate(BaseModel):
+    status: str
+
+
+# =========================================================
+# SITE VISIT
+# =========================================================
+
+class SiteVisitCreate(BaseModel):
+    land_id: int
+    requested_date: datetime
+    message: Optional[str] = None
+
+
+class SiteVisitResponse(BaseModel):
+    id: int
+    land_id: int
+    buyer_id: int
+    requested_date: datetime
+    message: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SiteVisitStatusUpdate(BaseModel):
+    status: str
+
+    

@@ -78,6 +78,14 @@ const Notifications = lazy(() =>
 );
 
 // =====================================================
+// PHASE 1 - Marketplace
+// =====================================================
+
+const MarketplaceActivity = lazy(() =>
+  import("./pages/MarketplaceActivity")
+);
+
+// =====================================================
 // Admin Pages
 // =====================================================
 
@@ -298,6 +306,19 @@ function App() {
             element={
               <ProtectedRoute>
                 <Notifications />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =====================================================
+              PHASE 1 - MARKETPLACE ACTIVITY
+          ===================================================== */}
+
+          <Route
+            path="/marketplace-activity"
+            element={
+              <ProtectedRoute>
+                <MarketplaceActivity />
               </ProtectedRoute>
             }
           />

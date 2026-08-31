@@ -1,28 +1,67 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Boolean, DateTime,Text
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    ForeignKey,
+    Boolean,
+    DateTime,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.database import Base
 from datetime import datetime
-from sqlalchemy.sql import func
 
+
+# =========================================================
+# USER
+# =========================================================
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+
     full_name = Column(String, nullable=False)
     profile_image = Column(String, nullable=True)
-    mobile = Column(String, unique=True, nullable=False)
-    email = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=False)
-    role = Column(String, default="farmer")
+
+    mobile = Column(
+        String,
+        unique=True,
+        nullable=False
+    )
+
+    email = Column(
+        String,
+        unique=True,
+        nullable=False
+    )
+
+    password = Column(
+        String,
+        nullable=False
+    )
+
+    role = Column(
+        String,
+        default="farmer"
+    )
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now()
     )
+
     last_seen = Column(
         DateTime(timezone=True),
         nullable=True
     )
+
+    # -----------------------------------------------------
+    # Existing relationships
+    # -----------------------------------------------------
 
     lands = relationship(
         "Land",
@@ -35,44 +74,131 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
+
     notifications = relationship(
-    "Notification",
-    cascade="all, delete-orphan"
-)
+        "Notification",
+        cascade="all, delete-orphan"
+    )
+
     activity_logs = relationship(
-    "ActivityLog",
-    back_populates="user",
-    cascade="all, delete-orphan"
-)
+        "ActivityLog",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+
+# =========================================================
+# LAND
+# =========================================================
 
 class Land(Base):
     __tablename__ = "lands"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
-    title = Column(String, nullable=False)
-    description = Column(String)
-    image_url = Column(String, nullable=True)
-    price = Column(Float, nullable=False)
-    area = Column(Float, nullable=False)
-    village = Column(String, nullable=False)
-    mandal = Column(String, nullable=False)
-    district = Column(String, nullable=False)
-    state = Column(String, nullable=False)
-    pincode = Column(String)
-    survey_number = Column(String)
-    soil_type = Column(String)
-    water_source = Column(String)
-    crop_type = Column(String)
-    status = Column(String, default="pending")
+    title = Column(
+        String,
+        nullable=False
+    )
 
-    rejection_reason = Column(Text, nullable=True)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
+    description = Column(
+        String
+    )
 
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    image_url = Column(
+        String,
+        nullable=True
+    )
 
-    owner = relationship("User", back_populates="lands")
+    price = Column(
+        Float,
+        nullable=False
+    )
+
+    area = Column(
+        Float,
+        nullable=False
+    )
+
+    village = Column(
+        String,
+        nullable=False
+    )
+
+    mandal = Column(
+        String,
+        nullable=False
+    )
+
+    district = Column(
+        String,
+        nullable=False
+    )
+
+    state = Column(
+        String,
+        nullable=False
+    )
+
+    pincode = Column(
+        String
+    )
+
+    survey_number = Column(
+        String
+    )
+
+    soil_type = Column(
+        String
+    )
+
+    water_source = Column(
+        String
+    )
+
+    crop_type = Column(
+        String
+    )
+
+    # Existing approval workflow.
+    #
+    # pending
+    # approved
+    # rejected
+    # changes_requested
+    status = Column(
+        String,
+        default="pending"
+    )
+
+    rejection_reason = Column(
+        Text,
+        nullable=True
+    )
+
+    latitude = Column(
+        Float,
+        nullable=True
+    )
+
+    longitude = Column(
+        Float,
+        nullable=True
+    )
+
+    owner_id = Column(
+        Integer,
+        ForeignKey("users.id")
+    )
+
+    owner = relationship(
+        "User",
+        back_populates="lands"
+    )
 
     images = relationship(
         "LandImage",
@@ -86,36 +212,141 @@ class Land(Base):
         cascade="all, delete-orphan"
     )
 
+    # -----------------------------------------------------
+    # Phase 1 marketplace relationships
+    # -----------------------------------------------------
+
+    availability = relationship(
+        "LandAvailability",
+        back_populates="land",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    inquiries = relationship(
+        "LandInquiry",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+    offers = relationship(
+        "LandOffer",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+    site_visits = relationship(
+        "SiteVisit",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+
+# =========================================================
+# EMAIL VERIFICATION
+# =========================================================
+
 class EmailVerification(Base):
     __tablename__ = "email_verifications"
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, nullable=False, index=True)
-    otp = Column(String, nullable=False)
-    verified = Column(Boolean, default=False)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
+    email = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    otp = Column(
+        String,
+        nullable=False
+    )
+
+    verified = Column(
+        Boolean,
+        default=False
+    )
+
+    expires_at = Column(
+        DateTime,
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+
+# =========================================================
+# LAND IMAGES
+# =========================================================
 
 class LandImage(Base):
     __tablename__ = "land_images"
 
-    id = Column(Integer, primary_key=True, index=True)
-    image_url = Column(String, nullable=False)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
-    land_id = Column(Integer, ForeignKey("lands.id"))
+    image_url = Column(
+        String,
+        nullable=False
+    )
 
-    land = relationship("Land", back_populates="images")
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id")
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="images"
+    )
+
+
+# =========================================================
+# CHAT - CONVERSATION
+# =========================================================
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
-    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    farmer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    land_id = Column(Integer, ForeignKey("lands.id"), nullable=False)
+    buyer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    farmer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
 
     messages = relationship(
         "Message",
@@ -124,10 +355,18 @@ class Conversation(Base):
     )
 
 
+# =========================================================
+# CHAT - MESSAGE
+# =========================================================
+
 class Message(Base):
     __tablename__ = "messages"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
     conversation_id = Column(
         Integer,
@@ -192,10 +431,20 @@ class Message(Base):
         "Conversation",
         back_populates="messages"
     )
+
+
+# =========================================================
+# FAVORITES
+# =========================================================
+
 class Favorite(Base):
     __tablename__ = "favorites"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
     user_id = Column(
         Integer,
@@ -223,6 +472,12 @@ class Favorite(Base):
         "Land",
         back_populates="favorites"
     )
+
+
+# =========================================================
+# NOTIFICATIONS
+# =========================================================
+
 class Notification(Base):
     __tablename__ = "notifications"
 
@@ -253,10 +508,7 @@ class Notification(Base):
         default=False
     )
 
-    # ==========================================
-    # Notification Navigation
-    # ==========================================
-
+    # Notification navigation
     target_type = Column(
         String,
         nullable=True
@@ -272,7 +524,14 @@ class Notification(Base):
         server_default=func.now()
     )
 
-    user = relationship("User")
+    user = relationship(
+        "User"
+    )
+
+
+# =========================================================
+# ACTIVITY LOG
+# =========================================================
 
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
@@ -314,10 +573,7 @@ class ActivityLog(Base):
         server_default=func.now()
     )
 
-    # ==========================
     # Export / Archive
-    # ==========================
-
     is_archived = Column(
         Boolean,
         default=False,
@@ -325,7 +581,7 @@ class ActivityLog(Base):
     )
 
     archived_at = Column(
-        DateTime(timezone=True),
+        DateTime,
         nullable=True
     )
 
@@ -333,4 +589,252 @@ class ActivityLog(Base):
         "User",
         back_populates="activity_logs"
     )
-   
+
+
+# =========================================================
+# PHASE 1
+# LAND AVAILABILITY
+# =========================================================
+#
+# We are intentionally NOT adding a new column directly
+# to the existing "lands" table.
+#
+# This avoids breaking the existing database schema.
+#
+# Approval status remains in Land.status.
+#
+# Marketplace availability is stored separately:
+#
+# available
+# reserved
+# sold
+#
+# =========================================================
+
+class LandAvailability(Base):
+    __tablename__ = "land_availability"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    status = Column(
+        String,
+        default="available",
+        nullable=False
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="availability"
+    )
+
+
+# =========================================================
+# PHASE 1
+# BUYER INQUIRY
+# =========================================================
+
+class LandInquiry(Base):
+    __tablename__ = "land_inquiries"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    buyer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    message = Column(
+        Text,
+        nullable=False
+    )
+
+    status = Column(
+        String,
+        default="pending",
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="inquiries"
+    )
+
+    buyer = relationship(
+        "User",
+        foreign_keys=[buyer_id]
+    )
+
+
+# =========================================================
+# PHASE 1
+# BUYER OFFER
+# =========================================================
+
+class LandOffer(Base):
+    __tablename__ = "land_offers"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    buyer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    # Buyer's proposed price
+    amount = Column(
+        Float,
+        nullable=False
+    )
+
+    message = Column(
+        Text,
+        nullable=True
+    )
+
+    status = Column(
+        String,
+        default="pending",
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="offers"
+    )
+
+    buyer = relationship(
+        "User",
+        foreign_keys=[buyer_id]
+    )
+
+
+# =========================================================
+# PHASE 1
+# SITE VISIT
+# =========================================================
+
+class SiteVisit(Base):
+    __tablename__ = "site_visits"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    buyer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    requested_date = Column(
+        DateTime,
+        nullable=False
+    )
+
+    message = Column(
+        Text,
+        nullable=True
+    )
+
+    status = Column(
+        String,
+        default="pending",
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="site_visits"
+    )
+
+    buyer = relationship(
+        "User",
+        foreign_keys=[buyer_id]
+    )
