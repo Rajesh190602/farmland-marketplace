@@ -246,6 +246,25 @@ function Notifications() {
       }
 
       // -------------------------------------------------
+      // MARKETPLACE ACTIVITY
+      // -------------------------------------------------
+
+      if (
+        notification.target_type ===
+          "inquiry" ||
+        notification.target_type ===
+          "offer" ||
+        notification.target_type ===
+          "site_visit"
+      ) {
+        navigate(
+          "/marketplace-activity"
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------
       // Unknown target
       // -------------------------------------------------
 
@@ -330,7 +349,6 @@ function Notifications() {
             margin: "0 auto",
           }}
         >
-
           {/* =================================================
               HEADER
           ================================================= */}
@@ -489,7 +507,6 @@ function Notifications() {
               </p>
             </div>
           ) : (
-
             /* =================================================
                NOTIFICATION LIST
             ================================================= */
@@ -547,7 +564,6 @@ function Notifications() {
                           flexWrap: "wrap",
                         }}
                       >
-
                         {/* =================================================
                             NOTIFICATION CONTENT
                         ================================================= */}
@@ -695,7 +711,6 @@ function Notifications() {
                               "145px",
                           }}
                         >
-
                           {/* OPEN BUTTON */}
 
                           {navigable && (
