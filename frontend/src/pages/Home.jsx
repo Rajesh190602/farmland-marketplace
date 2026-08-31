@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 
 import {
   FaUsers,
@@ -592,24 +593,30 @@ function Home() {
           }
 
           .home-scroll-top {
-            position: fixed;
-            right: 24px;
-            bottom: 24px;
-            width: 48px;
-            height: 48px;
-            border: none;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #2E7D32;
-            color: #fff;
-            box-shadow: 0 8px 22px rgba(0,0,0,.22);
-            cursor: pointer;
-            z-index: 99999;
-            font-size: 22px;
-            font-weight: 800;
-            line-height: 1;
+            position: fixed !important;
+            right: 24px !important;
+            bottom: 24px !important;
+            left: auto !important;
+            top: auto !important;
+            width: 48px !important;
+            height: 48px !important;
+            min-width: 48px !important;
+            min-height: 48px !important;
+            margin: 0 !important;
+            border: none !important;
+            border-radius: 50% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: #2E7D32 !important;
+            color: #fff !important;
+            box-shadow: 0 8px 22px rgba(0,0,0,.22) !important;
+            cursor: pointer !important;
+            z-index: 2147483647 !important;
+            font-size: 22px !important;
+            font-weight: 800 !important;
+            line-height: 1 !important;
+            transform: none !important;
           }
 
           .home-scroll-top:hover {
@@ -646,10 +653,12 @@ function Home() {
             }
 
             .home-scroll-top {
-              right: 16px;
-              bottom: 16px;
-              width: 46px;
-              height: 46px;
+              right: 16px !important;
+              bottom: 16px !important;
+              width: 46px !important;
+              height: 46px !important;
+              min-width: 46px !important;
+              min-height: 46px !important;
             }
           }
 
@@ -669,8 +678,8 @@ function Home() {
             }
 
             .home-scroll-top {
-              right: 14px;
-              bottom: 14px;
+              right: 14px !important;
+              bottom: 14px !important;
             }
           }
         `}</style>
@@ -1566,17 +1575,19 @@ function Home() {
 
         </div>
 
-        {showScrollTop && (
-          <button
-            type="button"
-            className="home-scroll-top"
-            onClick={scrollToTop}
-            aria-label="Scroll to top"
-            title="Scroll to top"
-          >
-            ↑
-          </button>
-        )}
+        {showScrollTop &&
+          createPortal(
+            <button
+              type="button"
+              className="home-scroll-top"
+              onClick={scrollToTop}
+              aria-label="Scroll to top"
+              title="Scroll to top"
+            >
+              ↑
+            </button>,
+            document.body
+          )}
       </div>
     </>
   );
