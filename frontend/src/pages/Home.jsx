@@ -40,6 +40,33 @@ function Home() {
 
   const [recentActivity, setRecentActivity] = useState([]);
 
+  // =====================================================
+  // SCROLL TO TOP
+  // =====================================================
+
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300);
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+
   const userName =
     sessionStorage.getItem("full_name") || "Farmer";
 
@@ -540,6 +567,112 @@ function Home() {
               grid-template-columns: 1fr;
             }
           }
+
+          .home-page {
+            width: 100%;
+            overflow-x: hidden;
+            box-sizing: border-box;
+          }
+
+          .home-container {
+            width: 100%;
+            max-width: 1180px;
+            margin-left: auto;
+            margin-right: auto;
+            box-sizing: border-box;
+          }
+
+          .home-dashboard-card,
+          .home-land-card {
+            min-width: 0;
+          }
+
+          .home-hero-content {
+            min-width: 0;
+          }
+
+          .home-scroll-top {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            width: 48px;
+            height: 48px;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #2E7D32;
+            color: #fff;
+            box-shadow: 0 8px 22px rgba(0,0,0,.22);
+            cursor: pointer;
+            z-index: 99999;
+            font-size: 22px;
+            font-weight: 800;
+            line-height: 1;
+          }
+
+          .home-scroll-top:hover {
+            transform: translateY(-3px);
+          }
+
+          @media (max-width: 900px) {
+            .home-container {
+              max-width: 100%;
+            }
+          }
+
+          @media (max-width: 700px) {
+            .home-page {
+              padding-left: 12px !important;
+              padding-right: 12px !important;
+            }
+
+            .home-hero {
+              min-height: auto;
+              padding: 24px !important;
+            }
+
+            .home-hero-art {
+              display: none;
+            }
+
+            .home-dashboard-card-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .home-land-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .home-scroll-top {
+              right: 16px;
+              bottom: 16px;
+              width: 46px;
+              height: 46px;
+            }
+          }
+
+          @media (max-width: 480px) {
+            .home-dashboard-card-grid,
+            .home-land-grid {
+              grid-template-columns: 1fr !important;
+            }
+
+            .home-quick-actions {
+              display: grid !important;
+              grid-template-columns: 1fr !important;
+            }
+
+            .home-quick-actions button {
+              max-width: none !important;
+            }
+
+            .home-scroll-top {
+              right: 14px;
+              bottom: 14px;
+            }
+          }
         `}</style>
 
       <div
@@ -1008,7 +1141,6 @@ function Home() {
                     border: "1px solid #E2EBE3",
                     transition: ".3s",
                     position: "relative",
-                    background: "#fff",
                   }}
                 >
 
@@ -1431,7 +1563,20 @@ function Home() {
             </div>
           )}
         </div>
+
         </div>
+
+        {showScrollTop && (
+          <button
+            type="button"
+            className="home-scroll-top"
+            onClick={scrollToTop}
+            aria-label="Scroll to top"
+            title="Scroll to top"
+          >
+            ↑
+          </button>
+        )}
       </div>
     </>
   );
