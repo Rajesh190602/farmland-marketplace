@@ -15,6 +15,10 @@ function MarketplaceActivity() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
 
+  // =====================================================
+  // LOAD MARKETPLACE ACTIVITY
+  // =====================================================
+
   useEffect(() => {
     loadActivity();
   }, []);
@@ -57,7 +61,10 @@ function MarketplaceActivity() {
         setSiteVisits([]);
       }
     } catch (error) {
-      console.error("Failed to load marketplace activity:", error);
+      console.error(
+        "Failed to load marketplace activity:",
+        error
+      );
 
       alert(
         error.response?.data?.detail ||
@@ -68,9 +75,57 @@ function MarketplaceActivity() {
     }
   };
 
+  // =====================================================
+  // START CHAT
+  // =====================================================
+
+  const startChat = async (landId) => {
+    try {
+      setActionLoading(`chat-${landId}`);
+
+      const response = await api.post(
+        "/chat/start",
+        {
+          land_id: landId,
+        }
+      );
+
+      const conversationId =
+        response.data?.id ||
+        response.data?.conversation_id;
+
+      if (!conversationId) {
+        throw new Error(
+          "Conversation ID was not returned by the server."
+        );
+      }
+
+      navigate(`/chat/${conversationId}`);
+    } catch (error) {
+      console.error(
+        "Failed to start chat:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          error.message ||
+          "Failed to start chat."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // =====================================================
+  // UPDATE INQUIRY
+  // =====================================================
+
   const updateInquiry = async (id, status) => {
     try {
-      setActionLoading(`inquiry-${id}-${status}`);
+      setActionLoading(
+        `inquiry-${id}-${status}`
+      );
 
       await api.put(
         `/marketplace/inquiries/${id}/status`,
@@ -88,9 +143,15 @@ function MarketplaceActivity() {
     }
   };
 
+  // =====================================================
+  // UPDATE OFFER
+  // =====================================================
+
   const updateOffer = async (id, status) => {
     try {
-      setActionLoading(`offer-${id}-${status}`);
+      setActionLoading(
+        `offer-${id}-${status}`
+      );
 
       await api.put(
         `/marketplace/offers/${id}/status`,
@@ -108,9 +169,15 @@ function MarketplaceActivity() {
     }
   };
 
+  // =====================================================
+  // UPDATE SITE VISIT
+  // =====================================================
+
   const updateSiteVisit = async (id, status) => {
     try {
-      setActionLoading(`visit-${id}-${status}`);
+      setActionLoading(
+        `visit-${id}-${status}`
+      );
 
       await api.put(
         `/marketplace/site-visits/${id}/status`,
@@ -127,6 +194,10 @@ function MarketplaceActivity() {
       setActionLoading(null);
     }
   };
+
+  // =====================================================
+  // STATUS STYLE
+  // =====================================================
 
   const statusStyle = (status) => {
     const normalized = String(status || "")
@@ -166,6 +237,10 @@ function MarketplaceActivity() {
     };
   };
 
+  // =====================================================
+  // STATUS BADGE
+  // =====================================================
+
   const StatusBadge = ({ status }) => (
     <span
       style={{
@@ -182,13 +257,18 @@ function MarketplaceActivity() {
     </span>
   );
 
+  // =====================================================
+  // CARD
+  // =====================================================
+
   const Card = ({ children }) => (
     <div
       style={{
         background: "#fff",
         borderRadius: "16px",
         padding: "20px",
-        boxShadow: "0 5px 18px rgba(0,0,0,0.08)",
+        boxShadow:
+          "0 5px 18px rgba(0,0,0,0.08)",
         border: "1px solid #eee",
       }}
     >
@@ -196,7 +276,14 @@ function MarketplaceActivity() {
     </div>
   );
 
-  if (userRole !== "farmer" && userRole !== "buyer") {
+  // =====================================================
+  // INVALID ROLE
+  // =====================================================
+
+  if (
+    userRole !== "farmer" &&
+    userRole !== "buyer"
+  ) {
     return (
       <>
         <Navbar />
@@ -216,7 +303,8 @@ function MarketplaceActivity() {
               borderRadius: "18px",
               padding: "40px 25px",
               textAlign: "center",
-              boxShadow: "0 6px 20px rgba(0,0,0,0.08)",
+              boxShadow:
+                "0 6px 20px rgba(0,0,0,0.08)",
             }}
           >
             <h2>Marketplace Activity</h2>
@@ -227,8 +315,8 @@ function MarketplaceActivity() {
                 marginTop: "10px",
               }}
             >
-              Marketplace activity is available for
-              buyers and farmers.
+              Marketplace activity is available
+              for buyers and farmers.
             </p>
 
             <button
@@ -252,6 +340,10 @@ function MarketplaceActivity() {
     );
   }
 
+  // =====================================================
+  // MAIN PAGE
+  // =====================================================
+
   return (
     <>
       <Navbar />
@@ -269,7 +361,10 @@ function MarketplaceActivity() {
             margin: "0 auto",
           }}
         >
-          {/* HEADER */}
+          {/* =================================================
+              HEADER
+          ================================================= */}
+
           <div
             style={{
               background:
@@ -283,7 +378,8 @@ function MarketplaceActivity() {
             <h1
               style={{
                 margin: 0,
-                fontSize: "clamp(25px,5vw,36px)",
+                fontSize:
+                  "clamp(25px,5vw,36px)",
               }}
             >
               🤝 Marketplace Activity
@@ -301,6 +397,10 @@ function MarketplaceActivity() {
             </p>
           </div>
 
+          {/* =================================================
+              LOADING
+          ================================================= */}
+
           {loading ? (
             <div
               style={{
@@ -310,12 +410,21 @@ function MarketplaceActivity() {
                 borderRadius: "16px",
               }}
             >
-              <h3>Loading marketplace activity...</h3>
+              <h3>
+                Loading marketplace activity...
+              </h3>
             </div>
           ) : (
             <>
-              {/* INQUIRIES */}
-              <section style={{ marginBottom: "40px" }}>
+              {/* =================================================
+                  INQUIRIES
+              ================================================= */}
+
+              <section
+                style={{
+                  marginBottom: "40px",
+                }}
+              >
                 <h2
                   style={{
                     color: "#2E7D32",
@@ -384,6 +493,46 @@ function MarketplaceActivity() {
                           Land ID: {item.land_id}
                         </p>
 
+                        {/* CHAT WITH BUYER */}
+
+                        <button
+                          onClick={() =>
+                            startChat(
+                              item.land_id
+                            )
+                          }
+                          disabled={
+                            actionLoading ===
+                            `chat-${item.land_id}`
+                          }
+                          style={{
+                            width: "100%",
+                            marginTop: "15px",
+                            border: "none",
+                            borderRadius: "9px",
+                            padding: "11px",
+                            background:
+                              "#1976D2",
+                            color: "#fff",
+                            cursor:
+                              actionLoading ===
+                              `chat-${item.land_id}`
+                                ? "not-allowed"
+                                : "pointer",
+                            fontWeight: "700",
+                          }}
+                        >
+                          💬{" "}
+                          {actionLoading ===
+                          `chat-${item.land_id}`
+                            ? "Opening Chat..."
+                            : userRole === "farmer"
+                            ? "Reply to Buyer"
+                            : "Chat with Farmer"}
+                        </button>
+
+                        {/* FARMER ACTIONS */}
+
                         {userRole === "farmer" &&
                           item.status ===
                             "pending" && (
@@ -391,7 +540,7 @@ function MarketplaceActivity() {
                               style={{
                                 display: "flex",
                                 gap: "10px",
-                                marginTop: "15px",
+                                marginTop: "10px",
                               }}
                             >
                               <button
@@ -410,10 +559,13 @@ function MarketplaceActivity() {
                                   border: "none",
                                   borderRadius: "9px",
                                   padding: "10px",
-                                  background: "#2E7D32",
+                                  background:
+                                    "#2E7D32",
                                   color: "#fff",
-                                  cursor: "pointer",
-                                  fontWeight: "700",
+                                  cursor:
+                                    "pointer",
+                                  fontWeight:
+                                    "700",
                                 }}
                               >
                                 Accept
@@ -435,10 +587,13 @@ function MarketplaceActivity() {
                                   border: "none",
                                   borderRadius: "9px",
                                   padding: "10px",
-                                  background: "#C62828",
+                                  background:
+                                    "#C62828",
                                   color: "#fff",
-                                  cursor: "pointer",
-                                  fontWeight: "700",
+                                  cursor:
+                                    "pointer",
+                                  fontWeight:
+                                    "700",
                                 }}
                               >
                                 Reject
@@ -451,8 +606,15 @@ function MarketplaceActivity() {
                 )}
               </section>
 
-              {/* OFFERS */}
-              <section style={{ marginBottom: "40px" }}>
+              {/* =================================================
+                  OFFERS
+              ================================================= */}
+
+              <section
+                style={{
+                  marginBottom: "40px",
+                }}
+              >
                 <h2
                   style={{
                     color: "#1565C0",
@@ -504,14 +666,17 @@ function MarketplaceActivity() {
 
                         <h3
                           style={{
-                            margin: "18px 0 8px",
+                            margin:
+                              "18px 0 8px",
                             color: "#1565C0",
                           }}
                         >
                           ₹
                           {Number(
                             item.amount || 0
-                          ).toLocaleString("en-IN")}
+                          ).toLocaleString(
+                            "en-IN"
+                          )}
                         </h3>
 
                         {item.message && (
@@ -534,6 +699,46 @@ function MarketplaceActivity() {
                           Land ID: {item.land_id}
                         </p>
 
+                        {/* CHAT */}
+
+                        <button
+                          onClick={() =>
+                            startChat(
+                              item.land_id
+                            )
+                          }
+                          disabled={
+                            actionLoading ===
+                            `chat-${item.land_id}`
+                          }
+                          style={{
+                            width: "100%",
+                            marginTop: "15px",
+                            border: "none",
+                            borderRadius: "9px",
+                            padding: "11px",
+                            background:
+                              "#1976D2",
+                            color: "#fff",
+                            cursor:
+                              actionLoading ===
+                              `chat-${item.land_id}`
+                                ? "not-allowed"
+                                : "pointer",
+                            fontWeight: "700",
+                          }}
+                        >
+                          💬{" "}
+                          {actionLoading ===
+                          `chat-${item.land_id}`
+                            ? "Opening Chat..."
+                            : userRole === "farmer"
+                            ? "Reply to Buyer"
+                            : "Chat with Farmer"}
+                        </button>
+
+                        {/* FARMER ACTIONS */}
+
                         {userRole === "farmer" &&
                           item.status ===
                             "pending" && (
@@ -541,7 +746,7 @@ function MarketplaceActivity() {
                               style={{
                                 display: "flex",
                                 gap: "10px",
-                                marginTop: "15px",
+                                marginTop: "10px",
                               }}
                             >
                               <button
@@ -560,10 +765,13 @@ function MarketplaceActivity() {
                                   border: "none",
                                   borderRadius: "9px",
                                   padding: "10px",
-                                  background: "#2E7D32",
+                                  background:
+                                    "#2E7D32",
                                   color: "#fff",
-                                  cursor: "pointer",
-                                  fontWeight: "700",
+                                  cursor:
+                                    "pointer",
+                                  fontWeight:
+                                    "700",
                                 }}
                               >
                                 Accept
@@ -585,10 +793,13 @@ function MarketplaceActivity() {
                                   border: "none",
                                   borderRadius: "9px",
                                   padding: "10px",
-                                  background: "#C62828",
+                                  background:
+                                    "#C62828",
                                   color: "#fff",
-                                  cursor: "pointer",
-                                  fontWeight: "700",
+                                  cursor:
+                                    "pointer",
+                                  fontWeight:
+                                    "700",
                                 }}
                               >
                                 Reject
@@ -601,7 +812,10 @@ function MarketplaceActivity() {
                 )}
               </section>
 
-              {/* SITE VISITS */}
+              {/* =================================================
+                  SITE VISITS
+              ================================================= */}
+
               <section>
                 <h2
                   style={{
@@ -685,6 +899,46 @@ function MarketplaceActivity() {
                           Land ID: {item.land_id}
                         </p>
 
+                        {/* CHAT */}
+
+                        <button
+                          onClick={() =>
+                            startChat(
+                              item.land_id
+                            )
+                          }
+                          disabled={
+                            actionLoading ===
+                            `chat-${item.land_id}`
+                          }
+                          style={{
+                            width: "100%",
+                            marginTop: "15px",
+                            border: "none",
+                            borderRadius: "9px",
+                            padding: "11px",
+                            background:
+                              "#1976D2",
+                            color: "#fff",
+                            cursor:
+                              actionLoading ===
+                              `chat-${item.land_id}`
+                                ? "not-allowed"
+                                : "pointer",
+                            fontWeight: "700",
+                          }}
+                        >
+                          💬{" "}
+                          {actionLoading ===
+                          `chat-${item.land_id}`
+                            ? "Opening Chat..."
+                            : userRole === "farmer"
+                            ? "Reply to Buyer"
+                            : "Chat with Farmer"}
+                        </button>
+
+                        {/* FARMER ACTIONS */}
+
                         {userRole === "farmer" &&
                           item.status ===
                             "pending" && (
@@ -694,7 +948,7 @@ function MarketplaceActivity() {
                                 gridTemplateColumns:
                                   "1fr 1fr",
                                 gap: "10px",
-                                marginTop: "15px",
+                                marginTop: "10px",
                               }}
                             >
                               <button
@@ -708,10 +962,13 @@ function MarketplaceActivity() {
                                   border: "none",
                                   borderRadius: "9px",
                                   padding: "10px",
-                                  background: "#2E7D32",
+                                  background:
+                                    "#2E7D32",
                                   color: "#fff",
-                                  cursor: "pointer",
-                                  fontWeight: "700",
+                                  cursor:
+                                    "pointer",
+                                  fontWeight:
+                                    "700",
                                 }}
                               >
                                 Accept
@@ -728,16 +985,21 @@ function MarketplaceActivity() {
                                   border: "none",
                                   borderRadius: "9px",
                                   padding: "10px",
-                                  background: "#C62828",
+                                  background:
+                                    "#C62828",
                                   color: "#fff",
-                                  cursor: "pointer",
-                                  fontWeight: "700",
+                                  cursor:
+                                    "pointer",
+                                  fontWeight:
+                                    "700",
                                 }}
                               >
                                 Reject
                               </button>
                             </div>
                           )}
+
+                        {/* MARK COMPLETED */}
 
                         {userRole === "farmer" &&
                           item.status ===
@@ -755,10 +1017,13 @@ function MarketplaceActivity() {
                                 border: "none",
                                 borderRadius: "9px",
                                 padding: "10px",
-                                background: "#1565C0",
+                                background:
+                                  "#1565C0",
                                 color: "#fff",
-                                cursor: "pointer",
-                                fontWeight: "700",
+                                cursor:
+                                  "pointer",
+                                fontWeight:
+                                  "700",
                               }}
                             >
                               Mark Completed
