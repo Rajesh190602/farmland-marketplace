@@ -14,6 +14,7 @@ from app.models import (
     SiteVisit,
     Notification,
     LandReport,
+    UserReport,
 )
 from app.schemas import (
     LandAvailabilityResponse,
@@ -28,6 +29,8 @@ from app.schemas import (
     SiteVisitStatusUpdate,
     LandReportCreate,
     LandReportResponse,
+    UserReportCreate,
+    UserReportResponse,
 )
 
 
@@ -1256,4 +1259,137 @@ def get_my_land_reports(
         )
         .all()
     )
+# =========================================================
+# PHASE 2 - TRUST & SAFETY
+# #9 REPORT USER
+# =========================================================
 
+@router.post(
+    "/users/{user_id}/report",
+    response_model=UserReportResponse,
+)
+def report_user(
+    user_id: int,
+    data: UserReportCreate,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Allow an authenticated user to report another user.
+
+    The report is stored as pending and does not automatically
+    suspend, block, or otherwise modify the reported user.
+    """
+
+    # The path and request body must refer to the same user.
+    if data.reported_user_id != user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Reported user ID does not match the selected user.",
+        )
+
+    reporter = get_user(
+        db,
+        current_user,
+    )
+
+    reported_user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not reported_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found.",
+        )
+
+    # A user cannot report themselves.
+    if reporter.id == reported_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot report yourself.",
+        )
+
+    reason = (data.reason or "").strip()
+
+    description = (
+        data.description.strip()
+        if data.description
+        else None
+    )
+
+    if not reason:
+        raise HTTPException(
+            status_code=400,
+            detail="Report reason is required.",
+        )
+
+    if len(reason) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Report reason must be 100 characters or less.",
+        )
+
+    if description and len(description) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Report description must be 1000 characters or less.",
+        )
+
+    # Prevent duplicate pending reports from the same reporter
+    # against the same user.
+    existing = (
+        db.query(UserReport)
+        .filter(
+            UserReport.reporter_id == reporter.id,
+            UserReport.reported_user_id == reported_user.id,
+            UserReport.status == "pending",
+        )
+        .first()
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have a pending report for this user.",
+        )
+
+    report = UserReport(
+        reporter_id=reporter.id,
+        reported_user_id=reported_user.id,
+        reason=reason,
+        description=description,
+        status="pending",
+    )
+
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+
+    return report
+
+
+@router.get(
+    "/user-reports/my",
+    response_model=list[UserReportResponse],
+)
+def get_my_user_reports(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Return reports submitted by the currently authenticated user.
+    """
+
+    return (
+        db.query(UserReport)
+        .filter(
+            UserReport.reporter_id == current_user,
+        )
+        .order_by(
+            UserReport.created_at.desc(),
+        )
+        .all()
+    )

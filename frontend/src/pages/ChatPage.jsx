@@ -29,6 +29,15 @@ export default function ChatPage() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
 
+  // =====================================================
+  // PHASE 2 - REPORT USER
+  // =====================================================
+
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+
   // Message whose menu is currently open
   const [openMessageMenu, setOpenMessageMenu] = useState(null);
 
@@ -574,6 +583,78 @@ export default function ChatPage() {
       bytes /
       (1024 * 1024)
     ).toFixed(1)} MB`;
+  };
+
+  // =====================================================
+  // PHASE 2 - REPORT USER
+  // =====================================================
+
+  const reportUser = async () => {
+    const reason = reportReason.trim();
+    const description = reportDescription.trim();
+
+    if (!otherUserId) {
+      alert("Unable to identify the user in this conversation.");
+      return;
+    }
+
+    if (!reason) {
+      alert("Please enter a reason for reporting this user.");
+      return;
+    }
+
+    if (reason.length > 100) {
+      alert("Report reason must be 100 characters or less.");
+      return;
+    }
+
+    if (description.length > 1000) {
+      alert(
+        "Report description must be 1000 characters or less."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to report ${otherUserName || "this user"}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setReportLoading(true);
+
+      await api.post(
+        `/marketplace/users/${otherUserId}/report`,
+        {
+          reported_user_id: Number(otherUserId),
+          reason,
+          description: description || null,
+        }
+      );
+
+      alert(
+        "Report submitted successfully. Our admin team will review it."
+      );
+
+      setReportReason("");
+      setReportDescription("");
+      setShowReportForm(false);
+    } catch (error) {
+      console.error(
+        "Failed to report user:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to submit user report."
+      );
+    } finally {
+      setReportLoading(false);
+    }
   };
 
   // =====================================================
@@ -1166,15 +1247,199 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div
+            <button
+              type="button"
+              onClick={() => {
+                setShowReportForm(
+                  (previous) => !previous
+                );
+                setShowEmoji(false);
+                setShowAttachMenu(false);
+              }}
+              disabled={!otherUserId}
+              title="Report User"
               style={{
+                border: "none",
+                background: "transparent",
+                color: "#fff",
                 fontSize: "22px",
-                opacity: 0.9,
+                opacity: otherUserId ? 0.9 : 0.5,
+                cursor: otherUserId
+                  ? "pointer"
+                  : "not-allowed",
+                padding: "5px 8px",
               }}
             >
               ⋮
-            </div>
+            </button>
           </div>
+
+          {/* =====================================================
+              PHASE 2 - REPORT USER
+          ===================================================== */}
+
+          {showReportForm && (
+            <div
+              style={{
+                background: "#FFF8F8",
+                borderBottom: "1px solid #FFCDD2",
+                padding: "15px",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: "700px",
+                  margin: "0 auto",
+                  background: "#fff",
+                  border: "1px solid #FFCDD2",
+                  borderRadius: "12px",
+                  padding: "15px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "10px",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <strong
+                    style={{
+                      color: "#C62828",
+                      fontSize: "16px",
+                    }}
+                  >
+                    🚩 Report {otherUserName || "User"}
+                  </strong>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowReportForm(false)
+                    }
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      fontSize: "20px",
+                      cursor: "pointer",
+                      color: "#666",
+                    }}
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <p
+                  style={{
+                    margin: "0 0 12px",
+                    color: "#666",
+                    fontSize: "13px",
+                  }}
+                >
+                  Report this user if you believe they are
+                  behaving improperly or violating marketplace rules.
+                </p>
+
+                <input
+                  type="text"
+                  value={reportReason}
+                  onChange={(event) =>
+                    setReportReason(event.target.value)
+                  }
+                  maxLength={100}
+                  placeholder="Reason for reporting"
+                  disabled={reportLoading}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "10px 12px",
+                    border: "1px solid #ccc",
+                    borderRadius: "8px",
+                    marginBottom: "8px",
+                    fontFamily: "inherit",
+                  }}
+                />
+
+                <textarea
+                  value={reportDescription}
+                  onChange={(event) =>
+                    setReportDescription(
+                      event.target.value
+                    )
+                  }
+                  maxLength={1000}
+                  rows={3}
+                  placeholder="Additional details (optional)"
+                  disabled={reportLoading}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "10px 12px",
+                    border: "1px solid #ccc",
+                    borderRadius: "8px",
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                  }}
+                />
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "8px",
+                    justifyContent: "flex-end",
+                    marginTop: "10px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowReportForm(false)
+                    }
+                    disabled={reportLoading}
+                    style={{
+                      border: "1px solid #ccc",
+                      background: "#fff",
+                      color: "#555",
+                      padding: "9px 16px",
+                      borderRadius: "8px",
+                      cursor: reportLoading
+                        ? "not-allowed"
+                        : "pointer",
+                      fontWeight: "600",
+                    }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={reportUser}
+                    disabled={reportLoading}
+                    style={{
+                      border: "none",
+                      background: reportLoading
+                        ? "#999"
+                        : "#C62828",
+                      color: "#fff",
+                      padding: "9px 16px",
+                      borderRadius: "8px",
+                      cursor: reportLoading
+                        ? "not-allowed"
+                        : "pointer",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {reportLoading
+                      ? "Submitting..."
+                      : "🚩 Submit Report"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* =====================================================
               MESSAGE AREA

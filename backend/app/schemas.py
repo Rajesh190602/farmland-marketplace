@@ -328,3 +328,25 @@ class LandReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+# =========================================================
+# PHASE 2 - USER REPORT
+# =========================================================
+
+class UserReportCreate(BaseModel):
+    reported_user_id: int
+    reason: str
+    description: Optional[str] = None
+
+
+class UserReportResponse(BaseModel):
+    id: int
+    reporter_id: int
+    reported_user_id: int
+    reason: str
+    description: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

@@ -929,4 +929,75 @@ class LandReport(Base):
         back_populates="land_reports",
         foreign_keys=[reporter_id]
     )
+# =========================================================
+# PHASE 2
+# USER REPORT
+# =========================================================
 
+class UserReport(Base):
+    __tablename__ = "user_reports"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    # User who submitted the report
+    reporter_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    # User being reported
+    reported_user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    # Reason selected by the reporter
+    reason = Column(
+        String,
+        nullable=False
+    )
+
+    # Optional additional information
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    # pending / resolved / dismissed
+    status = Column(
+        String,
+        default="pending",
+        nullable=False,
+        index=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    reporter = relationship(
+        "User",
+        foreign_keys=[reporter_id],
+        back_populates="user_reports_submitted"
+    )
+
+    reported_user = relationship(
+        "User",
+        foreign_keys=[reported_user_id],
+        back_populates="user_reports_received"
+    )
