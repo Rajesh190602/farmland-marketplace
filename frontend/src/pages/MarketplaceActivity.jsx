@@ -79,43 +79,53 @@ function MarketplaceActivity() {
   // START CHAT
   // =====================================================
 
-  const startChat = async (landId) => {
-    try {
-      setActionLoading(`chat-${landId}`);
+  const startChat = async (item) => {
+  try {
+    setActionLoading(`chat-${item.id}`);
 
-      const response = await api.post(
-        "/chat/start",
-        {
-          land_id: landId,
-        }
-      );
+    const requestData = {
+      land_id: item.land_id,
+    };
 
-      const conversationId =
-        response.data?.id ||
-        response.data?.conversation_id;
-
-      if (!conversationId) {
-        throw new Error(
-          "Conversation ID was not returned by the server."
-        );
-      }
-
-      navigate(`/chat/${conversationId}`);
-    } catch (error) {
-      console.error(
-        "Failed to start chat:",
-        error
-      );
-
-      alert(
-        error.response?.data?.detail ||
-          error.message ||
-          "Failed to start chat."
-      );
-    } finally {
-      setActionLoading(null);
+    // Farmers reply to the buyer using the existing
+    // marketplace activity information.
+    if (userRole === "farmer") {
+      requestData.buyer_id = item.buyer_id;
     }
-  };
+
+    const response = await api.post(
+      userRole === "farmer"
+        ? "/chat/reply"
+        : "/chat/start",
+      requestData
+    );
+
+    const conversationId =
+      response.data?.id ||
+      response.data?.conversation_id;
+
+    if (!conversationId) {
+      throw new Error(
+        "Conversation ID was not returned by the server."
+      );
+    }
+
+    navigate(`/chat/${conversationId}`);
+  } catch (error) {
+    console.error(
+      "Failed to open chat:",
+      error
+    );
+
+    alert(
+      error.response?.data?.detail ||
+        error.message ||
+        "Failed to open chat."
+    );
+  } finally {
+    setActionLoading(null);
+  }
+};
 
   // =====================================================
   // UPDATE INQUIRY
@@ -497,9 +507,9 @@ function MarketplaceActivity() {
 
                         <button
                           onClick={() =>
-                            startChat(
-                              item.land_id
-                            )
+                            startChat(item)
+                            
+                            
                           }
                           disabled={
                             actionLoading ===
@@ -703,9 +713,9 @@ function MarketplaceActivity() {
 
                         <button
                           onClick={() =>
-                            startChat(
-                              item.land_id
-                            )
+                            startChat(item)
+                            
+                            
                           }
                           disabled={
                             actionLoading ===
@@ -903,9 +913,8 @@ function MarketplaceActivity() {
 
                         <button
                           onClick={() =>
-                            startChat(
-                              item.land_id
-                            )
+                            startChat(item)
+                      
                           }
                           disabled={
                             actionLoading ===

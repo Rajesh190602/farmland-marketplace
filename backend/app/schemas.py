@@ -178,6 +178,7 @@ class LandResponse(BaseModel):
 
 class ConversationCreate(BaseModel):
     land_id: int
+    buyer_id: Optional[int] = None
 class FarmerReplyConversationCreate(BaseModel):
     land_id: int
     buyer_id: int
