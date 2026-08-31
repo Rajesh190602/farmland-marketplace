@@ -4,6 +4,7 @@ import api from "../../services/api";
 function AdminReports() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState(null);
 
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -46,6 +47,67 @@ function AdminReports() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // RESOLVE / DISMISS REPORT
+  // =====================================================
+
+  const updateReportStatus = async (report, newStatus) => {
+    if (!report || report.status !== "pending") {
+      return;
+    }
+
+    const actionText =
+      newStatus === "resolved"
+        ? "resolve"
+        : "dismiss";
+
+    const confirmed = window.confirm(
+      `Are you sure you want to ${actionText} this report?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const processingKey =
+      `${report.report_type}-${report.id}`;
+
+    try {
+      setProcessingId(processingKey);
+
+      await api.put(
+        `/admin/reports/${report.report_type}/${report.id}`,
+        null,
+        {
+          params: {
+            status: newStatus,
+          },
+        }
+      );
+
+      // Reload reports and statistics from backend.
+      await loadReports();
+
+      alert(
+        newStatus === "resolved"
+          ? "Report resolved successfully."
+          : "Report dismissed successfully."
+      );
+    } catch (error) {
+      console.error(
+        "Failed to update report status:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to update report status."
+      );
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -127,9 +189,12 @@ function AdminReports() {
         width: "100%",
         maxWidth: "1200px",
         margin: "0 auto",
+        boxSizing: "border-box",
       }}
     >
-      {/* Header */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
       <div
         style={{
@@ -157,7 +222,8 @@ function AdminReports() {
               color: "#666",
             }}
           >
-            Review reports submitted by marketplace users.
+            Review reports submitted by marketplace
+            users.
           </p>
         </div>
 
@@ -177,7 +243,9 @@ function AdminReports() {
         </button>
       </div>
 
-      {/* Statistics */}
+      {/* =================================================
+          STATISTICS
+      ================================================= */}
 
       <div
         style={{
@@ -213,7 +281,9 @@ function AdminReports() {
         />
       </div>
 
-      {/* Filters */}
+      {/* =================================================
+          FILTERS
+      ================================================= */}
 
       <div
         style={{
@@ -231,6 +301,7 @@ function AdminReports() {
       >
         <div>
           <strong>Report Type:</strong>{" "}
+
           <select
             value={typeFilter}
             onChange={(e) =>
@@ -244,13 +315,18 @@ function AdminReports() {
             }}
           >
             <option value="all">All</option>
-            <option value="land">Land Reports</option>
-            <option value="user">User Reports</option>
+            <option value="land">
+              Land Reports
+            </option>
+            <option value="user">
+              User Reports
+            </option>
           </select>
         </div>
 
         <div>
           <strong>Status:</strong>{" "}
+
           <select
             value={statusFilter}
             onChange={(e) =>
@@ -264,14 +340,22 @@ function AdminReports() {
             }}
           >
             <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="resolved">Resolved</option>
-            <option value="dismissed">Dismissed</option>
+            <option value="pending">
+              Pending
+            </option>
+            <option value="resolved">
+              Resolved
+            </option>
+            <option value="dismissed">
+              Dismissed
+            </option>
           </select>
         </div>
       </div>
 
-      {/* Report Count */}
+      {/* =================================================
+          REPORT COUNT
+      ================================================= */}
 
       <div
         style={{
@@ -284,7 +368,9 @@ function AdminReports() {
         {filteredReports.length !== 1 ? "s" : ""}
       </div>
 
-      {/* Empty State */}
+      {/* =================================================
+          EMPTY STATE
+      ================================================= */}
 
       {filteredReports.length === 0 ? (
         <div
@@ -320,6 +406,9 @@ function AdminReports() {
             const uniqueKey =
               `${report.report_type}-${report.id}`;
 
+            const isProcessing =
+              processingId === uniqueKey;
+
             return (
               <div
                 key={uniqueKey}
@@ -335,13 +424,14 @@ function AdminReports() {
                       : "5px solid #1976D2",
                 }}
               >
-                {/* Top Row */}
+                {/* =================================================
+                    TOP ROW
+                ================================================= */}
 
                 <div
                   style={{
                     display: "flex",
-                    justifyContent:
-                      "space-between",
+                    justifyContent: "space-between",
                     alignItems: "center",
                     gap: "10px",
                     flexWrap: "wrap",
@@ -377,7 +467,9 @@ function AdminReports() {
                   </span>
                 </div>
 
-                {/* Reported Target */}
+                {/* =================================================
+                    REPORTED TARGET
+                ================================================= */}
 
                 <div
                   style={{
@@ -387,8 +479,7 @@ function AdminReports() {
                     marginBottom: "15px",
                   }}
                 >
-                  {report.report_type ===
-                  "land" ? (
+                  {report.report_type === "land" ? (
                     <>
                       <div>
                         <strong>
@@ -458,7 +549,9 @@ function AdminReports() {
                   )}
                 </div>
 
-                {/* Reporter */}
+                {/* =================================================
+                    REPORTER
+                ================================================= */}
 
                 <p>
                   <strong>
@@ -477,7 +570,9 @@ function AdminReports() {
                   </p>
                 )}
 
-                {/* Reason */}
+                {/* =================================================
+                    REASON
+                ================================================= */}
 
                 <p>
                   <strong>
@@ -486,7 +581,9 @@ function AdminReports() {
                   {report.reason}
                 </p>
 
-                {/* Description */}
+                {/* =================================================
+                    DESCRIPTION
+                ================================================= */}
 
                 {report.description && (
                   <div
@@ -513,7 +610,9 @@ function AdminReports() {
                   </div>
                 )}
 
-                {/* Date */}
+                {/* =================================================
+                    DATE
+                ================================================= */}
 
                 {report.created_at && (
                   <div
@@ -530,6 +629,111 @@ function AdminReports() {
                     {new Date(
                       report.created_at
                     ).toLocaleString()}
+                  </div>
+                )}
+
+                {/* =================================================
+                    ADMIN ACTIONS
+                ================================================= */}
+
+                {report.status === "pending" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                      marginTop: "20px",
+                      paddingTop: "18px",
+                      borderTop:
+                        "1px solid #eee",
+                    }}
+                  >
+                    <button
+                      onClick={() =>
+                        updateReportStatus(
+                          report,
+                          "resolved"
+                        )
+                      }
+                      disabled={isProcessing}
+                      style={{
+                        flex: "1 1 180px",
+                        minWidth: "160px",
+                        padding: "12px 18px",
+                        background: isProcessing
+                          ? "#A5D6A7"
+                          : "#2E7D32",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: isProcessing
+                          ? "not-allowed"
+                          : "pointer",
+                        fontWeight: "bold",
+                        fontSize: "15px",
+                      }}
+                    >
+                      {isProcessing
+                        ? "Processing..."
+                        : "✅ Resolve"}
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        updateReportStatus(
+                          report,
+                          "dismissed"
+                        )
+                      }
+                      disabled={isProcessing}
+                      style={{
+                        flex: "1 1 180px",
+                        minWidth: "160px",
+                        padding: "12px 18px",
+                        background: isProcessing
+                          ? "#BDBDBD"
+                          : "#616161",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: isProcessing
+                          ? "not-allowed"
+                          : "pointer",
+                        fontWeight: "bold",
+                        fontSize: "15px",
+                      }}
+                    >
+                      {isProcessing
+                        ? "Processing..."
+                        : "❌ Dismiss"}
+                    </button>
+                  </div>
+                )}
+
+                {/* =================================================
+                    PROCESSED INFORMATION
+                ================================================= */}
+
+                {report.status !== "pending" && (
+                  <div
+                    style={{
+                      marginTop: "18px",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      background:
+                        report.status === "resolved"
+                          ? "#E8F5E9"
+                          : "#EEEEEE",
+                      color:
+                        report.status === "resolved"
+                          ? "#2E7D32"
+                          : "#616161",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {report.status === "resolved"
+                      ? "✅ This report has been resolved."
+                      : "⚪ This report has been dismissed."}
                   </div>
                 )}
               </div>

@@ -1500,3 +1500,187 @@ def monthly_growth(
         for year, month, users in results
         if year is not None and month is not None
     ]
+# =========================================================
+# PHASE 2 #11 - RESOLVE / DISMISS REPORT
+# =========================================================
+
+@router.put("/reports/{report_type}/{report_id}")
+def update_report_status(
+    report_type: str,
+    report_id: int,
+    status: str = Query(...),
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Admin can resolve or dismiss a marketplace report.
+
+    report_type:
+        land
+        user
+
+    status:
+        resolved
+        dismissed
+    """
+
+    report_type = report_type.strip().lower()
+    status = status.strip().lower()
+
+    # -----------------------------------------------------
+    # Validate report type
+    # -----------------------------------------------------
+
+    if report_type not in {"land", "user"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid report type. Use land or user.",
+        )
+
+    # -----------------------------------------------------
+    # Validate status
+    # -----------------------------------------------------
+
+    if status not in {"resolved", "dismissed"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status. Use resolved or dismissed.",
+        )
+
+    # =====================================================
+    # LAND REPORT
+    # =====================================================
+
+    if report_type == "land":
+
+        report = (
+            db.query(LandReport)
+            .filter(
+                LandReport.id == report_id
+            )
+            .first()
+        )
+
+        if not report:
+            raise HTTPException(
+                status_code=404,
+                detail="Land report not found.",
+            )
+
+        # Do not process an already processed report.
+        if report.status != "pending":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"This report has already been "
+                    f"{report.status}."
+                ),
+            )
+
+        old_status = report.status
+
+        report.status = status
+
+        # -------------------------------------------------
+        # Activity log
+        # -------------------------------------------------
+
+        create_activity_log(
+            db=db,
+            user_id=admin,
+            action=(
+                "RESOLVE_LAND_REPORT"
+                if status == "resolved"
+                else "DISMISS_LAND_REPORT"
+            ),
+            description=(
+                f"Admin {status} land report "
+                f"#{report.id} for land "
+                f"#{report.land_id}."
+            ),
+            target_type="LAND_REPORT",
+            target_id=report.id,
+        )
+
+        db.commit()
+        db.refresh(report)
+
+        return {
+            "message": (
+                "Land report resolved successfully."
+                if status == "resolved"
+                else "Land report dismissed successfully."
+            ),
+            "report_type": "land",
+            "report_id": report.id,
+            "old_status": old_status,
+            "status": report.status,
+        }
+
+    # =====================================================
+    # USER REPORT
+    # =====================================================
+
+    report = (
+        db.query(UserReport)
+        .filter(
+            UserReport.id == report_id
+        )
+        .first()
+    )
+
+    if not report:
+        raise HTTPException(
+            status_code=404,
+            detail="User report not found.",
+        )
+
+    # Do not process an already processed report.
+    if report.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"This report has already been "
+                f"{report.status}."
+            ),
+        )
+
+    old_status = report.status
+
+    report.status = status
+
+    # -----------------------------------------------------
+    # Activity log
+    # -----------------------------------------------------
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action=(
+            "RESOLVE_USER_REPORT"
+            if status == "resolved"
+            else "DISMISS_USER_REPORT"
+        ),
+        description=(
+            f"Admin {status} user report "
+            f"#{report.id} for user "
+            f"#{report.reported_user_id}."
+        ),
+        target_type="USER_REPORT",
+        target_id=report.id,
+    )
+
+    db.commit()
+    db.refresh(report)
+
+    return {
+        "message": (
+            "User report resolved successfully."
+            if status == "resolved"
+            else "User report dismissed successfully."
+        ),
+        "report_type": "user",
+        "report_id": report.id,
+        "old_status": old_status,
+        "status": report.status,
+    }
