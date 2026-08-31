@@ -13,18 +13,40 @@ function LandDetails() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
 
+  // =========================================================
+  // PHASE 1 - MARKETPLACE STATE
+  // =========================================================
+
+  const [availability, setAvailability] = useState(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
+  const [inquiryMessage, setInquiryMessage] = useState("");
+  const [inquiryLoading, setInquiryLoading] = useState(false);
+
+  const [offerAmount, setOfferAmount] = useState("");
+  const [offerMessage, setOfferMessage] = useState("");
+  const [offerLoading, setOfferLoading] = useState(false);
+
+  const [visitDate, setVisitDate] = useState("");
+  const [visitMessage, setVisitMessage] = useState("");
+  const [visitLoading, setVisitLoading] = useState(false);
+
   // Logged-in user's ID
   const currentUserId = Number(
     sessionStorage.getItem("user_id")
   );
 
-  useEffect(() => {
-    fetchLand();
-  }, [id]);
+  // Logged-in user's role
+  const currentUserRole =
+    sessionStorage.getItem("role") || "";
 
   // =========================================================
   // LOAD LAND
   // =========================================================
+
+  useEffect(() => {
+    fetchLand();
+  }, [id]);
 
   const fetchLand = async () => {
     try {
@@ -34,6 +56,9 @@ function LandDetails() {
 
       // Check whether current user already favorited this land
       await checkFavoriteStatus(id);
+
+      // Load Phase 1 marketplace availability
+      await fetchAvailability(id);
     } catch (error) {
       console.error("Failed to load land:", error);
 
@@ -41,6 +66,33 @@ function LandDetails() {
         error.response?.data?.detail ||
           "Failed to load land details."
       );
+    }
+  };
+
+  // =========================================================
+  // PHASE 1 - LOAD AVAILABILITY
+  // =========================================================
+
+  const fetchAvailability = async (landId) => {
+    try {
+      setAvailabilityLoading(true);
+
+      const response = await api.get(
+        `/marketplace/lands/${landId}/availability`
+      );
+
+      setAvailability(response.data);
+    } catch (error) {
+      console.error(
+        "Failed to load land availability:",
+        error
+      );
+
+      // Do not break Land Details if marketplace availability
+      // is temporarily unavailable.
+      setAvailability(null);
+    } finally {
+      setAvailabilityLoading(false);
     }
   };
 
@@ -82,7 +134,10 @@ function LandDetails() {
         `/chat/${response.data.conversation_id}`
       );
     } catch (error) {
-      console.error("Failed to start conversation:", error);
+      console.error(
+        "Failed to start conversation:",
+        error
+      );
 
       alert(
         error.response?.data?.detail ||
@@ -136,6 +191,173 @@ function LandDetails() {
   };
 
   // =========================================================
+  // PHASE 1 - SEND INQUIRY
+  // =========================================================
+
+  const sendInquiry = async () => {
+    if (currentUserRole !== "buyer") {
+      alert(
+        "Only buyers can send inquiries."
+      );
+      return;
+    }
+
+    if (inquiryLoading) {
+      return;
+    }
+
+    try {
+      setInquiryLoading(true);
+
+      const message =
+        inquiryMessage.trim() ||
+        "I am interested in this farmland. Please provide more details.";
+
+      await api.post("/marketplace/inquiries", {
+        land_id: land.id,
+        message,
+      });
+
+      alert(
+        "Your inquiry has been sent to the farmer."
+      );
+
+      setInquiryMessage("");
+    } catch (error) {
+      console.error(
+        "Failed to send inquiry:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to send inquiry."
+      );
+    } finally {
+      setInquiryLoading(false);
+    }
+  };
+
+  // =========================================================
+  // PHASE 1 - MAKE OFFER
+  // =========================================================
+
+  const makeOffer = async () => {
+    if (currentUserRole !== "buyer") {
+      alert(
+        "Only buyers can make offers."
+      );
+      return;
+    }
+
+    if (offerLoading) {
+      return;
+    }
+
+    const amount = Number(offerAmount);
+
+    if (!offerAmount || Number.isNaN(amount) || amount <= 0) {
+      alert(
+        "Please enter a valid offer amount."
+      );
+      return;
+    }
+
+    try {
+      setOfferLoading(true);
+
+      const message =
+        offerMessage.trim() ||
+        "I am interested in purchasing this farmland.";
+
+      await api.post("/marketplace/offers", {
+        land_id: land.id,
+        amount,
+        message,
+      });
+
+      alert(
+        "Your offer has been sent to the farmer."
+      );
+
+      setOfferAmount("");
+      setOfferMessage("");
+    } catch (error) {
+      console.error(
+        "Failed to make offer:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to submit offer."
+      );
+    } finally {
+      setOfferLoading(false);
+    }
+  };
+
+  // =========================================================
+  // PHASE 1 - REQUEST SITE VISIT
+  // =========================================================
+
+  const requestSiteVisit = async () => {
+    if (currentUserRole !== "buyer") {
+      alert(
+        "Only buyers can request a site visit."
+      );
+      return;
+    }
+
+    if (visitLoading) {
+      return;
+    }
+
+    if (!visitDate) {
+      alert(
+        "Please select a date and time for the site visit."
+      );
+      return;
+    }
+
+    try {
+      setVisitLoading(true);
+
+      const message =
+        visitMessage.trim() ||
+        "I would like to visit the farmland and inspect the property.";
+
+      await api.post(
+        "/marketplace/site-visits",
+        {
+          land_id: land.id,
+          requested_date: visitDate,
+          message,
+        }
+      );
+
+      alert(
+        "Your site visit request has been sent to the farmer."
+      );
+
+      setVisitDate("");
+      setVisitMessage("");
+    } catch (error) {
+      console.error(
+        "Failed to request site visit:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to request site visit."
+      );
+    } finally {
+      setVisitLoading(false);
+    }
+  };
+
+  // =========================================================
   // DELETE INDIVIDUAL LAND IMAGE
   // =========================================================
 
@@ -172,6 +394,71 @@ function LandDetails() {
     } finally {
       setDeletingImageId(null);
     }
+  };
+
+  // =========================================================
+  // AVAILABILITY DISPLAY
+  // =========================================================
+
+  const getAvailabilityText = () => {
+    if (availabilityLoading) {
+      return "Checking availability...";
+    }
+
+    if (!availability?.status) {
+      return "Availability unavailable";
+    }
+
+    switch (
+      availability.status.toLowerCase()
+    ) {
+      case "available":
+        return "🟢 Available";
+
+      case "reserved":
+        return "🟠 Reserved";
+
+      case "sold":
+        return "🔴 Sold";
+
+      default:
+        return availability.status;
+    }
+  };
+
+  const getAvailabilityStyle = () => {
+    const status =
+      availability?.status?.toLowerCase();
+
+    if (status === "available") {
+      return {
+        background: "#E8F5E9",
+        color: "#2E7D32",
+        border: "1px solid #A5D6A7",
+      };
+    }
+
+    if (status === "reserved") {
+      return {
+        background: "#FFF3E0",
+        color: "#EF6C00",
+        border: "1px solid #FFCC80",
+      };
+    }
+
+    if (status === "sold") {
+      return {
+        background: "#FFEBEE",
+        color: "#C62828",
+        border: "1px solid #EF9A9A",
+      };
+    }
+
+    return {
+      background: "#F5F5F5",
+      color: "#616161",
+      border: "1px solid #BDBDBD",
+    };
   };
 
   // =========================================================
@@ -238,6 +525,10 @@ function LandDetails() {
   // Only the owner should see the image deletion buttons.
   const isLandOwner =
     currentUserId === Number(land.owner_id);
+
+  // =========================================================
+  // RETURN
+  // =========================================================
 
   return (
     <>
@@ -310,6 +601,30 @@ function LandDetails() {
           </div>
 
           {/* =====================================================
+              PHASE 1 - AVAILABILITY
+          ====================================================== */}
+
+          <div
+            style={{
+              marginTop: "20px",
+              marginBottom: "10px",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                padding: "10px 20px",
+                borderRadius: "25px",
+                fontWeight: "bold",
+                fontSize: "17px",
+                ...getAvailabilityStyle(),
+              }}
+            >
+              {getAvailabilityText()}
+            </span>
+          </div>
+
+          {/* =====================================================
               LAND BADGES
           ====================================================== */}
 
@@ -338,6 +653,273 @@ function LandDetails() {
               💧 {land.water_source}
             </span>
           </div>
+
+          {/* =====================================================
+              PHASE 1 - BUYER MARKETPLACE ACTIONS
+          ====================================================== */}
+
+          {currentUserRole === "buyer" && (
+            <div
+              style={{
+                background: "#F8FBF8",
+                border: "1px solid #C8E6C9",
+                borderRadius: "18px",
+                padding: "25px",
+                marginTop: "20px",
+                marginBottom: "30px",
+              }}
+            >
+              <h2
+                style={{
+                  color: "#2E7D32",
+                  marginTop: 0,
+                  marginBottom: "20px",
+                }}
+              >
+                🛒 Marketplace Actions
+              </h2>
+
+              {/* =================================================
+                  INQUIRY
+              ================================================== */}
+
+              <div
+                style={{
+                  background: "#FFFFFF",
+                  borderRadius: "14px",
+                  padding: "20px",
+                  marginBottom: "20px",
+                  boxShadow:
+                    "0 3px 12px rgba(0,0,0,.08)",
+                }}
+              >
+                <h3
+                  style={{
+                    color: "#1565C0",
+                    marginTop: 0,
+                  }}
+                >
+                  💬 Send Inquiry
+                </h3>
+
+                <textarea
+                  value={inquiryMessage}
+                  onChange={(e) =>
+                    setInquiryMessage(e.target.value)
+                  }
+                  placeholder="Write your message to the farmer..."
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    resize: "vertical",
+                    fontSize: "15px",
+                    marginBottom: "12px",
+                  }}
+                />
+
+                <button
+                  onClick={sendInquiry}
+                  disabled={inquiryLoading}
+                  style={{
+                    background: inquiryLoading
+                      ? "#9E9E9E"
+                      : "#1565C0",
+                    color: "#fff",
+                    border: "none",
+                    padding: "12px 22px",
+                    borderRadius: "8px",
+                    cursor: inquiryLoading
+                      ? "not-allowed"
+                      : "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {inquiryLoading
+                    ? "Sending..."
+                    : "💬 Send Inquiry"}
+                </button>
+              </div>
+
+              {/* =================================================
+                  OFFER
+              ================================================== */}
+
+              <div
+                style={{
+                  background: "#FFFFFF",
+                  borderRadius: "14px",
+                  padding: "20px",
+                  marginBottom: "20px",
+                  boxShadow:
+                    "0 3px 12px rgba(0,0,0,.08)",
+                }}
+              >
+                <h3
+                  style={{
+                    color: "#2E7D32",
+                    marginTop: 0,
+                  }}
+                >
+                  💰 Make an Offer
+                </h3>
+
+                <input
+                  type="number"
+                  min="1"
+                  value={offerAmount}
+                  onChange={(e) =>
+                    setOfferAmount(e.target.value)
+                  }
+                  placeholder="Enter your offer amount"
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    fontSize: "15px",
+                    marginBottom: "12px",
+                  }}
+                />
+
+                <textarea
+                  value={offerMessage}
+                  onChange={(e) =>
+                    setOfferMessage(e.target.value)
+                  }
+                  placeholder="Add a message with your offer..."
+                  rows={3}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    resize: "vertical",
+                    fontSize: "15px",
+                    marginBottom: "12px",
+                  }}
+                />
+
+                <button
+                  onClick={makeOffer}
+                  disabled={offerLoading}
+                  style={{
+                    background: offerLoading
+                      ? "#9E9E9E"
+                      : "#2E7D32",
+                    color: "#fff",
+                    border: "none",
+                    padding: "12px 22px",
+                    borderRadius: "8px",
+                    cursor: offerLoading
+                      ? "not-allowed"
+                      : "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {offerLoading
+                    ? "Submitting..."
+                    : "💰 Submit Offer"}
+                </button>
+              </div>
+
+              {/* =================================================
+                  SITE VISIT
+              ================================================== */}
+
+              <div
+                style={{
+                  background: "#FFFFFF",
+                  borderRadius: "14px",
+                  padding: "20px",
+                  boxShadow:
+                    "0 3px 12px rgba(0,0,0,.08)",
+                }}
+              >
+                <h3
+                  style={{
+                    color: "#EF6C00",
+                    marginTop: 0,
+                  }}
+                >
+                  📅 Request Site Visit
+                </h3>
+
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: "bold",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Select date and time
+                </label>
+
+                <input
+                  type="datetime-local"
+                  value={visitDate}
+                  onChange={(e) =>
+                    setVisitDate(e.target.value)
+                  }
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    fontSize: "15px",
+                    marginBottom: "12px",
+                  }}
+                />
+
+                <textarea
+                  value={visitMessage}
+                  onChange={(e) =>
+                    setVisitMessage(e.target.value)
+                  }
+                  placeholder="Add a message for the farmer..."
+                  rows={3}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                    resize: "vertical",
+                    fontSize: "15px",
+                    marginBottom: "12px",
+                  }}
+                />
+
+                <button
+                  onClick={requestSiteVisit}
+                  disabled={visitLoading}
+                  style={{
+                    background: visitLoading
+                      ? "#9E9E9E"
+                      : "#EF6C00",
+                    color: "#fff",
+                    border: "none",
+                    padding: "12px 22px",
+                    borderRadius: "8px",
+                    cursor: visitLoading
+                      ? "not-allowed"
+                      : "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {visitLoading
+                    ? "Sending..."
+                    : "📅 Request Site Visit"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* =====================================================
               IMAGE GALLERY
@@ -628,8 +1210,7 @@ function LandDetails() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns:
-                  "1fr 1fr",
+                gridTemplateColumns: "1fr 1fr",
                 gap: "20px",
                 marginBottom: "25px",
               }}
