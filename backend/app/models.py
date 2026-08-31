@@ -97,6 +97,26 @@ class User(Base):
         cascade="all, delete-orphan"
     )
 
+    # -----------------------------------------------------
+    # Phase 2 - User Reports
+    # -----------------------------------------------------
+
+    user_reports_submitted = relationship(
+        "UserReport",
+        foreign_keys="UserReport.reporter_id",
+        back_populates="reporter",
+        cascade="all, delete-orphan"
+    )
+
+    user_reports_received = relationship(
+        "UserReport",
+        foreign_keys="UserReport.reported_user_id",
+        back_populates="reported_user",
+        cascade="all, delete-orphan"
+    )
+
+
+
 
 # =========================================================
 # LAND
