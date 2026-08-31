@@ -8,10 +8,12 @@ function MyLands() {
   const [deletingId, setDeletingId] = useState(null);
   const [deletingImageId, setDeletingImageId] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
+  const [availabilityLoadingId, setAvailabilityLoadingId] = useState(null);
 
   const [lands, setLands] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState({});
   const [galleryImages, setGalleryImages] = useState({});
+  const [availabilityStatuses, setAvailabilityStatuses] = useState({});
 
   const navigate = useNavigate();
 
@@ -35,6 +37,9 @@ function MyLands() {
 
       // Load gallery images for every land
       await loadGalleryImages(myLands);
+
+      // Load marketplace availability for every land
+      await loadAvailabilityStatuses(myLands);
     } catch (error) {
       console.error("Failed to load lands:", error);
 
@@ -91,6 +96,165 @@ function MyLands() {
         error
       );
     }
+  };
+
+  // =========================================================
+  // Load Marketplace Availability
+  // =========================================================
+
+  const loadAvailabilityStatuses = async (landList) => {
+    try {
+      const results = await Promise.all(
+        landList.map(async (land) => {
+          try {
+            const response = await api.get(
+              `/marketplace/lands/${land.id}/availability`
+            );
+
+            return {
+              landId: land.id,
+              status:
+                response.data?.status || "available",
+            };
+          } catch (error) {
+            console.error(
+              `Failed to load availability for land ${land.id}:`,
+              error
+            );
+
+            return {
+              landId: land.id,
+              status: "available",
+            };
+          }
+        })
+      );
+
+      const statusMap = {};
+
+      results.forEach((result) => {
+        statusMap[result.landId] = result.status;
+      });
+
+      setAvailabilityStatuses(statusMap);
+    } catch (error) {
+      console.error(
+        "Failed to load land availability:",
+        error
+      );
+    }
+  };
+
+  // =========================================================
+  // Update Marketplace Availability
+  // =========================================================
+
+  const updateAvailability = async (landId, newStatus) => {
+    const currentStatus =
+      availabilityStatuses[landId] || "available";
+
+    // Reserved -> Available needs confirmation
+    if (
+      currentStatus === "reserved" &&
+      newStatus === "available"
+    ) {
+      const confirmed = window.confirm(
+        "This land is currently reserved. Are you sure you want to make it available again?"
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Sold land cannot be reopened directly
+    if (
+      currentStatus === "sold" &&
+      newStatus !== "sold"
+    ) {
+      alert(
+        "Sold land cannot be reopened directly."
+      );
+      return;
+    }
+
+    try {
+      setAvailabilityLoadingId(landId);
+
+      const response = await api.put(
+        `/marketplace/lands/${landId}/availability`,
+        {
+          land_id: landId,
+          status: newStatus,
+        }
+      );
+
+      const updatedStatus =
+        response.data?.status || newStatus;
+
+      setAvailabilityStatuses((previous) => ({
+        ...previous,
+        [landId]: updatedStatus,
+      }));
+
+      alert(
+        `Land marked as ${updatedStatus}.`
+      );
+    } catch (error) {
+      console.error(
+        "Failed to update availability:",
+        error
+      );
+
+      alert(
+        getErrorMessage(
+          error,
+          "Unable to update land availability."
+        )
+      );
+    } finally {
+      setAvailabilityLoadingId(null);
+    }
+  };
+
+  // =========================================================
+  // Availability Display Helpers
+  // =========================================================
+
+  const getAvailabilityLabel = (status) => {
+    switch (status) {
+      case "reserved":
+        return "🟠 Reserved";
+      case "sold":
+        return "🔴 Sold";
+      case "available":
+      default:
+        return "🟢 Available";
+    }
+  };
+
+  const getAvailabilityBadgeStyle = (status) => {
+    if (status === "sold") {
+      return {
+        background: "#FFEBEE",
+        color: "#C62828",
+        border: "1px solid #FFCDD2",
+      };
+    }
+
+    if (status === "reserved") {
+      return {
+        background: "#FFF3E0",
+        color: "#EF6C00",
+        border: "1px solid #FFE0B2",
+      };
+    }
+
+    return {
+      background: "#E8F5E9",
+      color: "#2E7D32",
+      border: "1px solid #C8E6C9",
+    };
   };
 
   // =========================================================
@@ -340,6 +504,16 @@ function MyLands() {
       });
 
       setSelectedFiles((previous) => {
+        const updated = {
+          ...previous,
+        };
+
+        delete updated[id];
+
+        return updated;
+      });
+
+      setAvailabilityStatuses((previous) => {
         const updated = {
           ...previous,
         };
@@ -664,6 +838,258 @@ function MyLands() {
                   <strong>Crop Type:</strong>{" "}
                   {land.crop_type}
                 </p>
+
+                {/* =================================================
+                    Marketplace Availability
+                ================================================= */}
+
+                <div
+                  style={{
+                    marginTop: "25px",
+                    marginBottom: "25px",
+                    padding: "20px",
+                    background: "#F5F7FA",
+                    border: "1px solid #DADADA",
+                    borderRadius: "12px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      color: "#2E7D32",
+                      marginTop: 0,
+                      marginBottom: "10px",
+                    }}
+                  >
+                    🏷️ Land Availability
+                  </h3>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      flexWrap: "wrap",
+                      marginBottom: "15px",
+                    }}
+                  >
+                    <strong>Current Status:</strong>
+
+                    <span
+                      style={{
+                        ...getAvailabilityBadgeStyle(
+                          availabilityStatuses[land.id] ||
+                            "available"
+                        ),
+                        display: "inline-block",
+                        padding: "8px 16px",
+                        borderRadius: "22px",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {getAvailabilityLabel(
+                        availabilityStatuses[land.id] ||
+                          "available"
+                      )}
+                    </span>
+
+                    {land.status !== "approved" && (
+                      <span
+                        style={{
+                          background: "#FFF3E0",
+                          color: "#EF6C00",
+                          border: "1px solid #FFE0B2",
+                          padding: "8px 14px",
+                          borderRadius: "20px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        ⏳ {land.status}
+                      </span>
+                    )}
+                  </div>
+
+                  {land.status === "approved" ? (
+                    <>
+                      <p
+                        style={{
+                          color: "#666",
+                          marginTop: 0,
+                          marginBottom: "15px",
+                        }}
+                      >
+                        Update whether this land is currently
+                        available, reserved, or sold in the
+                        marketplace.
+                      </p>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateAvailability(
+                              land.id,
+                              "available"
+                            )
+                          }
+                          disabled={
+                            availabilityLoadingId ===
+                              land.id ||
+                            (availabilityStatuses[land.id] ||
+                              "available") === "available"
+                          }
+                          style={{
+                            background: "#2E7D32",
+                            color: "white",
+                            border: "none",
+                            padding: "10px 18px",
+                            borderRadius: "8px",
+                            cursor:
+                              availabilityLoadingId ===
+                              land.id
+                                ? "not-allowed"
+                                : "pointer",
+                            fontWeight: "bold",
+                            opacity:
+                              availabilityLoadingId ===
+                                land.id ||
+                              (availabilityStatuses[
+                                land.id
+                              ] || "available") ===
+                                "available"
+                                ? 0.6
+                                : 1,
+                          }}
+                        >
+                          🟢 Available
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateAvailability(
+                              land.id,
+                              "reserved"
+                            )
+                          }
+                          disabled={
+                            availabilityLoadingId ===
+                              land.id ||
+                            (availabilityStatuses[land.id] ||
+                              "available") === "reserved"
+                          }
+                          style={{
+                            background: "#EF6C00",
+                            color: "white",
+                            border: "none",
+                            padding: "10px 18px",
+                            borderRadius: "8px",
+                            cursor:
+                              availabilityLoadingId ===
+                              land.id
+                                ? "not-allowed"
+                                : "pointer",
+                            fontWeight: "bold",
+                            opacity:
+                              availabilityLoadingId ===
+                                land.id ||
+                              (availabilityStatuses[
+                                land.id
+                              ] || "available") ===
+                                "reserved"
+                                ? 0.6
+                                : 1,
+                          }}
+                        >
+                          🟠 Reserved
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateAvailability(
+                              land.id,
+                              "sold"
+                            )
+                          }
+                          disabled={
+                            availabilityLoadingId ===
+                              land.id ||
+                            (availabilityStatuses[land.id] ||
+                              "available") === "sold"
+                          }
+                          style={{
+                            background: "#C62828",
+                            color: "white",
+                            border: "none",
+                            padding: "10px 18px",
+                            borderRadius: "8px",
+                            cursor:
+                              availabilityLoadingId ===
+                              land.id
+                                ? "not-allowed"
+                                : "pointer",
+                            fontWeight: "bold",
+                            opacity:
+                              availabilityLoadingId ===
+                                land.id ||
+                              (availabilityStatuses[
+                                land.id
+                              ] || "available") ===
+                                "sold"
+                                ? 0.6
+                                : 1,
+                          }}
+                        >
+                          🔴 Sold
+                        </button>
+                      </div>
+
+                      {(availabilityStatuses[land.id] ||
+                        "available") === "sold" && (
+                        <p
+                          style={{
+                            marginBottom: 0,
+                            marginTop: "15px",
+                            color: "#C62828",
+                            fontWeight: "600",
+                          }}
+                        >
+                          A sold listing cannot be reopened
+                          directly.
+                        </p>
+                      )}
+
+                      {availabilityLoadingId === land.id && (
+                        <p
+                          style={{
+                            marginBottom: 0,
+                            marginTop: "12px",
+                            color: "#666",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          Updating marketplace availability...
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p
+                      style={{
+                        marginBottom: 0,
+                        color: "#666",
+                      }}
+                    >
+                      Availability can be changed only after
+                      this land is approved by the admin.
+                    </p>
+                  )}
+                </div>
 
                 {/* =================================================
                     Multiple Image Upload
