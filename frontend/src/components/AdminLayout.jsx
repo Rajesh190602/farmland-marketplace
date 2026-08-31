@@ -15,6 +15,8 @@ function AdminLayout() {
           background: "#1B5E20",
           color: "white",
           padding: "20px",
+          boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         <h2>👑 Admin Panel</h2>
@@ -73,6 +75,17 @@ function AdminLayout() {
             🟡 Pending Approvals
           </Link>
 
+          {/* Reports */}
+          <Link
+            to="/admin/reports"
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
+          >
+            🚩 Reports
+          </Link>
+
           {/* Activity Logs */}
           <Link
             to="/admin/activity-logs"
@@ -103,6 +116,8 @@ function AdminLayout() {
           flex: 1,
           padding: "30px",
           background: "#f5f5f5",
+          minWidth: 0,
+          boxSizing: "border-box",
         }}
       >
         <Outlet />
