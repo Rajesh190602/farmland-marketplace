@@ -349,7 +349,7 @@ def create_inquiry(
     )
 
     db.add(inquiry)
-
+    db.flush()
     notify(
         db,
         land.owner_id,
@@ -605,7 +605,7 @@ def create_offer(
     )
 
     db.add(offer)
-
+    db.flush()
     notify(
         db,
         land.owner_id,
@@ -916,7 +916,7 @@ def create_site_visit(
     )
 
     db.add(visit)
-
+    db.flush()
     notify(
         db,
         land.owner_id,
