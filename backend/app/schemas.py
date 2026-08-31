@@ -202,7 +202,7 @@ class ConversationResponse(BaseModel):
     buyer_id: int 
     farmer_id: int 
     land_id: int 
- 
+
     class Config: 
         from_attributes = True
 
@@ -306,4 +306,25 @@ class SiteVisitResponse(BaseModel):
 class SiteVisitStatusUpdate(BaseModel):
     status: str
 
-    
+# =========================================================
+# PHASE 2 - LAND REPORT
+# =========================================================
+
+class LandReportCreate(BaseModel):
+    land_id: int
+    reason: str
+    description: Optional[str] = None
+
+
+class LandReportResponse(BaseModel):
+    id: int
+    land_id: int
+    reporter_id: int
+    reason: str
+    description: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

@@ -13,6 +13,7 @@ from app.models import (
     LandOffer,
     SiteVisit,
     Notification,
+    LandReport,
 )
 from app.schemas import (
     LandAvailabilityResponse,
@@ -25,6 +26,8 @@ from app.schemas import (
     SiteVisitCreate,
     SiteVisitResponse,
     SiteVisitStatusUpdate,
+    LandReportCreate,
+    LandReportResponse,
 )
 
 
@@ -1118,3 +1121,139 @@ def update_site_visit_status(
     db.refresh(visit)
 
     return visit
+
+# =========================================================
+# PHASE 2 - TRUST & SAFETY
+# #8 REPORT LAND
+# =========================================================
+
+@router.post(
+    "/lands/{land_id}/report",
+    response_model=LandReportResponse,
+)
+def report_land(
+    land_id: int,
+    data: LandReportCreate,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Allow an authenticated user to report an approved land listing.
+
+    A report only creates a pending moderation record. It does not
+    automatically hide, delete, reserve, or change the land status.
+    """
+
+    # The path and body must refer to the same land.
+    if data.land_id != land_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Land ID in the request does not match the selected land.",
+        )
+
+    reporter = get_user(
+        db,
+        current_user,
+    )
+
+    land = get_land(
+        db,
+        land_id,
+    )
+
+    if land.status != "approved":
+        raise HTTPException(
+            status_code=404,
+            detail="Approved land not found.",
+        )
+
+    # A land owner cannot report their own listing.
+    if land.owner_id == reporter.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot report your own land.",
+        )
+
+    reason = (data.reason or "").strip()
+    description = (
+        data.description.strip()
+        if data.description
+        else None
+    )
+
+    if not reason:
+        raise HTTPException(
+            status_code=400,
+            detail="Report reason is required.",
+        )
+
+    if len(reason) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Report reason is too long.",
+        )
+
+    if description and len(description) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Report description must be 1000 characters or less.",
+        )
+
+    # Prevent repeated active reports from the same user for the same land.
+    existing = (
+        db.query(LandReport)
+        .filter(
+            LandReport.land_id == land.id,
+            LandReport.reporter_id == reporter.id,
+            LandReport.status == "pending",
+        )
+        .first()
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have a pending report for this land.",
+        )
+
+    report = LandReport(
+        land_id=land.id,
+        reporter_id=reporter.id,
+        reason=reason,
+        description=description,
+        status="pending",
+    )
+
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+
+    return report
+
+
+@router.get(
+    "/land-reports/my",
+    response_model=list[LandReportResponse],
+)
+def get_my_land_reports(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Return reports submitted by the currently authenticated user.
+
+    This endpoint is included for transparency and future Phase 2 UI.
+    Admin moderation is intentionally handled in later Phase 2 items.
+    """
+
+    return (
+        db.query(LandReport)
+        .filter(
+            LandReport.reporter_id == current_user,
+        )
+        .order_by(
+            LandReport.created_at.desc(),
+        )
+        .all()
+    )
+

@@ -86,6 +86,17 @@ class User(Base):
         cascade="all, delete-orphan"
     )
 
+    # -----------------------------------------------------
+    # Phase 2 - Land Reports
+    # -----------------------------------------------------
+
+    land_reports = relationship(
+        "LandReport",
+        back_populates="reporter",
+        foreign_keys="LandReport.reporter_id",
+        cascade="all, delete-orphan"
+    )
+
 
 # =========================================================
 # LAND
@@ -237,6 +248,16 @@ class Land(Base):
 
     site_visits = relationship(
         "SiteVisit",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+    # -----------------------------------------------------
+    # Phase 2 - Land Reports
+    # -----------------------------------------------------
+
+    reports = relationship(
+        "LandReport",
         back_populates="land",
         cascade="all, delete-orphan"
     )
@@ -838,3 +859,74 @@ class SiteVisit(Base):
         "User",
         foreign_keys=[buyer_id]
     )
+
+# =========================================================
+# PHASE 2
+# LAND REPORT
+# =========================================================
+
+class LandReport(Base):
+    __tablename__ = "land_reports"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    reporter_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    # Reason selected by the user when reporting a land listing.
+    reason = Column(
+        String,
+        nullable=False
+    )
+
+    # Optional additional information from the reporter.
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    # pending / resolved / dismissed
+    status = Column(
+        String,
+        default="pending",
+        nullable=False,
+        index=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="reports"
+    )
+
+    reporter = relationship(
+        "User",
+        back_populates="land_reports",
+        foreign_keys=[reporter_id]
+    )
+

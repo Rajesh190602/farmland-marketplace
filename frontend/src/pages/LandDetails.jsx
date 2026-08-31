@@ -29,6 +29,14 @@ function LandDetails() {
   const [visitDate, setVisitDate] = useState("");
   const [visitMessage, setVisitMessage] = useState("");
 
+  // =========================================================
+  // PHASE 2 - REPORT LAND STATE
+  // =========================================================
+
+  const [reportReason, setReportReason] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+
   // Logged-in user's information
   const currentUserId = Number(
     sessionStorage.getItem("user_id")
@@ -406,6 +414,73 @@ function LandDetails() {
       );
     } finally {
       setMarketplaceLoading(false);
+    }
+  };
+
+  // =========================================================
+  // PHASE 2 - REPORT LAND
+  // =========================================================
+
+  const reportLand = async () => {
+    const reason = reportReason.trim();
+    const description =
+      reportDescription.trim();
+
+    if (!reason) {
+      alert("Please enter a reason for reporting this land.");
+      return;
+    }
+
+    if (reason.length > 100) {
+      alert("Report reason must be 100 characters or less.");
+      return;
+    }
+
+    if (description.length > 1000) {
+      alert(
+        "Report description must be 1000 characters or less."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to report this land listing?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setReportLoading(true);
+
+      await api.post(
+        `/marketplace/lands/${land.id}/report`,
+        {
+          land_id: land.id,
+          reason,
+          description: description || null,
+        }
+      );
+
+      alert(
+        "Report submitted successfully. Our admin team will review it."
+      );
+
+      setReportReason("");
+      setReportDescription("");
+    } catch (error) {
+      console.error(
+        "Failed to report land:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to submit land report."
+      );
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -1504,6 +1579,112 @@ function LandDetails() {
               </button>
             </div>
           </div>
+
+          {/* =====================================================
+              PHASE 2 - REPORT LAND
+          ====================================================== */}
+
+          {!isOwnLand &&
+            isApproved && (
+              <div
+                style={{
+                  marginTop: "30px",
+                  background: "#FFF8F8",
+                  padding: "25px",
+                  borderRadius: "15px",
+                  border: "1px solid #FFCDD2",
+                  boxShadow:
+                    "0 5px 20px rgba(0,0,0,.06)",
+                }}
+              >
+                <h2
+                  style={{
+                    color: "#C62828",
+                    marginTop: 0,
+                    marginBottom: "10px",
+                  }}
+                >
+                  🚩 Report This Land
+                </h2>
+
+                <p
+                  style={{
+                    color: "#666",
+                    marginBottom: "20px",
+                  }}
+                >
+                  If you believe this listing contains
+                  incorrect, misleading, or inappropriate
+                  information, you can report it for admin review.
+                </p>
+
+                <input
+                  type="text"
+                  value={reportReason}
+                  onChange={(event) =>
+                    setReportReason(event.target.value)
+                  }
+                  maxLength={100}
+                  placeholder="Reason for reporting"
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px",
+                    border: "1px solid #ccc",
+                    borderRadius: "8px",
+                    marginBottom: "10px",
+                    fontFamily: "inherit",
+                  }}
+                />
+
+                <textarea
+                  value={reportDescription}
+                  onChange={(event) =>
+                    setReportDescription(
+                      event.target.value
+                    )
+                  }
+                  maxLength={1000}
+                  placeholder="Additional details (optional)"
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "12px",
+                    border: "1px solid #ccc",
+                    borderRadius: "8px",
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                  }}
+                />
+
+                <button
+                  onClick={reportLand}
+                  disabled={reportLoading}
+                  style={{
+                    marginTop: "12px",
+                    background: reportLoading
+                      ? "#999"
+                      : "#C62828",
+                    color: "#fff",
+                    padding: "11px 22px",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: reportLoading
+                      ? "not-allowed"
+                      : "pointer",
+                    fontWeight: "bold",
+                    opacity: reportLoading
+                      ? 0.7
+                      : 1,
+                  }}
+                >
+                  {reportLoading
+                    ? "Submitting..."
+                    : "🚩 Submit Report"}
+                </button>
+              </div>
+            )}
 
           {/* =====================================================
               MARKETPLACE ACTIVITY
