@@ -54,7 +54,7 @@ export default function ChatPage() {
     }
 
     try {
-      const response = await api.get("/marketplace/users/blocked");
+      const response = await api.get("/users/blocked");
       const blockedUsers = response.data || [];
 
       const blocked = Array.isArray(blockedUsers)
@@ -92,7 +92,7 @@ export default function ChatPage() {
       setBlockLoading(true);
 
       await api.post(
-        `/marketplace/users/${otherUserId}/block`
+        `/users/${otherUserId}/block`
       );
 
       setIsBlocked(true);
@@ -131,7 +131,7 @@ export default function ChatPage() {
       setBlockLoading(true);
 
       await api.delete(
-        `/marketplace/users/${otherUserId}/block`
+        `/users/${otherUserId}/block`
       );
 
       setIsBlocked(false);
@@ -761,7 +761,7 @@ export default function ChatPage() {
       setReportLoading(true);
 
       await api.post(
-        `/marketplace/users/${otherUserId}/report`,
+        `/users/${otherUserId}/report`,
         {
           reported_user_id: Number(otherUserId),
           reason,
