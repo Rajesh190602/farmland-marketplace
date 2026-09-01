@@ -855,6 +855,60 @@ def unblock_user(
     }
 
 
+@router.get("/{user_id}/block-status")
+def get_block_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    if user_id == current_user:
+        return {
+            "user_id": user_id,
+            "blocked": False,
+            "blocked_by_me": False,
+            "blocked_by_other": False
+        }
+
+    target_user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not target_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    blocked_by_me = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user,
+            UserBlock.blocked_id == user_id
+        )
+        .first()
+        is not None
+    )
+
+    blocked_by_other = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == user_id,
+            UserBlock.blocked_id == current_user
+        )
+        .first()
+        is not None
+    )
+
+    return {
+        "user_id": user_id,
+        "blocked": blocked_by_me or blocked_by_other,
+        "blocked_by_me": blocked_by_me,
+        "blocked_by_other": blocked_by_other
+    }
+
+
 @router.get("/blocked")
 def get_blocked_users(
     db: Session = Depends(get_db),
