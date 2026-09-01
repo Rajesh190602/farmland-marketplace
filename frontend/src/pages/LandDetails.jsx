@@ -173,19 +173,35 @@ function LandDetails() {
   }, [id]);
 
   const fetchLand = async () => {
+  try {
+    const response = await api.get(
+      `/lands/${id}`
+    );
+
+    setLand(response.data);
+
+    // =====================================================
+    // PHASE 3 - RECENTLY VIEWED LANDS
+    // Record this land only after it has loaded successfully.
+    // Failure here must NOT break the Land Details page.
+    // =====================================================
     try {
-      const response = await api.get(
-        `/lands/${id}`
+      await api.post(
+        `/lands/${id}/view`
       );
+    } catch (viewError) {
+      console.error(
+        "Failed to record recently viewed land:",
+        viewError
+      );
+    }
 
-      setLand(response.data);
+    await checkFavoriteStatus(id);
 
-      await checkFavoriteStatus(id);
-
-      // Availability is a Phase 1 marketplace feature.
-      // If this request fails, do not break the existing
-      // Land Details page.
-      await fetchAvailability(id);
+    // Availability is a Phase 1 marketplace feature.
+    // If this request fails, do not break the existing
+    // Land Details page.
+    await fetchAvailability(id);
     } catch (error) {
       console.error(
         "Failed to load land:",

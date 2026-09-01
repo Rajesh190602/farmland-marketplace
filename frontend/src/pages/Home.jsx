@@ -76,6 +76,7 @@ function Home() {
   ).trim().toLowerCase();
 
   const [featuredLands, setFeaturedLands] = useState([]);
+  const [recentlyViewedLands, setRecentlyViewedLands] = useState([]);
 
   // =====================================================
   // FAVORITES
@@ -90,6 +91,7 @@ function Home() {
 
   useEffect(() => {
     fetchDashboard();
+    fetchRecentlyViewedLands();
 
     // Farmers must not load other farmers' public lands on Home.
     // Buyers and admins can load featured lands.
@@ -116,6 +118,20 @@ function Home() {
       }
     } catch (error) {
       console.log(error);
+    }
+  };
+
+  // =====================================================
+  // FETCH RECENTLY VIEWED LANDS
+  // =====================================================
+
+  const fetchRecentlyViewedLands = async () => {
+    try {
+      const response = await api.get("/lands/recently-viewed");
+      setRecentlyViewedLands(response.data || []);
+    } catch (error) {
+      console.log("Failed to load recently viewed lands:", error);
+      setRecentlyViewedLands([]);
     }
   };
 
@@ -1324,6 +1340,145 @@ function Home() {
             })}
           </div>
         </div>
+
+        {/* =================================================
+            RECENTLY VIEWED LANDS
+        ================================================= */}
+
+        {recentlyViewedLands.length > 0 && (
+          <div className="home-land-section">
+            <div className="home-section-title">
+              <div>
+                <h2>🕘 Recently Viewed Lands</h2>
+                <span>Lands you viewed recently</span>
+              </div>
+            </div>
+
+            <div
+              className="home-land-grid"
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit,minmax(300px,1fr))",
+                gap: "22px",
+              }}
+            >
+              {recentlyViewedLands.map((land) => (
+                <div
+                  key={land.id}
+                  className="home-land-card"
+                  style={{
+                    background: "#fff",
+                    borderRadius: "18px",
+                    overflow: "hidden",
+                    boxShadow:
+                      "0 8px 24px rgba(31,72,35,.11)",
+                    border: "1px solid #E2EBE3",
+                    transition: ".3s",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    className="home-land-image-wrap"
+                    style={{
+                      position: "relative",
+                    }}
+                  >
+                    <img
+                      src={
+                        land.image_url ||
+                        "https://via.placeholder.com/400x250"
+                      }
+                      alt={land.title}
+                      style={{
+                        width: "100%",
+                        height: "clamp(190px,22vw,230px)",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    className="home-land-details"
+                    style={{
+                      padding: "20px 20px 22px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        marginBottom: "10px",
+                        color: "#1B5E20",
+                        fontSize: "20px",
+                        lineHeight: "1.3",
+                      }}
+                    >
+                      {land.title}
+                    </h3>
+
+                    <p>
+                      <strong>📍</strong>{" "}
+                      {land.village}, {land.district}
+                    </p>
+
+                    <p>
+                      <strong>🌱 Soil:</strong>{" "}
+                      {land.soil_type || "Not specified"}
+                    </p>
+
+                    <p>
+                      <strong>📐 Area:</strong>{" "}
+                      {land.area} Acres
+                    </p>
+
+                    <p
+                      style={{
+                        color: "#E65100",
+                        fontWeight: "800",
+                        fontSize: "21px",
+                        marginTop: "12px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      ₹{land.price}
+                    </p>
+
+                    <p
+                      style={{
+                        color: "#777",
+                        fontSize: "12px",
+                        marginTop: "4px",
+                      }}
+                    >
+                      Viewed{" "}
+                      {land.viewed_at
+                        ? new Date(land.viewed_at).toLocaleString()
+                        : ""}
+                    </p>
+
+                    <button
+                      className="home-view-button"
+                      onClick={() => navigate(`/land/${land.id}`)}
+                      style={{
+                        marginTop: "15px",
+                        width: "100%",
+                        background: "#2E7D32",
+                        color: "#fff",
+                        border: "none",
+                        padding: "12px",
+                        borderRadius: "10px",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* =================================================
             RECENT ACTIVITY

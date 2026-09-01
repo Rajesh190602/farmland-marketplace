@@ -1105,3 +1105,56 @@ class UserReport(Base):
         foreign_keys=[reported_user_id],
         back_populates="user_reports_received"
     )
+# =========================================================
+# RECENTLY VIEWED LANDS
+# =========================================================
+
+class RecentlyViewedLand(Base):
+    __tablename__ = "recently_viewed_lands"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    viewed_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
+
+    # One user should have only one record
+    # for each land.
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "land_id",
+            name="uq_recently_viewed_user_land"
+        ),
+    )
+
+    user = relationship(
+        "User",
+        foreign_keys=[user_id]
+    )
+
+    land = relationship(
+        "Land",
+        foreign_keys=[land_id]
+    )

@@ -4,10 +4,11 @@ from app import models
 from sqlalchemy import or_
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Land, User
+from app.models import Land, User, RecentlyViewedLand
 from app.schemas import LandCreate
 from app.utils.activity_log import create_activity_log
 from typing import Optional
+from datetime import datetime
 
 
 router = APIRouter(
@@ -382,9 +383,203 @@ def get_my_land_by_id(
     }
 
 
-# ==========================
+# =========================================================
+# RECENTLY VIEWED LANDS
+# =========================================================
+
+@router.post("/{land_id}/view")
+def record_land_view(
+    land_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    # Only approved and published marketplace lands
+    # should be added to recently viewed.
+    if land.status != "approved" or not land.is_published:
+        raise HTTPException(
+            status_code=404,
+            detail="Land is not available"
+        )
+
+    existing = (
+        db.query(RecentlyViewedLand)
+        .filter(
+            RecentlyViewedLand.user_id == current_user,
+            RecentlyViewedLand.land_id == land_id
+        )
+        .first()
+    )
+
+    if existing:
+        existing.viewed_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(existing)
+
+        return {
+            "message": "Land view updated",
+            "land_id": land_id,
+            "viewed_at": existing.viewed_at
+        }
+
+    viewed = RecentlyViewedLand(
+        user_id=current_user,
+        land_id=land_id,
+        viewed_at=datetime.utcnow()
+    )
+
+    db.add(viewed)
+    db.commit()
+    db.refresh(viewed)
+
+    # Keep only the latest 20 viewed lands.
+    old_views = (
+        db.query(RecentlyViewedLand)
+        .filter(
+            RecentlyViewedLand.user_id == current_user
+        )
+        .order_by(
+            RecentlyViewedLand.viewed_at.desc()
+        )
+        .offset(20)
+        .all()
+    )
+
+    for old_view in old_views:
+        db.delete(old_view)
+
+    db.commit()
+
+    return {
+        "message": "Land view recorded",
+        "land_id": land_id,
+        "viewed_at": viewed.viewed_at
+    }
+
+
+# =========================================================
+# GET RECENTLY VIEWED LANDS
+# =========================================================
+
+@router.get("/recently-viewed")
+def get_recently_viewed_lands(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    views = (
+        db.query(RecentlyViewedLand)
+        .filter(
+            RecentlyViewedLand.user_id == current_user
+        )
+        .order_by(
+            RecentlyViewedLand.viewed_at.desc()
+        )
+        .limit(20)
+        .all()
+    )
+
+    result = []
+
+    for view in views:
+        land = (
+            db.query(Land)
+            .filter(
+                Land.id == view.land_id,
+                Land.status == "approved",
+                Land.is_published == True
+            )
+            .first()
+        )
+
+        if not land:
+            continue
+
+        result.append({
+            "id": land.id,
+            "title": land.title,
+            "description": land.description,
+            "image_url": land.image_url,
+            "price": land.price,
+            "area": land.area,
+            "village": land.village,
+            "mandal": land.mandal,
+            "district": land.district,
+            "state": land.state,
+            "pincode": land.pincode,
+            "survey_number": land.survey_number,
+            "soil_type": land.soil_type,
+            "water_source": land.water_source,
+            "crop_type": land.crop_type,
+            "latitude": land.latitude,
+            "longitude": land.longitude,
+            "owner_id": land.owner_id,
+            "viewed_at": view.viewed_at
+        })
+
+    return result
+
+
+# =========================================================
+# REMOVE ONE RECENTLY VIEWED LAND
+# =========================================================
+
+@router.delete("/recently-viewed/{land_id}")
+def remove_recently_viewed_land(
+    land_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    viewed = (
+        db.query(RecentlyViewedLand)
+        .filter(
+            RecentlyViewedLand.user_id == current_user,
+            RecentlyViewedLand.land_id == land_id
+        )
+        .first()
+    )
+
+    if not viewed:
+        raise HTTPException(
+            status_code=404,
+            detail="Land is not in your recently viewed list"
+        )
+
+    db.delete(viewed)
+    db.commit()
+
+    return {
+        "message": "Land removed from recently viewed",
+        "land_id": land_id
+    }
+
+
+# =========================================================
 # Get Land By ID
-# ==========================
+# =========================================================
 
 @router.get("/{land_id}")
 def get_land(
@@ -423,7 +618,7 @@ def get_land(
             )
     else:
         # Buyers/admins can view only approved marketplace lands.
-        if ( 
+        if (
             land.status != "approved"
             or not land.is_published
         ):
