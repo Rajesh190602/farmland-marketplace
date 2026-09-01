@@ -23,6 +23,11 @@ function AllLands() {
 
   const [lands, setLands] = useState([]);
 
+  // =====================================================
+  // PHASE 3 - STEP 16: SORT LANDS
+  // =====================================================
+  const [sortBy, setSortBy] = useState("newest");
+
   const [loading, setLoading] = useState(true);
 
   const [district, setDistrict] = useState("");
@@ -112,7 +117,26 @@ function AllLands() {
   }
 };
 
-    return (
+    // =====================================================
+  // STEP 16 - SORT CURRENT LAND RESULTS
+  // =====================================================
+  const sortedLands = [...lands].sort((a, b) => {
+    switch (sortBy) {
+      case "price_low":
+        return Number(a.price ?? 0) - Number(b.price ?? 0);
+      case "price_high":
+        return Number(b.price ?? 0) - Number(a.price ?? 0);
+      case "area_low":
+        return Number(a.area ?? 0) - Number(b.area ?? 0);
+      case "area_high":
+        return Number(b.area ?? 0) - Number(a.area ?? 0);
+      case "newest":
+      default:
+        return Number(b.id ?? 0) - Number(a.id ?? 0);
+    }
+  });
+
+  return (
     <>
       <Navbar />
 
@@ -259,6 +283,28 @@ function AllLands() {
             >
               ← Home
             </button>
+
+            {/* =================================================
+                STEP 16 - SORT LANDS
+            ================================================= */}
+            <div style={sortContainer}>
+              <label htmlFor="land-sort" style={sortLabel}>
+                Sort by:
+              </label>
+
+              <select
+                id="land-sort"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={sortSelect}
+              >
+                <option value="newest">Newest First</option>
+                <option value="price_low">Price: Low → High</option>
+                <option value="price_high">Price: High → Low</option>
+                <option value="area_low">Area: Small → Large</option>
+                <option value="area_high">Area: Large → Small</option>
+              </select>
+            </div>
           </div>
         </div>
                 {/* ===========================
@@ -319,7 +365,7 @@ function AllLands() {
               gap: "25px",
             }}
           >
-            {lands.map((land) => (
+            {sortedLands.map((land) => (
 
               <div
                 key={land.id}
@@ -491,6 +537,31 @@ function AllLands() {
   // =======================================
 // Styles
 // =======================================
+
+const sortContainer = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap",
+};
+
+const sortLabel = {
+  color: "#2E7D32",
+  fontWeight: "bold",
+  fontSize: "15px",
+};
+
+const sortSelect = {
+  border: "1px solid #ddd",
+  borderRadius: "10px",
+  padding: "12px 15px",
+  background: "#fff",
+  color: "#333",
+  fontSize: "15px",
+  outline: "none",
+  cursor: "pointer",
+  minWidth: "190px",
+};
 
 const inputContainer = {
   display: "flex",
