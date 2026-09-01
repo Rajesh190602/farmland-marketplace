@@ -37,6 +37,117 @@ export default function ChatPage() {
   const [reportReason, setReportReason] = useState("");
   const [reportDescription, setReportDescription] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
+  // =====================================================
+// PHASE 2 - BLOCK USER
+// =====================================================
+
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
+
+  // =====================================================
+  // PHASE 2 - BLOCK USER
+  // =====================================================
+
+  const loadBlockStatus = async (userId) => {
+    if (!userId) {
+      return;
+    }
+
+    try {
+      const response = await api.get("/marketplace/users/blocked");
+      const blockedUsers = response.data || [];
+
+      const blocked = Array.isArray(blockedUsers)
+        ? blockedUsers.some((user) => {
+            const blockedId =
+              user.blocked_user_id ??
+              user.user_id ??
+              user.id ??
+              user.blockedUserId;
+
+            return Number(blockedId) === Number(userId);
+          })
+        : false;
+
+      setIsBlocked(blocked);
+    } catch (error) {
+      console.error("Failed to load block status:", error);
+    }
+  };
+
+  const blockUser = async () => {
+    if (!otherUserId || blockLoading) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to block ${otherUserName || "this user"}? You will not be able to send messages to this user while they are blocked.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setBlockLoading(true);
+
+      await api.post(
+        `/marketplace/users/${otherUserId}/block`
+      );
+
+      setIsBlocked(true);
+      setText("");
+      setShowEmoji(false);
+      setShowAttachMenu(false);
+      setShowReportForm(false);
+
+      alert(`${otherUserName || "User"} has been blocked.`);
+    } catch (error) {
+      console.error("Failed to block user:", error);
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to block this user."
+      );
+    } finally {
+      setBlockLoading(false);
+    }
+  };
+
+  const unblockUser = async () => {
+    if (!otherUserId || blockLoading) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to unblock ${otherUserName || "this user"}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setBlockLoading(true);
+
+      await api.delete(
+        `/marketplace/users/${otherUserId}/block`
+      );
+
+      setIsBlocked(false);
+
+      alert(`${otherUserName || "User"} has been unblocked.`);
+    } catch (error) {
+      console.error("Failed to unblock user:", error);
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to unblock this user."
+      );
+    } finally {
+      setBlockLoading(false);
+    }
+  };
 
   // Message whose menu is currently open
   const [openMessageMenu, setOpenMessageMenu] = useState(null);
@@ -277,6 +388,18 @@ export default function ChatPage() {
   }, [otherUserId]);
 
   // =====================================================
+  // BLOCK STATUS CHECK
+  // =====================================================
+
+  useEffect(() => {
+    if (!otherUserId) {
+      return;
+    }
+
+    loadBlockStatus(otherUserId);
+  }, [otherUserId]);
+
+  // =====================================================
   // SCROLL TO BOTTOM
   // =====================================================
 
@@ -299,6 +422,11 @@ export default function ChatPage() {
   // =====================================================
 
   const sendMessage = async () => {
+    if (isBlocked) {
+      alert("You have blocked this user. Unblock the user to send messages.");
+      return;
+    }
+
     if (!text.trim() || sending) {
       return;
     }
@@ -396,6 +524,12 @@ export default function ChatPage() {
   // =====================================================
 
   const uploadFile = async (event) => {
+    if (isBlocked) {
+      alert("You have blocked this user. Unblock the user to send messages or files.");
+      event.target.value = "";
+      return;
+    }
+
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -1247,6 +1381,38 @@ export default function ChatPage() {
               </div>
             </div>
 
+            {/* =====================================================
+                PHASE 2 - BLOCK / UNBLOCK USER
+            ===================================================== */}
+
+            <button
+              type="button"
+              onClick={isBlocked ? unblockUser : blockUser}
+              disabled={!otherUserId || blockLoading}
+              title={isBlocked ? "Unblock User" : "Block User"}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: isBlocked ? "#B9FBC0" : "#fff",
+                fontSize: "20px",
+                opacity:
+                  otherUserId && !blockLoading
+                    ? 0.95
+                    : 0.5,
+                cursor:
+                  otherUserId && !blockLoading
+                    ? "pointer"
+                    : "not-allowed",
+                padding: "5px 8px",
+              }}
+            >
+              {blockLoading
+                ? "..."
+                : isBlocked
+                  ? "🔓"
+                  : "🚫"}
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -1438,6 +1604,41 @@ export default function ChatPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* =====================================================
+              BLOCKED USER NOTICE
+          ===================================================== */}
+
+          {isBlocked && (
+            <div
+              style={{
+                background: "#FFF3E0",
+                borderBottom: "1px solid #FFCC80",
+                padding: "10px 15px",
+                textAlign: "center",
+                color: "#8D4A00",
+                fontSize: "13px",
+              }}
+            >
+              🚫 You have blocked {otherUserName || "this user"}. You cannot send messages or files.
+              <button
+                type="button"
+                onClick={unblockUser}
+                disabled={blockLoading}
+                style={{
+                  marginLeft: "8px",
+                  border: "none",
+                  background: "transparent",
+                  color: "#1565C0",
+                  fontWeight: "700",
+                  cursor: blockLoading ? "not-allowed" : "pointer",
+                  padding: "0",
+                }}
+              >
+                Unblock
+              </button>
             </div>
           )}
 
@@ -1650,6 +1851,7 @@ export default function ChatPage() {
 
             <button
               type="button"
+              disabled={isBlocked}
               onClick={() => {
                 setShowEmoji(
                   !showEmoji
@@ -1667,7 +1869,7 @@ export default function ChatPage() {
                   "pointer",
                 padding: "5px",
               }}
-              title="Emoji"
+              title={isBlocked ? "Unblock user to use chat" : "Emoji"}
             >
               😊
             </button>
@@ -1676,6 +1878,7 @@ export default function ChatPage() {
 
             <button
               type="button"
+              disabled={isBlocked}
               onClick={() => {
                 setShowAttachMenu(
                   !showAttachMenu
@@ -1693,7 +1896,7 @@ export default function ChatPage() {
                 transform:
                   "rotate(-35deg)",
               }}
-              title="Attach"
+              title={isBlocked ? "Unblock user to attach files" : "Attach"}
             >
               📎
             </button>
@@ -1707,6 +1910,7 @@ export default function ChatPage() {
               onChange={
                 uploadFile
               }
+              disabled={isBlocked}
               style={{
                 display: "none",
               }}
@@ -1764,6 +1968,7 @@ export default function ChatPage() {
               disabled={
                 sending ||
                 uploading ||
+                isBlocked ||
                 !text.trim()
               }
               style={{
@@ -1775,6 +1980,7 @@ export default function ChatPage() {
                 background:
                   sending ||
                   uploading ||
+                  isBlocked ||
                   !text.trim()
                     ? "#A5D6A7"
                     : "#075E54",
@@ -1782,6 +1988,7 @@ export default function ChatPage() {
                 cursor:
                   sending ||
                   uploading ||
+                  isBlocked ||
                   !text.trim()
                     ? "not-allowed"
                     : "pointer",

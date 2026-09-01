@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone,timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -346,6 +346,27 @@ def create_inquiry(
             status_code=409,
             detail="You already have a pending inquiry for this land.",
         )
+        # ----------------------------------
+    # ANTI-SPAM COOLDOWN
+    # ----------------------------------
+
+    recent_inquiry = (
+        db.query(LandInquiry)
+        .filter(
+            LandInquiry.land_id == land.id,
+            LandInquiry.buyer_id == buyer.id,
+            LandInquiry.created_at >= (
+                datetime.utcnow() - timedelta(minutes=5)
+            ),
+        )
+        .first()
+    )
+
+    if recent_inquiry:
+        raise HTTPException(
+            status_code=429,
+            detail="Please wait 5 minutes before sending another inquiry for this land.",
+        )
 
     inquiry = LandInquiry(
         land_id=land.id,
@@ -600,6 +621,27 @@ def create_offer(
         raise HTTPException(
             status_code=409,
             detail="You already have a pending offer for this land.",
+        )
+        # ----------------------------------
+    # ANTI-SPAM COOLDOWN
+    # ----------------------------------
+
+    recent_offer = (
+        db.query(LandOffer)
+        .filter(
+            LandOffer.land_id == land.id,
+            LandOffer.buyer_id == buyer.id,
+            LandOffer.created_at >= (
+                datetime.utcnow() - timedelta(minutes=5)
+            ),
+        )
+        .first()
+    )
+
+    if recent_offer:
+        raise HTTPException(
+            status_code=429,
+            detail="Please wait 5 minutes before submitting another offer for this land.",
         )
 
     offer = LandOffer(

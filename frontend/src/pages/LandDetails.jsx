@@ -30,6 +30,21 @@ function LandDetails() {
   const [visitMessage, setVisitMessage] = useState("");
 
   // =========================================================
+  // FRONTEND ANTI-SPAM PROTECTION
+  // =========================================================
+  // Frontend protection improves UX, but the backend remains
+  // authoritative. A user can bypass client-side limits by
+  // refreshing/devtools, so backend rate limiting is still required.
+  const FRONTEND_ACTION_COOLDOWN_SECONDS = 60;
+  const BACKEND_RATE_LIMIT_COOLDOWN_SECONDS = 300;
+
+  const [spamCooldowns, setSpamCooldowns] = useState({
+    inquiry: 0,
+    offer: 0,
+    siteVisit: 0,
+  });
+
+  // =========================================================
   // PHASE 2 - REPORT LAND STATE
   // =========================================================
 
@@ -44,6 +59,110 @@ function LandDetails() {
 
   const currentRole =
     sessionStorage.getItem("role");
+
+  // =========================================================
+  // FRONTEND ANTI-SPAM HELPERS
+  // =========================================================
+
+  const getSpamStorageKey = (action) =>
+    `farmland_marketplace_spam_${currentUserId}_${id}_${action}`;
+
+  const getCooldownRemaining = (action) => {
+    try {
+      const until = Number(
+        localStorage.getItem(getSpamStorageKey(action)) || 0
+      );
+      return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    } catch {
+      return 0;
+    }
+  };
+
+  const startSpamCooldown = (
+    action,
+    seconds = FRONTEND_ACTION_COOLDOWN_SECONDS
+  ) => {
+    const until = Date.now() + seconds * 1000;
+
+    try {
+      localStorage.setItem(
+        getSpamStorageKey(action),
+        String(until)
+      );
+    } catch {
+      // Continue even if browser storage is unavailable.
+    }
+
+    setSpamCooldowns((previous) => ({
+      ...previous,
+      [action]: seconds,
+    }));
+  };
+
+  const clearExpiredSpamCooldowns = () => {
+    setSpamCooldowns({
+      inquiry: getCooldownRemaining("inquiry"),
+      offer: getCooldownRemaining("offer"),
+      siteVisit: getCooldownRemaining("siteVisit"),
+    });
+  };
+
+  const formatCooldown = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    if (minutes > 0) {
+      return `${minutes}m ${String(remainingSeconds).padStart(2, "0")}s`;
+    }
+
+    return `${remainingSeconds}s`;
+  };
+
+  const getRateLimitMessage = (error, actionLabel) => {
+    const retryAfterHeader =
+      error?.response?.headers?.["retry-after"];
+
+    const retryAfterSeconds = Number(retryAfterHeader);
+
+    const seconds =
+      Number.isFinite(retryAfterSeconds) &&
+      retryAfterSeconds > 0
+        ? Math.min(retryAfterSeconds, BACKEND_RATE_LIMIT_COOLDOWN_SECONDS)
+        : BACKEND_RATE_LIMIT_COOLDOWN_SECONDS;
+
+    return {
+      seconds,
+      message:
+        `Too many ${actionLabel} attempts. ` +
+        `Please wait ${formatCooldown(seconds)} before trying again.`,
+    };
+  };
+
+  useEffect(() => {
+    clearExpiredSpamCooldowns();
+
+    const timer = window.setInterval(() => {
+      setSpamCooldowns((previous) => {
+        const next = {
+          inquiry: getCooldownRemaining("inquiry"),
+          offer: getCooldownRemaining("offer"),
+          siteVisit: getCooldownRemaining("siteVisit"),
+        };
+
+        if (
+          next.inquiry === previous.inquiry &&
+          next.offer === previous.offer &&
+          next.siteVisit === previous.siteVisit
+        ) {
+          return previous;
+        }
+
+        return next;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [id, currentUserId]);
 
   // =========================================================
   // LOAD LAND
@@ -249,12 +368,27 @@ function LandDetails() {
   // =========================================================
 
   const sendInquiry = async () => {
-    const message =
-      inquiryMessage.trim();
+    const message = inquiryMessage.trim();
+
+    if (spamCooldowns.inquiry > 0) {
+      alert(
+        `Please wait ${formatCooldown(
+          spamCooldowns.inquiry
+        )} before sending another inquiry.`
+      );
+      return;
+    }
 
     if (!message) {
       alert(
         "Please enter a message before sending the inquiry."
+      );
+      return;
+    }
+
+    if (message.length > 1000) {
+      alert(
+        "Inquiry message must be 1000 characters or less."
       );
       return;
     }
@@ -269,6 +403,8 @@ function LandDetails() {
           message,
         }
       );
+
+      startSpamCooldown("inquiry");
 
       alert(
         "Your inquiry has been sent to the farmer."
@@ -285,10 +421,24 @@ function LandDetails() {
         error
       );
 
-      alert(
-        error.response?.data?.detail ||
-          "Unable to send inquiry."
-      );
+      if (error.response?.status === 429) {
+        const rateLimit = getRateLimitMessage(
+          error,
+          "inquiry"
+        );
+
+        startSpamCooldown(
+          "inquiry",
+          rateLimit.seconds
+        );
+
+        alert(rateLimit.message);
+      } else {
+        alert(
+          error.response?.data?.detail ||
+            "Unable to send inquiry."
+        );
+      }
     } finally {
       setMarketplaceLoading(false);
     }
@@ -299,12 +449,36 @@ function LandDetails() {
   // =========================================================
 
   const makeOffer = async () => {
-    const amount =
-      Number(offerAmount);
+    const amount = Number(offerAmount);
+
+    if (spamCooldowns.offer > 0) {
+      alert(
+        `Please wait ${formatCooldown(
+          spamCooldowns.offer
+        )} before submitting another offer.`
+      );
+      return;
+    }
 
     if (!offerAmount || amount <= 0) {
       alert(
         "Please enter a valid offer amount."
+      );
+      return;
+    }
+
+    if (!Number.isFinite(amount)) {
+      alert(
+        "Please enter a valid offer amount."
+      );
+      return;
+    }
+
+    const message = offerMessage.trim();
+
+    if (message.length > 1000) {
+      alert(
+        "Offer message must be 1000 characters or less."
       );
       return;
     }
@@ -317,10 +491,11 @@ function LandDetails() {
         {
           land_id: land.id,
           amount,
-          message:
-            offerMessage.trim() || null,
+          message: message || null,
         }
       );
+
+      startSpamCooldown("offer");
 
       alert(
         "Your offer has been sent to the farmer."
@@ -338,10 +513,24 @@ function LandDetails() {
         error
       );
 
-      alert(
-        error.response?.data?.detail ||
-          "Unable to submit offer."
-      );
+      if (error.response?.status === 429) {
+        const rateLimit = getRateLimitMessage(
+          error,
+          "offer"
+        );
+
+        startSpamCooldown(
+          "offer",
+          rateLimit.seconds
+        );
+
+        alert(rateLimit.message);
+      } else {
+        alert(
+          error.response?.data?.detail ||
+            "Unable to submit offer."
+        );
+      }
     } finally {
       setMarketplaceLoading(false);
     }
@@ -352,6 +541,15 @@ function LandDetails() {
   // =========================================================
 
   const requestSiteVisit = async () => {
+    if (spamCooldowns.siteVisit > 0) {
+      alert(
+        `Please wait ${formatCooldown(
+          spamCooldowns.siteVisit
+        )} before requesting another site visit.`
+      );
+      return;
+    }
+
     if (!visitDate) {
       alert(
         "Please select a site visit date and time."
@@ -382,6 +580,15 @@ function LandDetails() {
       return;
     }
 
+    const message = visitMessage.trim();
+
+    if (message.length > 1000) {
+      alert(
+        "Site visit message must be 1000 characters or less."
+      );
+      return;
+    }
+
     try {
       setMarketplaceLoading(true);
 
@@ -392,9 +599,11 @@ function LandDetails() {
           requested_date:
             selectedDate.toISOString(),
           message:
-            visitMessage.trim() || null,
+            message || null,
         }
       );
+
+      startSpamCooldown("siteVisit");
 
       alert(
         "Your site visit request has been sent to the farmer."
@@ -408,10 +617,24 @@ function LandDetails() {
         error
       );
 
-      alert(
-        error.response?.data?.detail ||
-          "Unable to request site visit."
-      );
+      if (error.response?.status === 429) {
+        const rateLimit = getRateLimitMessage(
+          error,
+          "site visit"
+        );
+
+        startSpamCooldown(
+          "siteVisit",
+          rateLimit.seconds
+        );
+
+        alert(rateLimit.message);
+      } else {
+        alert(
+          error.response?.data?.detail ||
+            "Unable to request site visit."
+        );
+      }
     } finally {
       setMarketplaceLoading(false);
     }
@@ -799,6 +1022,7 @@ function LandDetails() {
                       )
                     }
                     placeholder="Write a message to the farmer..."
+                    maxLength={1000}
                     rows={4}
                     style={{
                       width: "100%",
@@ -816,7 +1040,8 @@ function LandDetails() {
                   <button
                     onClick={sendInquiry}
                     disabled={
-                      marketplaceLoading
+                      marketplaceLoading ||
+                      spamCooldowns.inquiry > 0
                     }
                     style={{
                       marginTop: "12px",
@@ -839,6 +1064,10 @@ function LandDetails() {
                   >
                     {marketplaceLoading
                       ? "Sending..."
+                      : spamCooldowns.inquiry > 0
+                      ? `Wait ${formatCooldown(
+                          spamCooldowns.inquiry
+                        )}`
                       : "Send Inquiry"}
                   </button>
                 </div>
@@ -893,6 +1122,7 @@ function LandDetails() {
                       )
                     }
                     placeholder="Optional message..."
+                    maxLength={1000}
                     rows={3}
                     style={{
                       width: "100%",
@@ -910,7 +1140,8 @@ function LandDetails() {
                   <button
                     onClick={makeOffer}
                     disabled={
-                      marketplaceLoading
+                      marketplaceLoading ||
+                      spamCooldowns.offer > 0
                     }
                     style={{
                       marginTop: "12px",
@@ -933,6 +1164,10 @@ function LandDetails() {
                   >
                     {marketplaceLoading
                       ? "Submitting..."
+                      : spamCooldowns.offer > 0
+                      ? `Wait ${formatCooldown(
+                          spamCooldowns.offer
+                        )}`
                       : "Submit Offer"}
                   </button>
                 </div>
@@ -984,6 +1219,7 @@ function LandDetails() {
                       )
                     }
                     placeholder="Optional message..."
+                    maxLength={1000}
                     rows={3}
                     style={{
                       width: "100%",
@@ -1003,7 +1239,8 @@ function LandDetails() {
                       requestSiteVisit
                     }
                     disabled={
-                      marketplaceLoading
+                      marketplaceLoading ||
+                      spamCooldowns.siteVisit > 0
                     }
                     style={{
                       marginTop: "12px",
@@ -1026,6 +1263,10 @@ function LandDetails() {
                   >
                     {marketplaceLoading
                       ? "Submitting..."
+                      : spamCooldowns.siteVisit > 0
+                      ? `Wait ${formatCooldown(
+                          spamCooldowns.siteVisit
+                        )}`
                       : "Request Site Visit"}
                   </button>
                 </div>

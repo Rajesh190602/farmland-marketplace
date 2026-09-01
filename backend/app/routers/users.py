@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.models import User, EmailVerification
+from app.models import User, EmailVerification,UserBlock
 import cloudinary.uploader
 from app.database import get_db
 from app.auth import get_current_user
@@ -741,3 +741,149 @@ def change_password(
     return {
         "message": "Password changed successfully"
     }
+# =========================================================
+# PHASE 2 - USER BLOCK
+# =========================================================
+
+@router.post("/{user_id}/block")
+def block_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # ----------------------------------
+    # Cannot block yourself
+    # ----------------------------------
+
+    if user_id == current_user:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot block yourself"
+        )
+
+    # ----------------------------------
+    # Check target user exists
+    # ----------------------------------
+
+    target_user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not target_user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # ----------------------------------
+    # Check if already blocked
+    # ----------------------------------
+
+    existing_block = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user,
+            UserBlock.blocked_id == user_id
+        )
+        .first()
+    )
+
+    if existing_block:
+        raise HTTPException(
+            status_code=400,
+            detail="User is already blocked"
+        )
+
+    # ----------------------------------
+    # Create block
+    # ----------------------------------
+
+    block = UserBlock(
+        blocker_id=current_user,
+        blocked_id=user_id
+    )
+
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    return {
+        "message": "User blocked successfully.",
+        "user_id": user_id,
+        "blocked": True
+    }
+
+
+@router.delete("/{user_id}/block")
+def unblock_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    # ----------------------------------
+    # Find block
+    # ----------------------------------
+
+    existing_block = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user,
+            UserBlock.blocked_id == user_id
+        )
+        .first()
+    )
+
+    if not existing_block:
+        raise HTTPException(
+            status_code=404,
+            detail="User is not blocked"
+        )
+
+    # ----------------------------------
+    # Remove block
+    # ----------------------------------
+
+    db.delete(existing_block)
+    db.commit()
+
+    return {
+        "message": "User unblocked successfully.",
+        "user_id": user_id,
+        "blocked": False
+    }
+
+
+@router.get("/blocked")
+def get_blocked_users(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    blocks = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user
+        )
+        .order_by(UserBlock.created_at.desc())
+        .all()
+    )
+
+    result = []
+
+    for block in blocks:
+        user = (
+            db.query(User)
+            .filter(User.id == block.blocked_id)
+            .first()
+        )
+
+        if user:
+            result.append({
+                "user_id": user.id,
+                "full_name": user.full_name,
+                "profile_image": user.profile_image,
+                "blocked_at": block.created_at
+            })
+
+    return result

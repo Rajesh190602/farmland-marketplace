@@ -22,7 +22,8 @@ from app.models import (
     Message,
     User,
     Notification,
-    ActivityLog
+    ActivityLog,
+    UserBlock
 )
 
 from app.schemas import (
@@ -103,6 +104,33 @@ def start_chat(
         raise HTTPException(
             status_code=400,
             detail="You cannot chat with yourself."
+        )
+        # ----------------------------------
+    # BLOCK CHECK
+    # ----------------------------------
+
+    existing_block = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == land.owner_id,
+            UserBlock.blocked_id == current_user
+        )
+        .first()
+    )
+
+    current_user_block = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user,
+            UserBlock.blocked_id == land.owner_id
+        )
+        .first()
+    )
+
+    if existing_block or current_user_block:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot start a chat because one of you has blocked the other."
         )
 
     # ----------------------------------
@@ -275,6 +303,33 @@ def reply_to_buyer(
             status_code=404,
             detail="Buyer not found"
         )
+        # ----------------------------------
+    # BLOCK CHECK
+    # ----------------------------------
+
+    existing_block = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user,
+            UserBlock.blocked_id == buyer.id
+        )
+        .first()
+    )
+
+    buyer_blocked_farmer = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == buyer.id,
+            UserBlock.blocked_id == current_user
+        )
+        .first()
+    )
+
+    if existing_block or buyer_blocked_farmer:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot start a conversation because one of you has blocked the other."
+        )
 
     # ----------------------------------
     # Create conversation
@@ -349,6 +404,38 @@ def send_message(
         raise HTTPException(
             status_code=403,
             detail="You are not part of this conversation"
+        )
+        # ----------------------------------
+    # BLOCK CHECK
+    # ----------------------------------
+
+    if current_user == conversation.buyer_id:
+        receiver_id = conversation.farmer_id
+    else:
+        receiver_id = conversation.buyer_id
+
+    blocked_by_receiver = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == receiver_id,
+            UserBlock.blocked_id == current_user
+        )
+        .first()
+    )
+
+    blocked_by_current_user = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user,
+            UserBlock.blocked_id == receiver_id
+        )
+        .first()
+    )
+
+    if blocked_by_receiver or blocked_by_current_user:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot send messages because one of you has blocked the other."
         )
 
     # ----------------------------------
@@ -478,6 +565,38 @@ async def send_chat_file(
         raise HTTPException(
             status_code=403,
             detail="You are not part of this conversation"
+        )
+        # ----------------------------------
+    # BLOCK CHECK
+    # ----------------------------------
+
+    if current_user == conversation.buyer_id:
+        receiver_id = conversation.farmer_id
+    else:
+        receiver_id = conversation.buyer_id
+
+    blocked_by_receiver = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == receiver_id,
+            UserBlock.blocked_id == current_user
+        )
+        .first()
+    )
+
+    blocked_by_current_user = (
+        db.query(UserBlock)
+        .filter(
+            UserBlock.blocker_id == current_user,
+            UserBlock.blocked_id == receiver_id
+        )
+        .first()
+    )
+
+    if blocked_by_receiver or blocked_by_current_user:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot send files because one of you has blocked the other."
         )
 
     # ----------------------------------

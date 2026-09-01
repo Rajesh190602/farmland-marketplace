@@ -120,6 +120,77 @@ class User(Base):
         back_populates="reported_user",
         cascade="all, delete-orphan"
     )
+        # -----------------------------------------------------
+    # Phase 2 - User Blocks
+    # -----------------------------------------------------
+
+    blocks_created = relationship(
+        "UserBlock",
+        foreign_keys="UserBlock.blocker_id",
+        back_populates="blocker",
+        cascade="all, delete-orphan"
+    )
+
+    blocks_received = relationship(
+        "UserBlock",
+        foreign_keys="UserBlock.blocked_id",
+        back_populates="blocked",
+        cascade="all, delete-orphan"
+    )
+# =========================================================
+# PHASE 2
+# USER BLOCK
+# =========================================================
+
+class UserBlock(Base):
+    __tablename__ = "user_blocks"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    blocker_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    blocked_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    blocker = relationship(
+        "User",
+        foreign_keys=[blocker_id],
+        back_populates="blocks_created"
+    )
+    blocked = relationship(
+        "User",
+        foreign_keys=[blocked_id],
+        back_populates="blocks_received"
+    )
+    
+
+    
+    __table_args__ = (
+        UniqueConstraint(
+            "blocker_id",
+            "blocked_id",
+            name="uq_user_block"
+        ),
+    )
 
 
 
