@@ -48,6 +48,12 @@ class User(Base):
         String,
         default="farmer"
     )
+    is_suspended = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True
+    )
 
     created_at = Column(
         DateTime(timezone=True),
@@ -205,6 +211,13 @@ class Land(Base):
         String,
         default="pending"
     )
+    is_published = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        index=True
+    )
+    
 
     rejection_reason = Column(
         Text,

@@ -11,6 +11,8 @@ import {
   FaChevronLeft,
   FaChevronRight,
   FaTrash,
+  FaBan,
+  FaCheckCircle,
 } from "react-icons/fa";
 import api from "../../services/api";
 
@@ -23,6 +25,7 @@ function Users() {
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [suspendingId, setSuspendingId] = useState(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -49,7 +52,10 @@ function Users() {
         },
       });
 
-      console.log("Users API Response:", response.data);
+      console.log(
+        "Users API Response:",
+        response.data
+      );
 
       if (Array.isArray(response.data.users)) {
         setUsers(response.data.users);
@@ -63,7 +69,10 @@ function Users() {
           : 0
       );
     } catch (error) {
-      console.error("Failed to load users:", error);
+      console.error(
+        "Failed to load users:",
+        error
+      );
 
       setUsers([]);
       setTotal(0);
@@ -163,13 +172,19 @@ function Users() {
 
   const handlePreviousPage = () => {
     if (page > 1) {
-      setPage((currentPage) => currentPage - 1);
+      setPage(
+        (currentPage) =>
+          currentPage - 1
+      );
     }
   };
 
   const handleNextPage = () => {
     if (page < totalPages) {
-      setPage((currentPage) => currentPage + 1);
+      setPage(
+        (currentPage) =>
+          currentPage + 1
+      );
     }
   };
 
@@ -182,13 +197,106 @@ function Users() {
   };
 
   // =========================================================
+  // SUSPEND / UNSUSPEND USER
+  // =========================================================
+
+  const handleSuspendUser = async (user) => {
+    // Admin protection
+    if (
+      user.role?.toLowerCase() ===
+      "admin"
+    ) {
+      alert(
+        "Admin accounts cannot be suspended."
+      );
+      return;
+    }
+
+    const currentlySuspended =
+      Boolean(user.is_suspended);
+
+    const action =
+      currentlySuspended
+        ? "restore"
+        : "suspend";
+
+    const confirmed = window.confirm(
+      currentlySuspended
+        ? `Are you sure you want to restore "${user.full_name}"?\n\n` +
+            "This user will be able to use the application again."
+        : `Are you sure you want to suspend "${user.full_name}"?\n\n` +
+            "This user will no longer be able to access protected application features."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSuspendingId(user.id);
+
+      const response = await api.put(
+        `/admin/users/${user.id}/${action}`
+      );
+
+      console.log(
+        "Suspend/Unsuspend response:",
+        response.data
+      );
+
+      // Update the current user immediately
+      setUsers(
+        (previousUsers) =>
+          previousUsers.map(
+            (currentUser) =>
+              currentUser.id === user.id
+                ? {
+                    ...currentUser,
+                    is_suspended:
+                      response.data
+                        ?.is_suspended ??
+                      !currentlySuspended,
+                  }
+                : currentUser
+          )
+      );
+
+      alert(
+        response.data?.message ||
+          (currentlySuspended
+            ? "User unsuspended successfully."
+            : "User suspended successfully.")
+      );
+    } catch (error) {
+      console.error(
+        "Suspend/Unsuspend User Error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          (currentlySuspended
+            ? "Failed to unsuspend user."
+            : "Failed to suspend user.")
+      );
+    } finally {
+      setSuspendingId(null);
+    }
+  };
+
+  // =========================================================
   // DELETE USER
   // =========================================================
 
   const handleDeleteUser = async (user) => {
     // Frontend protection
-    if (user.role?.toLowerCase() === "admin") {
-      alert("Admin accounts cannot be deleted.");
+    if (
+      user.role?.toLowerCase() ===
+      "admin"
+    ) {
+      alert(
+        "Admin accounts cannot be deleted."
+      );
       return;
     }
 
@@ -204,23 +312,32 @@ function Users() {
     try {
       setDeletingId(user.id);
 
-      await api.delete(`/admin/users/${user.id}`);
+      await api.delete(
+        `/admin/users/${user.id}`
+      );
 
       // Remove deleted user from current page
-      setUsers((previousUsers) =>
-        previousUsers.filter(
-          (currentUser) =>
-            currentUser.id !== user.id
-        )
+      setUsers(
+        (previousUsers) =>
+          previousUsers.filter(
+            (currentUser) =>
+              currentUser.id !==
+              user.id
+          )
       );
 
       // Update total
-      setTotal((previousTotal) =>
-        Math.max(0, previousTotal - 1)
+      setTotal(
+        (previousTotal) =>
+          Math.max(
+            0,
+            previousTotal - 1
+          )
       );
 
-      alert("User deleted successfully.");
-
+      alert(
+        "User deleted successfully."
+      );
     } catch (error) {
       console.error(
         "Delete User Error:",
@@ -350,7 +467,8 @@ function Users() {
                   marginLeft: "10px",
                   fontSize: "12px",
                   color: "#1976D2",
-                  whiteSpace: "nowrap",
+                  whiteSpace:
+                    "nowrap",
                 }}
               >
                 Searching...
@@ -361,11 +479,14 @@ function Users() {
               type="text"
               placeholder="Search by name or email..."
               value={search}
-              onChange={handleSearchChange}
+              onChange={
+                handleSearchChange
+              }
               style={{
                 border: "none",
                 outline: "none",
-                background: "transparent",
+                background:
+                  "transparent",
                 marginLeft: "10px",
                 width: "100%",
                 fontSize: "16px",
@@ -377,7 +498,9 @@ function Users() {
 
           <select
             value={role}
-            onChange={handleRoleChange}
+            onChange={
+              handleRoleChange
+            }
             style={{
               padding: "13px",
               borderRadius: "10px",
@@ -553,153 +676,324 @@ function Users() {
             gap: "20px",
           }}
         >
-          {users.map((user) => (
-            <div
-              key={user.id}
-              style={{
-                background: "#fff",
-                borderRadius: "18px",
-                padding: "22px",
-                boxShadow:
-                  "0 6px 18px rgba(0,0,0,0.10)",
-              }}
-            >
-              {/* User name */}
+          {users.map((user) => {
+            const isSuspended =
+              Boolean(
+                user.is_suspended
+              );
 
-              <h2
-                style={{
-                  marginTop: 0,
-                  marginBottom: "15px",
-                  color: "#222",
-                }}
-              >
-                {user.full_name ||
-                  "Unknown User"}
-              </h2>
+            const isAdmin =
+              user.role?.toLowerCase() ===
+              "admin";
 
-              {/* Email */}
+            const isSuspensionLoading =
+              suspendingId ===
+              user.id;
 
-              <p>
-                <strong>Email:</strong>{" "}
-                {user.email || "N/A"}
-              </p>
+            const isDeleteLoading =
+              deletingId ===
+              user.id;
 
-              {/* Mobile */}
-
-              <p>
-                <strong>Mobile:</strong>{" "}
-                {user.mobile || "N/A"}
-              </p>
-
-              {/* User ID */}
-
-              <p>
-                <strong>User ID:</strong>{" "}
-                {user.id}
-              </p>
-
-              {/* Role */}
-
+            return (
               <div
+                key={user.id}
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  background: getRoleColor(
+                  background: "#fff",
+                  borderRadius: "18px",
+                  padding: "22px",
+                  boxShadow:
+                    "0 6px 18px rgba(0,0,0,0.10)",
+                  border: isSuspended
+                    ? "2px solid #EF6C00"
+                    : "2px solid transparent",
+                }}
+              >
+                {/* =================================================
+                    USER NAME
+                ================================================== */}
+
+                <h2
+                  style={{
+                    marginTop: 0,
+                    marginBottom: "15px",
+                    color: "#222",
+                  }}
+                >
+                  {user.full_name ||
+                    "Unknown User"}
+                </h2>
+
+                {/* Email */}
+
+                <p>
+                  <strong>
+                    Email:
+                  </strong>{" "}
+                  {user.email ||
+                    "N/A"}
+                </p>
+
+                {/* Mobile */}
+
+                <p>
+                  <strong>
+                    Mobile:
+                  </strong>{" "}
+                  {user.mobile ||
+                    "N/A"}
+                </p>
+
+                {/* User ID */}
+
+                <p>
+                  <strong>
+                    User ID:
+                  </strong>{" "}
+                  {user.id}
+                </p>
+
+                {/* =================================================
+                    ROLE
+                ================================================== */}
+
+                <div
+                  style={{
+                    display:
+                      "inline-flex",
+                    alignItems:
+                      "center",
+                    gap: "8px",
+                    background:
+                      getRoleColor(
+                        user.role
+                      ),
+                    color: "#fff",
+                    padding:
+                      "8px 14px",
+                    borderRadius:
+                      "30px",
+                    fontWeight:
+                      "bold",
+                    textTransform:
+                      "capitalize",
+                  }}
+                >
+                  {getRoleIcon(
                     user.role
-                  ),
-                  color: "#fff",
-                  padding: "8px 14px",
-                  borderRadius: "30px",
-                  fontWeight: "bold",
-                  textTransform:
-                    "capitalize",
-                }}
-              >
-                {getRoleIcon(user.role)}
-                {user.role || "Unknown"}
-              </div>
+                  )}
 
-              {/* =================================================
-                  VIEW DETAILS
-              ================================================== */}
+                  {user.role ||
+                    "Unknown"}
+                </div>
 
-              <button
-                onClick={() =>
-                  navigate(
-                    `/admin/users/${user.id}`
-                  )
-                }
-                style={{
-                  marginTop: "20px",
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent:
-                    "center",
-                  gap: "8px",
-                  background: "#1976D2",
-                  color: "#fff",
-                  border: "none",
-                  padding: "12px",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  fontSize: "15px",
-                }}
-              >
-                <FaEye />
-                View Details
-              </button>
+                {/* =================================================
+                    ACCOUNT STATUS
+                ================================================== */}
 
-              {/* =================================================
-                  DELETE USER
+                <div
+                  style={{
+                    marginTop: "15px",
+                    display:
+                      "inline-flex",
+                    alignItems:
+                      "center",
+                    gap: "8px",
+                    background:
+                      isSuspended
+                        ? "#FFF3E0"
+                        : "#E8F5E9",
+                    color:
+                      isSuspended
+                        ? "#EF6C00"
+                        : "#2E7D32",
+                    padding:
+                      "8px 14px",
+                    borderRadius:
+                      "30px",
+                    fontWeight:
+                      "bold",
+                  }}
+                >
+                  {isSuspended ? (
+                    <FaBan />
+                  ) : (
+                    <FaCheckCircle />
+                  )}
 
-                  Admin accounts do not get a delete button.
-              ================================================== */}
+                  {isSuspended
+                    ? "Suspended"
+                    : "Active"}
+                </div>
 
-              {user.role?.toLowerCase() !==
-                "admin" && (
+                {/* =================================================
+                    VIEW DETAILS
+                ================================================== */}
+
                 <button
                   onClick={() =>
-                    handleDeleteUser(user)
+                    navigate(
+                      `/admin/users/${user.id}`
+                    )
                   }
                   disabled={
-                    deletingId === user.id
+                    isSuspensionLoading ||
+                    isDeleteLoading
                   }
                   style={{
-                    marginTop: "10px",
+                    marginTop: "20px",
                     width: "100%",
                     display: "flex",
-                    alignItems: "center",
+                    alignItems:
+                      "center",
                     justifyContent:
                       "center",
                     gap: "8px",
                     background:
-                      deletingId === user.id
-                        ? "#999"
-                        : "#D32F2F",
+                      "#1976D2",
                     color: "#fff",
                     border: "none",
                     padding: "12px",
-                    borderRadius: "10px",
+                    borderRadius:
+                      "10px",
                     cursor:
-                      deletingId === user.id
-                        ? "not-allowed"
-                        : "pointer",
-                    fontWeight: "bold",
+                      "pointer",
+                    fontWeight:
+                      "bold",
                     fontSize: "15px",
                   }}
                 >
-                  <FaTrash />
-
-                  {deletingId === user.id
-                    ? "Deleting..."
-                    : "Delete User"}
+                  <FaEye />
+                  View Details
                 </button>
-              )}
-            </div>
-          ))}
+
+                {/* =================================================
+                    SUSPEND / UNSUSPEND
+                ================================================== */}
+
+                {!isAdmin && (
+                  <button
+                    onClick={() =>
+                      handleSuspendUser(
+                        user
+                      )
+                    }
+                    disabled={
+                      isSuspensionLoading ||
+                      isDeleteLoading
+                    }
+                    style={{
+                      marginTop:
+                        "10px",
+                      width: "100%",
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "center",
+                      gap: "8px",
+                      background:
+                        isSuspensionLoading
+                          ? "#999"
+                          : isSuspended
+                          ? "#2E7D32"
+                          : "#EF6C00",
+                      color: "#fff",
+                      border: "none",
+                      padding:
+                        "12px",
+                      borderRadius:
+                        "10px",
+                      cursor:
+                        isSuspensionLoading ||
+                        isDeleteLoading
+                          ? "not-allowed"
+                          : "pointer",
+                      fontWeight:
+                        "bold",
+                      fontSize:
+                        "15px",
+                    }}
+                  >
+                    {isSuspensionLoading ? (
+                      <>
+                        {isSuspended
+                          ? "Unsuspending..."
+                          : "Suspending..."}
+                      </>
+                    ) : (
+                      <>
+                        {isSuspended ? (
+                          <FaCheckCircle />
+                        ) : (
+                          <FaBan />
+                        )}
+
+                        {isSuspended
+                          ? "Restore User"
+                          : "Suspend User"}
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* =================================================
+                    DELETE USER
+                ================================================== */}
+
+                {!isAdmin && (
+                  <button
+                    onClick={() =>
+                      handleDeleteUser(
+                        user
+                      )
+                    }
+                    disabled={
+                      isDeleteLoading ||
+                      isSuspensionLoading
+                    }
+                    style={{
+                      marginTop:
+                        "10px",
+                      width: "100%",
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "center",
+                      gap: "8px",
+                      background:
+                        isDeleteLoading
+                          ? "#999"
+                          : "#D32F2F",
+                      color: "#fff",
+                      border: "none",
+                      padding:
+                        "12px",
+                      borderRadius:
+                        "10px",
+                      cursor:
+                        isDeleteLoading ||
+                        isSuspensionLoading
+                          ? "not-allowed"
+                          : "pointer",
+                      fontWeight:
+                        "bold",
+                      fontSize:
+                        "15px",
+                    }}
+                  >
+                    <FaTrash />
+
+                    {isDeleteLoading
+                      ? "Deleting..."
+                      : "Delete User"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -715,8 +1009,10 @@ function Users() {
             padding: "18px",
             borderRadius: "15px",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            alignItems:
+              "center",
+            justifyContent:
+              "center",
             gap: "20px",
             flexWrap: "wrap",
             boxShadow:
@@ -726,15 +1022,20 @@ function Users() {
           {/* Previous */}
 
           <button
-            onClick={handlePreviousPage}
+            onClick={
+              handlePreviousPage
+            }
             disabled={page === 1}
             style={{
               display: "flex",
-              alignItems: "center",
+              alignItems:
+                "center",
               gap: "8px",
-              padding: "10px 18px",
+              padding:
+                "10px 18px",
               border: "none",
-              borderRadius: "8px",
+              borderRadius:
+                "8px",
               background:
                 page === 1
                   ? "#ddd"
@@ -747,7 +1048,8 @@ function Users() {
                 page === 1
                   ? "not-allowed"
                   : "pointer",
-              fontWeight: "bold",
+              fontWeight:
+                "bold",
             }}
           >
             <FaChevronLeft />
@@ -758,27 +1060,38 @@ function Users() {
 
           <div
             style={{
-              fontWeight: "bold",
+              fontWeight:
+                "bold",
               color: "#333",
-              minWidth: "130px",
-              textAlign: "center",
+              minWidth:
+                "130px",
+              textAlign:
+                "center",
             }}
           >
-            Page {page} of {totalPages}
+            Page {page} of{" "}
+            {totalPages}
           </div>
 
           {/* Next */}
 
           <button
-            onClick={handleNextPage}
-            disabled={page >= totalPages}
+            onClick={
+              handleNextPage
+            }
+            disabled={
+              page >= totalPages
+            }
             style={{
               display: "flex",
-              alignItems: "center",
+              alignItems:
+                "center",
               gap: "8px",
-              padding: "10px 18px",
+              padding:
+                "10px 18px",
               border: "none",
-              borderRadius: "8px",
+              borderRadius:
+                "8px",
               background:
                 page >= totalPages
                   ? "#ddd"
@@ -791,7 +1104,8 @@ function Users() {
                 page >= totalPages
                   ? "not-allowed"
                   : "pointer",
-              fontWeight: "bold",
+              fontWeight:
+                "bold",
             }}
           >
             Next

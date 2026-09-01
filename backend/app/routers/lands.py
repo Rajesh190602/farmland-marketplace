@@ -122,7 +122,8 @@ def get_all_lands(
         )
     else:
         query = query.filter(
-            models.Land.status == "approved"
+            models.Land.status == "approved",
+            models.Land.is_published == True
         )
 
     if search:
@@ -195,7 +196,8 @@ def search_lands(
         )
     else:
         query = query.filter(
-            Land.status == "approved"
+            Land.status == "approved",
+            Land.is_published == True
         )
 
     if district:
@@ -421,7 +423,10 @@ def get_land(
             )
     else:
         # Buyers/admins can view only approved marketplace lands.
-        if land.status != "approved":
+        if ( 
+            land.status != "approved"
+            or not land.is_published
+        ):
             raise HTTPException(
                 status_code=404,
                 detail="Land not found"

@@ -543,6 +543,7 @@ def get_all_lands(
             "latitude": land.latitude,
             "longitude": land.longitude,
             "status": land.status,
+            "is_published": land.is_published,
             "rejection_reason": land.rejection_reason,
 
             # Existing single image
@@ -823,6 +824,94 @@ def reject_land(
         "status": land.status,
         "reason": land.rejection_reason
     }
+# =========================================================
+# Admin Publish / Unpublish Land
+# =========================================================
+
+@router.put("/lands/{land_id}/publish")
+def publish_land(
+    land_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    # Only approved lands can be published
+    if land.status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Only approved lands can be published."
+        )
+
+    land.is_published = True
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="PUBLISH_LAND",
+        description=f'Published land "{land.title}"',
+        target_type="LAND",
+        target_id=land.id,
+    )
+
+    db.commit()
+    db.refresh(land)
+
+    return {
+        "message": "Land published successfully.",
+        "land_id": land.id,
+        "is_published": land.is_published
+    }
+
+
+@router.put("/lands/{land_id}/unpublish")
+def unpublish_land(
+    land_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin)
+):
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    land.is_published = False
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="UNPUBLISH_LAND",
+        description=f'Unpublished land "{land.title}"',
+        target_type="LAND",
+        target_id=land.id,
+    )
+
+    db.commit()
+    db.refresh(land)
+
+    return {
+        "message": "Land unpublished successfully.",
+        "land_id": land.id,
+        "is_published": land.is_published
+    }
+
 
 # ==========================
 # Admin Delete Land
@@ -1021,6 +1110,7 @@ def get_land_by_id(
         "latitude": land.latitude,
         "longitude": land.longitude,
         "status": land.status,
+        "is_published": land.is_published,
         "rejection_reason": land.rejection_reason,
 
         "image_url": land.image_url,
@@ -1683,4 +1773,182 @@ def update_report_status(
         "report_id": report.id,
         "old_status": old_status,
         "status": report.status,
+    }
+# =========================================================
+# PHASE 2 #12 - SUSPEND / RESTORE USER
+# =========================================================
+
+@router.put("/users/{user_id}/suspend")
+def suspend_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Suspend a user account.
+
+    Only admins can perform this action.
+    An admin cannot suspend their own account.
+    Admin accounts cannot be suspended.
+    """
+
+    # -----------------------------------------------------
+    # Find target user
+    # -----------------------------------------------------
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    # -----------------------------------------------------
+    # Prevent admin from suspending themselves
+    # -----------------------------------------------------
+
+    if user.id == admin:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot suspend your own admin account."
+        )
+
+    # -----------------------------------------------------
+    # Prevent suspension of another admin
+    # -----------------------------------------------------
+
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be suspended."
+        )
+
+    # -----------------------------------------------------
+    # Already suspended
+    # -----------------------------------------------------
+
+    if user.is_suspended:
+        return {
+            "message": "User is already suspended.",
+            "user_id": user.id,
+            "is_suspended": True,
+        }
+
+    # -----------------------------------------------------
+    # Suspend user
+    # -----------------------------------------------------
+
+    user.is_suspended = True
+
+    # -----------------------------------------------------
+    # Activity log
+    # -----------------------------------------------------
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="SUSPEND_USER",
+        description=(
+            f'Suspended user "{user.full_name}" '
+            f'({user.email}).'
+        ),
+        target_type="USER",
+        target_id=user.id,
+    )
+
+    # -----------------------------------------------------
+    # Save
+    # -----------------------------------------------------
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "User suspended successfully.",
+        "user_id": user.id,
+        "is_suspended": user.is_suspended,
+    }
+
+
+# =========================================================
+# RESTORE USER
+# =========================================================
+
+@router.put("/users/{user_id}/restore")
+def restore_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Restore a suspended user account.
+
+    Only admins can perform this action.
+    """
+
+    # -----------------------------------------------------
+    # Find target user
+    # -----------------------------------------------------
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    # -----------------------------------------------------
+    # Already active
+    # -----------------------------------------------------
+
+    if not user.is_suspended:
+        return {
+            "message": "User is already active.",
+            "user_id": user.id,
+            "is_suspended": False,
+        }
+
+    # -----------------------------------------------------
+    # Restore user
+    # -----------------------------------------------------
+
+    user.is_suspended = False
+
+    # -----------------------------------------------------
+    # Activity log
+    # -----------------------------------------------------
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="RESTORE_USER",
+        description=(
+            f'Restored user "{user.full_name}" '
+            f'({user.email}).'
+        ),
+        target_type="USER",
+        target_id=user.id,
+    )
+
+    # -----------------------------------------------------
+    # Save
+    # -----------------------------------------------------
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "User restored successfully.",
+        "user_id": user.id,
+        "is_suspended": user.is_suspended,
     }
