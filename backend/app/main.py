@@ -8,6 +8,7 @@ from app import cloudinary_config
 from app import models
 from app.database import Base, engine
 from app.routers import admin, chat, dashboard, lands, upload, users,notifications, reports,land_images,activity_logs
+from app.routers import saved_searches
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -55,6 +56,7 @@ app.include_router(favorites.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(activity_logs.router)
+app.include_router(saved_searches.router)
 
 @app.get("/")
 def root():

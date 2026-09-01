@@ -1158,3 +1158,92 @@ class RecentlyViewedLand(Base):
         "Land",
         foreign_keys=[land_id]
     )
+# =========================================================
+# STEP 19
+# SAVED SEARCHES
+# =========================================================
+
+class SavedSearch(Base):
+    __tablename__ = "saved_searches"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    # User who saved the search
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    # User-defined name for the saved search
+    name = Column(
+        String,
+        nullable=False
+    )
+
+    # Search filters
+    district = Column(
+        String,
+        nullable=True
+    )
+
+    village = Column(
+        String,
+        nullable=True
+    )
+
+    mandal = Column(
+        String,
+        nullable=True
+    )
+
+    crop_type = Column(
+        String,
+        nullable=True
+    )
+
+    soil_type = Column(
+        String,
+        nullable=True
+    )
+
+    water_source = Column(
+        String,
+        nullable=True
+    )
+
+    min_price = Column(
+        Float,
+        nullable=True
+    )
+
+    max_price = Column(
+        Float,
+        nullable=True
+    )
+
+    min_area = Column(
+        Float,
+        nullable=True
+    )
+
+    max_area = Column(
+        Float,
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    user = relationship(
+        "User",
+        foreign_keys=[user_id]
+    )
