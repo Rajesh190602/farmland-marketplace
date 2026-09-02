@@ -76,6 +76,83 @@ function MarketplaceActivity() {
   };
 
   // =====================================================
+  // BUYER ACTIVITY / HISTORY HELPERS
+  // =====================================================
+
+  const openLand = (landId) => {
+    if (!landId) {
+      return;
+    }
+
+    navigate(`/lands/${landId}`);
+  };
+
+  const formatDate = (value) => {
+    if (!value) {
+      return "Date unavailable";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "Date unavailable";
+    }
+
+    return date.toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  };
+
+  const getRecentActivity = () => {
+    const activity = [
+      ...inquiries.map((item) => ({
+        type: "Inquiry",
+        icon: "💬",
+        landId: item.land_id,
+        status: item.status,
+        message: item.message,
+        date: item.created_at,
+        id: item.id,
+      })),
+      ...offers.map((item) => ({
+        type: "Offer",
+        icon: "💰",
+        landId: item.land_id,
+        status: item.status,
+        message: item.message,
+        amount: item.amount,
+        date: item.created_at,
+        id: item.id,
+      })),
+      ...siteVisits.map((item) => ({
+        type: "Site Visit",
+        icon: "📅",
+        landId: item.land_id,
+        status: item.status,
+        message: item.message,
+        date: item.created_at || item.requested_date,
+        requestedDate: item.requested_date,
+        id: item.id,
+      })),
+    ];
+
+    return activity
+      .sort((a, b) => {
+        const first = new Date(a.date || 0).getTime();
+        const second = new Date(b.date || 0).getTime();
+        return second - first;
+      })
+      .slice(0, 10);
+  };
+
+  const getStatusCount = (items, status) =>
+    items.filter(
+      (item) =>
+        String(item.status || "").toLowerCase() === status
+    ).length;
+
+  // =====================================================
   // START CHAT
   // =====================================================
 
@@ -411,6 +488,247 @@ function MarketplaceActivity() {
               LOADING
           ================================================= */}
 
+          {/* =================================================
+              BUYER ACTIVITY / HISTORY SUMMARY
+          ================================================= */}
+
+          {userRole === "buyer" && (
+            <>
+              <section
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit,minmax(170px,1fr))",
+                  gap: "15px",
+                  marginBottom: "30px",
+                }}
+              >
+                {[
+                  {
+                    label: "Total Inquiries",
+                    value: inquiries.length,
+                    icon: "💬",
+                  },
+                  {
+                    label: "Total Offers",
+                    value: offers.length,
+                    icon: "💰",
+                  },
+                  {
+                    label: "Site Visits",
+                    value: siteVisits.length,
+                    icon: "📅",
+                  },
+                  {
+                    label: "Pending",
+                    value:
+                      getStatusCount(inquiries, "pending") +
+                      getStatusCount(offers, "pending") +
+                      getStatusCount(siteVisits, "pending"),
+                    icon: "⏳",
+                  },
+                  {
+                    label: "Accepted",
+                    value:
+                      getStatusCount(inquiries, "accepted") +
+                      getStatusCount(offers, "accepted") +
+                      getStatusCount(siteVisits, "accepted"),
+                    icon: "✅",
+                  },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    style={{
+                      background: "#fff",
+                      borderRadius: "15px",
+                      padding: "20px 16px",
+                      boxShadow:
+                        "0 5px 18px rgba(0,0,0,0.07)",
+                      border: "1px solid #eee",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ fontSize: "27px" }}>
+                      {stat.icon}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "28px",
+                        fontWeight: "800",
+                        color: "#2E7D32",
+                        marginTop: "5px",
+                      }}
+                    >
+                      {stat.value}
+                    </div>
+                    <div
+                      style={{
+                        color: "#666",
+                        fontSize: "13px",
+                        fontWeight: "600",
+                        marginTop: "3px",
+                      }}
+                    >
+                      {stat.label}
+                    </div>
+                  </div>
+                ))}
+              </section>
+
+              <section style={{ marginBottom: "40px" }}>
+                <h2
+                  style={{
+                    color: "#6A1B9A",
+                    marginBottom: "18px",
+                  }}
+                >
+                  🕘 Recent Activity
+                </h2>
+
+                {getRecentActivity().length === 0 ? (
+                  <Card>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: "#777",
+                        textAlign: "center",
+                      }}
+                    >
+                      No marketplace activity yet. When you
+                      send an inquiry, make an offer, or request
+                      a site visit, it will appear here.
+                    </p>
+                  </Card>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "12px",
+                    }}
+                  >
+                    {getRecentActivity().map((item) => (
+                      <Card key={`${item.type}-${item.id}`}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: "15px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <strong
+                                style={{
+                                  color: "#333",
+                                  fontSize: "16px",
+                                }}
+                              >
+                                {item.icon} {item.type}
+                              </strong>
+
+                              <StatusBadge
+                                status={item.status}
+                              />
+                            </div>
+
+                            <p
+                              style={{
+                                margin: "9px 0 4px",
+                                color: "#666",
+                                fontSize: "13px",
+                              }}
+                            >
+                              Land ID: {item.landId}
+                            </p>
+
+                            <p
+                              style={{
+                                margin: 0,
+                                color: "#888",
+                                fontSize: "12px",
+                              }}
+                            >
+                              {formatDate(item.date)}
+                            </p>
+
+                            {item.requestedDate && (
+                              <p
+                                style={{
+                                  margin: "7px 0 0",
+                                  color: "#555",
+                                  fontSize: "13px",
+                                }}
+                              >
+                                <strong>
+                                  Requested visit:
+                                </strong>{" "}
+                                {formatDate(item.requestedDate)}
+                              </p>
+                            )}
+
+                            {item.amount !== undefined && (
+                              <p
+                                style={{
+                                  margin: "7px 0 0",
+                                  color: "#1565C0",
+                                  fontWeight: "700",
+                                }}
+                              >
+                                Offer: ₹
+                                {Number(
+                                  item.amount || 0
+                                ).toLocaleString("en-IN")}
+                              </p>
+                            )}
+
+                            {item.message && (
+                              <p
+                                style={{
+                                  margin: "8px 0 0",
+                                  color: "#555",
+                                  lineHeight: 1.4,
+                                }}
+                              >
+                                {item.message}
+                              </p>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() =>
+                              openLand(item.landId)
+                            }
+                            style={{
+                              border: "none",
+                              borderRadius: "9px",
+                              padding: "10px 15px",
+                              background: "#2E7D32",
+                              color: "#fff",
+                              cursor: "pointer",
+                              fontWeight: "700",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            🌾 View Land
+                          </button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
           {loading ? (
             <div
               style={{
@@ -513,7 +831,7 @@ function MarketplaceActivity() {
                           }
                           disabled={
                             actionLoading ===
-                            `chat-${item.land_id}`
+                            `chat-${item.id}`
                           }
                           style={{
                             width: "100%",
@@ -526,7 +844,7 @@ function MarketplaceActivity() {
                             color: "#fff",
                             cursor:
                               actionLoading ===
-                              `chat-${item.land_id}`
+                              `chat-${item.id}`
                                 ? "not-allowed"
                                 : "pointer",
                             fontWeight: "700",
@@ -534,7 +852,7 @@ function MarketplaceActivity() {
                         >
                           💬{" "}
                           {actionLoading ===
-                          `chat-${item.land_id}`
+                          `chat-${item.id}`
                             ? "Opening Chat..."
                             : userRole === "farmer"
                             ? "Reply to Buyer"
@@ -719,7 +1037,7 @@ function MarketplaceActivity() {
                           }
                           disabled={
                             actionLoading ===
-                            `chat-${item.land_id}`
+                            `chat-${item.id}`
                           }
                           style={{
                             width: "100%",
@@ -732,7 +1050,7 @@ function MarketplaceActivity() {
                             color: "#fff",
                             cursor:
                               actionLoading ===
-                              `chat-${item.land_id}`
+                              `chat-${item.id}`
                                 ? "not-allowed"
                                 : "pointer",
                             fontWeight: "700",
@@ -740,7 +1058,7 @@ function MarketplaceActivity() {
                         >
                           💬{" "}
                           {actionLoading ===
-                          `chat-${item.land_id}`
+                          `chat-${item.id}`
                             ? "Opening Chat..."
                             : userRole === "farmer"
                             ? "Reply to Buyer"
@@ -884,9 +1202,9 @@ function MarketplaceActivity() {
                           <strong>
                             Requested:
                           </strong>{" "}
-                          {new Date(
+                          {formatDate(
                             item.requested_date
-                          ).toLocaleString()}
+                          )}
                         </p>
 
                         {item.message && (
@@ -918,7 +1236,7 @@ function MarketplaceActivity() {
                           }
                           disabled={
                             actionLoading ===
-                            `chat-${item.land_id}`
+                            `chat-${item.id}`
                           }
                           style={{
                             width: "100%",
@@ -931,7 +1249,7 @@ function MarketplaceActivity() {
                             color: "#fff",
                             cursor:
                               actionLoading ===
-                              `chat-${item.land_id}`
+                              `chat-${item.id}`
                                 ? "not-allowed"
                                 : "pointer",
                             fontWeight: "700",
@@ -939,7 +1257,7 @@ function MarketplaceActivity() {
                         >
                           💬{" "}
                           {actionLoading ===
-                          `chat-${item.land_id}`
+                          `chat-${item.id}`
                             ? "Opening Chat..."
                             : userRole === "farmer"
                             ? "Reply to Buyer"
