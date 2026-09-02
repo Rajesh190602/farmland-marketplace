@@ -99,7 +99,7 @@ export default function ChatPage() {
       setBlockLoading(true);
 
       await api.post(
-        `/marketplace/users/${otherUserId}/block`
+        `/users/${otherUserId}/block`
       );
 
       setIsBlocked(true);
@@ -138,7 +138,7 @@ export default function ChatPage() {
       setBlockLoading(true);
 
       await api.delete(
-        `/marketplace/users/${otherUserId}/block`
+        `/users/${otherUserId}/block`
       );
 
       setIsBlocked(false);
