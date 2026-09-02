@@ -102,3 +102,11 @@ app/src/main/res/xml/config.xml
 
 # Android Studio project metadata
 .idea/
+
+# Signing keys
+*.jks
+*.keystore
+*.p12
+
+# Local signing configuration
+signing.properties

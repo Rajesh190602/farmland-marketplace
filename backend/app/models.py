@@ -284,7 +284,7 @@ class Land(Base):
     )
     is_published = Column(
         Boolean,
-        default=True,
+        default=False,
         nullable=False,
         index=True
     )

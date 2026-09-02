@@ -220,9 +220,11 @@ function Notifications() {
       // LAND
       // -------------------------------------------------
 
-      if (
-        notification.target_type === "land"
-      ) {
+      const targetType = String(
+        notification.target_type
+      ).toLowerCase();
+
+      if (targetType === "land") {
         navigate(
           `/land/${notification.target_id}`
         );

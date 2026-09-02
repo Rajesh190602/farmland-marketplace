@@ -14,6 +14,7 @@ from app.models import (
     Favorite,
     LandReport,
     UserReport,
+    SavedSearch,
 )
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
@@ -824,9 +825,9 @@ def reject_land(
         "status": land.status,
         "reason": land.rejection_reason
     }
-# =========================================================
-# Admin Publish / Unpublish Land
-# =========================================================
+# ==========================
+# Publish Land
+# ==========================
 
 @router.put("/lands/{land_id}/publish")
 def publish_land(
@@ -853,7 +854,23 @@ def publish_land(
             detail="Only approved lands can be published."
         )
 
+    # Prevent duplicate publishing
+    if land.is_published:
+        return {
+            "message": "Land is already published.",
+            "land_id": land.id,
+            "is_published": land.is_published
+        }
+
+    # ---------------------------------------------------------
+    # Publish the land
+    # ---------------------------------------------------------
+
     land.is_published = True
+
+    # ---------------------------------------------------------
+    # Existing activity log
+    # ---------------------------------------------------------
 
     create_activity_log(
         db=db,
@@ -864,13 +881,164 @@ def publish_land(
         target_id=land.id,
     )
 
+    # ---------------------------------------------------------
+    # Notify buyers whose saved searches match this land
+    # ---------------------------------------------------------
+
+    saved_searches = (
+        db.query(SavedSearch)
+        .filter(
+            SavedSearch.user_id != land.owner_id
+        )
+        .all()
+    )
+
+    notified_users = set()
+
+    for saved_search in saved_searches:
+
+        # District
+        if (
+            saved_search.district
+            and (
+                not land.district
+                or saved_search.district.strip().lower()
+                not in land.district.strip().lower()
+            )
+        ):
+            continue
+
+        # Village
+        if (
+            saved_search.village
+            and (
+                not land.village
+                or saved_search.village.strip().lower()
+                not in land.village.strip().lower()
+            )
+        ):
+            continue
+
+        # Mandal
+        if (
+            saved_search.mandal
+            and (
+                not land.mandal
+                or saved_search.mandal.strip().lower()
+                not in land.mandal.strip().lower()
+            )
+        ):
+            continue
+
+        # Crop type
+        if (
+            saved_search.crop_type
+            and (
+                not land.crop_type
+                or saved_search.crop_type.strip().lower()
+                not in land.crop_type.strip().lower()
+            )
+        ):
+            continue
+
+        # Soil type
+        if (
+            saved_search.soil_type
+            and (
+                not land.soil_type
+                or saved_search.soil_type.strip().lower()
+                not in land.soil_type.strip().lower()
+            )
+        ):
+            continue
+
+        # Water source
+        if (
+            saved_search.water_source
+            and (
+                not land.water_source
+                or saved_search.water_source.strip().lower()
+                not in land.water_source.strip().lower()
+            )
+        ):
+            continue
+
+        # Minimum price
+        if (
+            saved_search.min_price is not None
+            and (
+                land.price is None
+                or land.price < saved_search.min_price
+            )
+        ):
+            continue
+
+        # Maximum price
+        if (
+            saved_search.max_price is not None
+            and (
+                land.price is None
+                or land.price > saved_search.max_price
+            )
+        ):
+            continue
+
+        # Minimum area
+        if (
+            saved_search.min_area is not None
+            and (
+                land.area is None
+                or land.area < saved_search.min_area
+            )
+        ):
+            continue
+
+        # Maximum area
+        if (
+            saved_search.max_area is not None
+            and (
+                land.area is None
+                or land.area > saved_search.max_area
+            )
+        ):
+            continue
+
+        # -----------------------------------------------------
+        # Avoid sending multiple notifications to the same
+        # buyer when they have multiple matching saved searches.
+        # -----------------------------------------------------
+
+        if saved_search.user_id in notified_users:
+            continue
+
+        notification = Notification(
+            user_id=saved_search.user_id,
+            title="New Land Matches Your Saved Search",
+            message=(
+                f'A new land "{land.title}" matches one of '
+                f'your saved searches.'
+            ),
+            target_type="LAND",
+            target_id=land.id,
+            is_read=False,
+        )
+
+        db.add(notification)
+
+        notified_users.add(saved_search.user_id)
+
+    # ---------------------------------------------------------
+    # Save everything together
+    # ---------------------------------------------------------
+
     db.commit()
     db.refresh(land)
 
     return {
         "message": "Land published successfully.",
         "land_id": land.id,
-        "is_published": land.is_published
+        "is_published": land.is_published,
+        "matched_buyers_notified": len(notified_users),
     }
 
 
