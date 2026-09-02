@@ -574,6 +574,135 @@ export default function ChatPage() {
   };
 
   // =====================================================
+  // PHASE 4 - BETTER FILE VALIDATION
+  // =====================================================
+
+  const CHAT_FILE_RULES = {
+    ".jpg": { mime: "image/jpeg", label: "JPG image" },
+    ".jpeg": { mime: "image/jpeg", label: "JPEG image" },
+    ".png": { mime: "image/png", label: "PNG image" },
+    ".webp": { mime: "image/webp", label: "WebP image" },
+    ".pdf": { mime: "application/pdf", label: "PDF document" },
+    ".doc": { mime: "application/msword", label: "Word document" },
+    ".docx": {
+      mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      label: "Word document",
+    },
+    ".xls": { mime: "application/vnd.ms-excel", label: "Excel spreadsheet" },
+    ".xlsx": {
+      mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      label: "Excel spreadsheet",
+    },
+  };
+
+  const MAX_CHAT_FILE_SIZE = 10 * 1024 * 1024;
+  const MAX_CHAT_FILENAME_LENGTH = 255;
+
+  const getFileExtension = (filename) => {
+    const lastDot = filename.lastIndexOf(".");
+    if (lastDot < 0) return "";
+    return filename.slice(lastDot).toLowerCase();
+  };
+
+  const readFileHeader = async (file, byteCount = 16) => {
+    const buffer = await file.slice(0, byteCount).arrayBuffer();
+    return new Uint8Array(buffer);
+  };
+
+  const startsWithBytes = (bytes, signature) => {
+    if (bytes.length < signature.length) return false;
+    return signature.every((value, index) => bytes[index] === value);
+  };
+
+  const validateChatFile = async (file) => {
+    if (!file) {
+      return "No file selected.";
+    }
+
+    if (!file.name || file.name.length > MAX_CHAT_FILENAME_LENGTH) {
+      return "File name must be between 1 and 255 characters.";
+    }
+
+    if (file.name.includes("\0")) {
+      return "Invalid file name.";
+    }
+
+    if (file.size === 0) {
+      return "The selected file is empty.";
+    }
+
+    if (file.size > MAX_CHAT_FILE_SIZE) {
+      return "File size must be 10 MB or less.";
+    }
+
+    const extension = getFileExtension(file.name);
+    const rule = CHAT_FILE_RULES[extension];
+
+    if (!rule) {
+      return (
+        "File type not supported. Allowed: JPG, JPEG, PNG, WEBP, PDF, " +
+        "DOC, DOCX, XLS and XLSX."
+      );
+    }
+
+    const browserMime = (file.type || "").split(";", 1)[0].trim().toLowerCase();
+    if (
+      browserMime &&
+      browserMime !== "application/octet-stream" &&
+      browserMime !== rule.mime
+    ) {
+      return `${rule.label} must use the correct file type (${rule.mime}).`;
+    }
+
+    // Check the actual file signature for common formats before upload.
+    // The backend performs the authoritative validation again.
+    const header = await readFileHeader(file, 16);
+
+    let validSignature = false;
+
+    if (rule.mime === "image/jpeg") {
+      validSignature = startsWithBytes(header, [0xff, 0xd8, 0xff]);
+    } else if (rule.mime === "image/png") {
+      validSignature = startsWithBytes(header, [
+        0x89, 0x50, 0x4e, 0x47,
+        0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+    } else if (rule.mime === "image/webp") {
+      validSignature =
+        header.length >= 12 &&
+        startsWithBytes(header, [0x52, 0x49, 0x46, 0x46]) &&
+        startsWithBytes(header.slice(8), [0x57, 0x45, 0x42, 0x50]);
+    } else if (rule.mime === "application/pdf") {
+      validSignature = startsWithBytes(header, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+    } else if (
+      rule.mime === "application/msword" ||
+      rule.mime === "application/vnd.ms-excel"
+    ) {
+      validSignature = startsWithBytes(header, [
+        0xd0, 0xcf, 0x11, 0xe0,
+        0xa1, 0xb1, 0x1a, 0xe1,
+      ]);
+    } else if (
+      rule.mime ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      rule.mime ===
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) {
+      // DOCX/XLSX are ZIP containers. The backend additionally verifies
+      // their internal Office structure.
+      validSignature = startsWithBytes(header, [0x50, 0x4b, 0x03, 0x04]);
+    }
+
+    if (!validSignature) {
+      return "The selected file appears invalid or corrupted. Please choose a genuine supported file.";
+    }
+
+    return null;
+  };
+
+  
+
+  // =====================================================
   // UPLOAD FILE
   // =====================================================
 
@@ -590,18 +719,14 @@ export default function ChatPage() {
       return;
     }
 
-    const maxSize = 10 * 1024 * 1024;
-
-    if (file.size > maxSize) {
-      alert(
-        "File size must be 10 MB or less."
-      );
-
-      event.target.value = "";
-      return;
-    }
-
     try {
+      const validationError = await validateChatFile(file);
+
+      if (validationError) {
+        alert(validationError);
+        return;
+      }
+
       setUploading(true);
 
       const formData = new FormData();

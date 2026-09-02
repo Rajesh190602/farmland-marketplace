@@ -9,6 +9,9 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+import os
+import io
+import zipfile
 
 import cloudinary
 import cloudinary.uploader
@@ -579,6 +582,159 @@ def send_message(
 
 
 # =========================================================
+# CHAT FILE VALIDATION
+# =========================================================
+
+CHAT_FILE_RULES = {
+    ".jpg": {"mime": "image/jpeg", "type": "image"},
+    ".jpeg": {"mime": "image/jpeg", "type": "image"},
+    ".png": {"mime": "image/png", "type": "image"},
+    ".webp": {"mime": "image/webp", "type": "image"},
+    ".pdf": {"mime": "application/pdf", "type": "file"},
+    ".doc": {"mime": "application/msword", "type": "file"},
+    ".docx": {
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "type": "file",
+    },
+    ".xls": {"mime": "application/vnd.ms-excel", "type": "file"},
+    ".xlsx": {
+        "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "type": "file",
+    },
+}
+
+MAX_CHAT_FILE_SIZE = 10 * 1024 * 1024
+MAX_CHAT_FILENAME_LENGTH = 255
+
+
+def _has_prefix(content: bytes, prefix: bytes) -> bool:
+    return content.startswith(prefix)
+
+
+def _validate_file_signature(
+    filename: str,
+    content_type: str,
+    file_content: bytes,
+) -> None:
+    """Validate the actual file bytes instead of trusting the browser MIME type."""
+
+    extension = os.path.splitext(filename)[1].lower()
+
+    if content_type in {"image/jpeg"}:
+        valid = _has_prefix(file_content, b"\xff\xd8\xff")
+    elif content_type == "image/png":
+        valid = _has_prefix(file_content, b"\x89PNG\r\n\x1a\n")
+    elif content_type == "image/webp":
+        valid = (
+            len(file_content) >= 12
+            and file_content[:4] == b"RIFF"
+            and file_content[8:12] == b"WEBP"
+        )
+    elif content_type == "application/pdf":
+        valid = _has_prefix(file_content, b"%PDF-")
+    elif content_type in {"application/msword", "application/vnd.ms-excel"}:
+        # Legacy .doc/.xls files use the OLE Compound File signature.
+        valid = _has_prefix(
+            file_content,
+            b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
+        )
+    elif content_type in {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }:
+        # DOCX/XLSX are ZIP containers. Also verify the expected internal file.
+        valid = False
+        if _has_prefix(file_content, b"PK\x03\x04"):
+            try:
+                with zipfile.ZipFile(io.BytesIO(file_content)) as archive:
+                    names = set(archive.namelist())
+                    if content_type.endswith("wordprocessingml.document"):
+                        valid = (
+                            "[Content_Types].xml" in names
+                            and "word/document.xml" in names
+                        )
+                    else:
+                        valid = (
+                            "[Content_Types].xml" in names
+                            and "xl/workbook.xml" in names
+                        )
+            except (zipfile.BadZipFile, OSError):
+                valid = False
+    else:
+        valid = False
+
+    if not valid:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The selected {extension or 'file'} is invalid or corrupted. "
+                "Please choose a genuine supported file."
+            ),
+        )
+
+
+def validate_chat_file(
+    filename: str,
+    browser_content_type: str | None,
+    file_content: bytes,
+):
+    if not filename:
+        raise HTTPException(status_code=400, detail="No file selected")
+
+    if "\x00" in filename or any(ord(char) < 32 for char in filename):
+        raise HTTPException(status_code=400, detail="Invalid file name")
+
+    safe_filename = os.path.basename(filename.replace("\\", "/"))
+    if safe_filename != filename:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+
+    if len(safe_filename) > MAX_CHAT_FILENAME_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail="File name must be 255 characters or less",
+        )
+
+    extension = os.path.splitext(safe_filename)[1].lower()
+    rule = CHAT_FILE_RULES.get(extension)
+
+    if not rule:
+        allowed = ", ".join(sorted(CHAT_FILE_RULES.keys()))
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not supported. Allowed types: {allowed}",
+        )
+
+    expected_mime = rule["mime"]
+    supplied_mime = (browser_content_type or "").split(";", 1)[0].strip().lower()
+
+    # Browsers can report application/octet-stream or an empty MIME type for
+    # some document files. In that case the extension plus byte signature is
+    # authoritative. A conflicting specific MIME type is rejected.
+    generic_mimes = {"", "application/octet-stream"}
+    if supplied_mime not in generic_mimes and supplied_mime != expected_mime:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"File extension '{extension}' does not match the selected "
+                f"file type. Expected {expected_mime}."
+            ),
+        )
+
+    if not file_content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    if len(file_content) > MAX_CHAT_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="File size must be 10 MB or less",
+        )
+
+    _validate_file_signature(safe_filename, expected_mime, file_content)
+
+    return safe_filename, expected_mime, rule["type"]
+
+
+# =========================================================
 # SEND CHAT FILE / IMAGE
 # =========================================================
 
@@ -621,73 +777,25 @@ async def send_chat_file(
         )
 
     # ----------------------------------
-    # Validate filename
+    # Read only up to the allowed size + 1 byte.
+    # This prevents unnecessarily loading very large uploads.
     # ----------------------------------
 
-    if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="No file selected"
-        )
+    file_content = await file.read(MAX_CHAT_FILE_SIZE + 1)
 
     # ----------------------------------
-    # Allowed file types
+    # Validate filename, extension, MIME, size and
+    # actual file signature before sending anything to Cloudinary.
     # ----------------------------------
 
-    allowed_types = {
-        "image/jpeg": "image",
-        "image/png": "image",
-        "image/webp": "image",
-
-        "application/pdf": "file",
-
-        "application/msword": "file",
-
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            "file",
-
-        "application/vnd.ms-excel":
-            "file",
-
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-            "file"
-    }
-
-    if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"File type not supported: "
-                f"{file.content_type}"
-            )
-        )
-
-    message_type = allowed_types[
-        file.content_type
-    ]
+    safe_filename, canonical_mime, message_type = validate_chat_file(
+        file.filename or "",
+        file.content_type,
+        file_content,
+    )
 
     # ----------------------------------
-    # Maximum 10 MB
-    # ----------------------------------
-
-    MAX_FILE_SIZE = 10 * 1024 * 1024
-
-    file_content = await file.read()
-
-    if len(file_content) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Uploaded file is empty"
-        )
-
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail="File size must be 10 MB or less"
-        )
-
-    # ----------------------------------
-    # Upload to Cloudinary
+    # Upload to Cloudinary only after validation
     # ----------------------------------
 
     try:
@@ -748,9 +856,9 @@ async def send_chat_file(
 
         message_type=message_type,
         file_url=file_url,
-        file_name=file.filename,
+        file_name=safe_filename,
         file_size=len(file_content),
-        file_type=file.content_type
+        file_type=canonical_mime
     )
 
     try:
@@ -789,7 +897,7 @@ async def send_chat_file(
         user_id=current_user,
         action="CHAT_FILE_SENT",
         description=(
-            f"Sent file '{file.filename}' "
+            f"Sent file '{safe_filename}' "
             f"in conversation {conversation.id}."
         ),
         target_type="conversation",
@@ -822,7 +930,7 @@ async def send_chat_file(
             title="📎 New File",
             message=(
                 f"{sender.full_name if sender else 'User'} "
-                f"sent you a file: {file.filename}"
+                f"sent you a file: {safe_filename}"
             ),
             target_type="conversation",
             target_id=conversation.id
@@ -834,7 +942,7 @@ async def send_chat_file(
     return {
         "message": "File sent successfully",
         "message_id": message.id,
-        "file_name": file.filename,
+        "file_name": safe_filename,
         "file_url": file_url,
         "message_type": message_type
     }
