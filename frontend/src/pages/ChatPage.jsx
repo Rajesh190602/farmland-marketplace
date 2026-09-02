@@ -23,6 +23,13 @@ export default function ChatPage() {
   const [otherUserId, setOtherUserId] = useState(null);
   const [otherUserName, setOtherUserName] = useState("User");
 
+  // =====================================================
+  // PHASE 4 - CONVERSATION TIED TO LAND
+  // =====================================================
+
+  const [conversationLandId, setConversationLandId] = useState(null);
+  const [conversationLandTitle, setConversationLandTitle] = useState("");
+
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState(null);
 
@@ -248,6 +255,22 @@ export default function ChatPage() {
       setOtherUserName(
         resolvedOtherUserName
       );
+
+      // The backend already ties each conversation to its land and
+      // returns the land ID/title. Keep that existing relationship and
+      // expose it clearly in the chat UI.
+      const resolvedLandId =
+        data.land_id ??
+        data.landId ??
+        null;
+
+      const resolvedLandTitle =
+        data.land_title ||
+        data.landTitle ||
+        "";
+
+      setConversationLandId(resolvedLandId);
+      setConversationLandTitle(resolvedLandTitle);
     } catch (error) {
       console.error(
         "Failed to load conversation details:",
@@ -1757,6 +1780,101 @@ export default function ChatPage() {
               ⋮
             </button>
           </div>
+
+          {/* =====================================================
+              PHASE 4 - CONVERSATION TIED TO LAND
+          ===================================================== */}
+
+          {conversationLandId && (
+            <div
+              style={{
+                background: "#F7FBF5",
+                borderBottom: "1px solid #C8E6C9",
+                padding: "10px 15px",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: "700px",
+                  margin: "0 auto",
+                  background: "#FFFFFF",
+                  border: "1px solid #C8E6C9",
+                  borderRadius: "10px",
+                  padding: "10px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                }}
+              >
+                <div
+                  style={{
+                    width: "38px",
+                    height: "38px",
+                    borderRadius: "8px",
+                    background: "#E8F5E9",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "20px",
+                    flexShrink: 0,
+                  }}
+                >
+                  🌾
+                </div>
+
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#666",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    Conversation about this land
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "700",
+                      color: "#2E7D32",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={conversationLandTitle || `Land #${conversationLandId}`}
+                  >
+                    {conversationLandTitle || `Land #${conversationLandId}`}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => navigate(`/lands/${conversationLandId}`)}
+                  style={{
+                    border: "none",
+                    background: "#2E7D32",
+                    color: "#FFFFFF",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                  title="View this land listing"
+                >
+                  View Land
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* =====================================================
               PHASE 2 - REPORT USER
