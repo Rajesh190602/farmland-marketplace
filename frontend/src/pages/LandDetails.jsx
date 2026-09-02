@@ -52,6 +52,12 @@ function LandDetails() {
   const [reportDescription, setReportDescription] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
 
+  // =========================================================
+  // PHASE 3 - SIMILAR LANDS
+  // =========================================================
+  const [similarLands, setSimilarLands] = useState([]);
+  const [similarLandsLoading, setSimilarLandsLoading] = useState(false);
+
   // Logged-in user's information
   const currentUserId = Number(
     sessionStorage.getItem("user_id")
@@ -202,6 +208,7 @@ function LandDetails() {
     // If this request fails, do not break the existing
     // Land Details page.
     await fetchAvailability(id);
+    await fetchSimilarLands(response.data);
     } catch (error) {
       console.error(
         "Failed to load land:",
@@ -236,6 +243,177 @@ function LandDetails() {
       // continue even if marketplace availability
       // is unavailable.
       setAvailability(null);
+    }
+  };
+
+  // =========================================================
+  // PHASE 3 - LOAD SIMILAR LANDS
+  // =========================================================
+  // Similar listings are calculated on the frontend so the
+  // existing land-search backend and all current functionality
+  // remain unchanged.
+  const fetchSimilarLands = async (currentLand) => {
+    if (!currentLand || currentRole !== "buyer") {
+      setSimilarLands([]);
+      return;
+    }
+
+    try {
+      setSimilarLandsLoading(true);
+
+      // Start with the same district because location is the
+      // strongest similarity signal for farmland buyers.
+      const params = {};
+      if (currentLand.district) {
+        params.district = currentLand.district;
+      }
+
+      let response = await api.get("/lands/search", {
+        params,
+      });
+
+      let candidates = Array.isArray(response.data)
+        ? response.data
+        : [];
+
+      // If there are no same-district results, use all searchable
+      // marketplace lands as a fallback.
+      if (
+        candidates.length === 0 &&
+        currentLand.district
+      ) {
+        response = await api.get("/lands/search");
+        candidates = Array.isArray(response.data)
+          ? response.data
+          : [];
+      }
+
+      const normalize = (value) =>
+        String(value ?? "").trim().toLowerCase();
+
+      const currentId = Number(currentLand.id);
+      const currentPrice = Number(currentLand.price);
+      const currentArea = Number(currentLand.area);
+
+      const isMeaningfulNumber = (value) =>
+        Number.isFinite(value) && value > 0;
+
+      const getSimilarityScore = (candidate) => {
+        let score = 0;
+
+        if (
+          normalize(candidate.district) &&
+          normalize(candidate.district) ===
+            normalize(currentLand.district)
+        ) {
+          score += 5;
+        }
+
+        if (
+          normalize(candidate.mandal) &&
+          normalize(candidate.mandal) ===
+            normalize(currentLand.mandal)
+        ) {
+          score += 4;
+        }
+
+        if (
+          normalize(candidate.crop_type) &&
+          normalize(candidate.crop_type) ===
+            normalize(currentLand.crop_type)
+        ) {
+          score += 4;
+        }
+
+        if (
+          normalize(candidate.soil_type) &&
+          normalize(candidate.soil_type) ===
+            normalize(currentLand.soil_type)
+        ) {
+          score += 3;
+        }
+
+        if (
+          normalize(candidate.water_source) &&
+          normalize(candidate.water_source) ===
+            normalize(currentLand.water_source)
+        ) {
+          score += 2;
+        }
+
+        const candidatePrice = Number(candidate.price);
+        if (
+          isMeaningfulNumber(currentPrice) &&
+          isMeaningfulNumber(candidatePrice)
+        ) {
+          const priceDifference =
+            Math.abs(candidatePrice - currentPrice) /
+            currentPrice;
+
+          if (priceDifference <= 0.25) {
+            score += 2;
+          }
+        }
+
+        const candidateArea = Number(candidate.area);
+        if (
+          isMeaningfulNumber(currentArea) &&
+          isMeaningfulNumber(candidateArea)
+        ) {
+          const areaDifference =
+            Math.abs(candidateArea - currentArea) /
+            currentArea;
+
+          if (areaDifference <= 0.25) {
+            score += 2;
+          }
+        }
+
+        return score;
+      };
+
+      const ranked = candidates
+        .filter(
+          (candidate) =>
+            Number(candidate.id) !== currentId &&
+            candidate.status === "approved" &&
+            candidate.is_published !== false
+        )
+        .map((candidate) => ({
+          ...candidate,
+          _similarityScore:
+            getSimilarityScore(candidate),
+        }))
+        .filter(
+          (candidate) =>
+            candidate._similarityScore > 0
+        )
+        .sort((a, b) => {
+          if (
+            b._similarityScore !==
+            a._similarityScore
+          ) {
+            return (
+              b._similarityScore -
+              a._similarityScore
+            );
+          }
+
+          return (
+            Number(b.id) - Number(a.id)
+          );
+        })
+        .slice(0, 6);
+
+      setSimilarLands(ranked);
+    } catch (error) {
+      console.error(
+        "Failed to load similar lands:",
+        error
+      );
+      setSimilarLands([]);
+    } finally {
+      setSimilarLandsLoading(false);
     }
   };
 
@@ -1940,6 +2118,196 @@ function LandDetails() {
                     ? "Submitting..."
                     : "🚩 Submit Report"}
                 </button>
+              </div>
+            )}
+
+          {/* =====================================================
+              PHASE 3 - SIMILAR LANDS
+          ====================================================== */}
+
+          {isBuyer &&
+            isApproved &&
+            similarLands.length > 0 && (
+              <div
+                style={{
+                  marginTop: "30px",
+                  background: "#F8FBF8",
+                  padding: "25px",
+                  borderRadius: "15px",
+                  border: "1px solid #C8E6C9",
+                  boxShadow:
+                    "0 5px 20px rgba(0,0,0,.06)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "15px",
+                    flexWrap: "wrap",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div>
+                    <h2
+                      style={{
+                        color: "#2E7D32",
+                        marginTop: 0,
+                        marginBottom: "6px",
+                      }}
+                    >
+                      🌾 Similar Lands
+                    </h2>
+
+                    <p
+                      style={{
+                        margin: 0,
+                        color: "#666",
+                      }}
+                    >
+                      Other farmland listings that may
+                      be similar to this property.
+                    </p>
+                  </div>
+
+                  {similarLandsLoading && (
+                    <span
+                      style={{
+                        color: "#2E7D32",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Loading...
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(260px, 1fr))",
+                    gap: "20px",
+                  }}
+                >
+                  {similarLands.map((similarLand) => (
+                    <div
+                      key={similarLand.id}
+                      style={{
+                        background: "#fff",
+                        borderRadius: "12px",
+                        overflow: "hidden",
+                        border: "1px solid #E0E0E0",
+                        boxShadow:
+                          "0 4px 14px rgba(0,0,0,.08)",
+                      }}
+                    >
+                      {similarLand.image_url ? (
+                        <img
+                          src={similarLand.image_url}
+                          alt={similarLand.title}
+                          style={{
+                            width: "100%",
+                            height: "180px",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "100%",
+                            height: "180px",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            background: "#E8F5E9",
+                            color: "#2E7D32",
+                            fontSize: "48px",
+                          }}
+                        >
+                          🌾
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          padding: "18px",
+                        }}
+                      >
+                        <h3
+                          style={{
+                            marginTop: 0,
+                            marginBottom: "10px",
+                            color: "#2E7D32",
+                            fontSize: "20px",
+                          }}
+                        >
+                          {similarLand.title}
+                        </h3>
+
+                        <div
+                          style={{
+                            color: "#333",
+                            lineHeight: "26px",
+                            fontSize: "14px",
+                          }}
+                        >
+                          <div>
+                            <strong>💰 Price:</strong>{" "}
+                            ₹
+                            {Number(
+                              similarLand.price
+                            ).toLocaleString("en-IN")}
+                          </div>
+
+                          <div>
+                            <strong>📏 Area:</strong>{" "}
+                            {similarLand.area} Acres
+                          </div>
+
+                          <div>
+                            <strong>🌱 Crop:</strong>{" "}
+                            {similarLand.crop_type}
+                          </div>
+
+                          <div>
+                            <strong>🌍 Soil:</strong>{" "}
+                            {similarLand.soil_type}
+                          </div>
+
+                          <div>
+                            <strong>📍 Location:</strong>{" "}
+                            {similarLand.village},{" "}
+                            {similarLand.district}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              `/land/${similarLand.id}`
+                            )
+                          }
+                          style={{
+                            width: "100%",
+                            marginTop: "15px",
+                            background: "#2E7D32",
+                            color: "#fff",
+                            padding: "11px 18px",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
