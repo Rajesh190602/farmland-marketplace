@@ -61,7 +61,7 @@ export default function ChatPage() {
     }
 
     try {
-      const response = await api.get("/marketplace/users/blocked");
+      const response = await api.get("/users/blocked");
       const blockedUsers = response.data || [];
 
       const blocked = Array.isArray(blockedUsers)
