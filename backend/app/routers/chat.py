@@ -28,7 +28,8 @@ from app.models import (
     ActivityLog,
     UserBlock,
     ConversationMute,
-    ConversationArchive
+    ConversationArchive,
+    ConversationDeletion
 )
 
 from app.schemas import (
@@ -261,6 +262,25 @@ def start_chat(
     )
 
     if conversation:
+        existing_deletion = db.query(ConversationDeletion).filter(
+            ConversationDeletion.conversation_id == conversation.id,
+            ConversationDeletion.user_id == current_user
+        ).first()
+
+        if existing_deletion:
+            db.delete(existing_deletion)
+            existing_archive = db.query(ConversationArchive).filter(
+                ConversationArchive.conversation_id == conversation.id,
+                ConversationArchive.user_id == current_user
+            ).first()
+            if existing_archive:
+                db.delete(existing_archive)
+            db.commit()
+            return {
+                "conversation_id": conversation.id,
+                "message": "Conversation restored because you started chatting again"
+            }
+
         return {
             "conversation_id": conversation.id,
             "message": "Conversation already exists"
@@ -491,6 +511,12 @@ def send_message(
             status_code=403,
             detail="You are not part of this conversation"
         )
+
+    verify_conversation_not_deleted(
+        db,
+        data.conversation_id,
+        current_user
+    )
 
     # ----------------------------------
     # Prevent empty messages
@@ -1078,6 +1104,12 @@ def get_messages(
             detail="Access denied"
         )
 
+    verify_conversation_not_deleted(
+        db,
+        conversation_id,
+        current_user
+    )
+
     # ----------------------------------
     # Mark messages from OTHER USER
     # as READ
@@ -1316,6 +1348,13 @@ def my_archived_conversations(
         if not conversation:
             continue
 
+        deleted_for_user = db.query(ConversationDeletion).filter(
+            ConversationDeletion.conversation_id == conversation.id,
+            ConversationDeletion.user_id == current_user
+        ).first()
+        if deleted_for_user:
+            continue
+
         if conversation.buyer_id == current_user:
             other_user = (
                 db.query(User)
@@ -1375,6 +1414,63 @@ def my_archived_conversations(
 
 
 # =========================================================
+# DELETE CONVERSATION FOR ME
+# The shared conversation and messages remain for the other participant.
+# =========================================================
+
+def verify_conversation_participant(conversation, current_user):
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if current_user not in [conversation.buyer_id, conversation.farmer_id]:
+        raise HTTPException(status_code=403, detail="You are not part of this conversation")
+
+
+def verify_conversation_not_deleted(db, conversation_id, current_user):
+    deletion = db.query(ConversationDeletion).filter(
+        ConversationDeletion.conversation_id == conversation_id,
+        ConversationDeletion.user_id == current_user
+    ).first()
+    if deletion:
+        raise HTTPException(status_code=404, detail="This conversation has been deleted for you")
+
+
+@router.delete("/delete/{conversation_id}")
+def delete_conversation_for_me(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    verify_conversation_participant(conversation, current_user)
+
+    existing_deletion = db.query(ConversationDeletion).filter(
+        ConversationDeletion.conversation_id == conversation_id,
+        ConversationDeletion.user_id == current_user
+    ).first()
+    if existing_deletion:
+        return {"message": "Conversation is already deleted for you.", "conversation_id": conversation_id, "deleted": True}
+
+    db.add(ConversationDeletion(conversation_id=conversation_id, user_id=current_user))
+
+    existing_archive = db.query(ConversationArchive).filter(
+        ConversationArchive.conversation_id == conversation_id,
+        ConversationArchive.user_id == current_user
+    ).first()
+    if existing_archive:
+        db.delete(existing_archive)
+
+    db.add(ActivityLog(
+        user_id=current_user,
+        action="CHAT_CONVERSATION_DELETED_FOR_ME",
+        description=f"Deleted conversation {conversation_id} for self.",
+        target_type="conversation",
+        target_id=conversation_id
+    ))
+    db.commit()
+    return {"message": "Conversation deleted for you successfully.", "conversation_id": conversation_id, "deleted": True}
+
+
+# =========================================================
 # MY CONVERSATIONS
 # =========================================================
 
@@ -1397,6 +1493,18 @@ def my_conversations(
                 current_user
             )
         )
+        .outerjoin(
+            ConversationDeletion,
+            (
+                ConversationDeletion.conversation_id ==
+                Conversation.id
+            )
+            &
+            (
+                ConversationDeletion.user_id ==
+                current_user
+            )
+        )
         .filter(
             or_(
                 Conversation.buyer_id ==
@@ -1408,6 +1516,9 @@ def my_conversations(
         )
         .filter(
             ConversationArchive.id.is_(None)
+        )
+        .filter(
+            ConversationDeletion.id.is_(None)
         )
         .order_by(
             desc(Conversation.id)

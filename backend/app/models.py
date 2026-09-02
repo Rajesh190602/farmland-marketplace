@@ -591,6 +591,29 @@ class ConversationArchive(Base):
 
 
 # =========================================================
+# PHASE 4
+# CONVERSATION DELETE FOR ME
+# Each participant can delete their own copy independently.
+# Deleting does NOT delete the shared conversation or messages.
+# =========================================================
+
+class ConversationDeletion(Base):
+    __tablename__ = "conversation_deletions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    deleted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    conversation = relationship("Conversation")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "user_id", name="uq_conversation_deletion"),
+    )
+
+
+# =========================================================
 # CHAT - MESSAGE
 # =========================================================
 

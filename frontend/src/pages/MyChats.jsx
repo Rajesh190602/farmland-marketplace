@@ -11,6 +11,7 @@ function MyChats() {
     useState([]);
   const [showArchived, setShowArchived] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(null);
 
   const navigate = useNavigate();
 
@@ -127,6 +128,39 @@ function MyChats() {
       );
     } finally {
       setArchiveLoading(null);
+    }
+  };
+
+  // =====================================================
+  // DELETE CONVERSATION FOR ME
+  // =====================================================
+
+  const deleteConversation = async (conversationId) => {
+    if (!conversationId || deleteLoading === conversationId) return;
+
+    const confirmed = window.confirm(
+      "Delete this conversation for you?\n\n" +
+        "It will be permanently removed from your chats. " +
+        "The other participant will still have their copy and messages.\n\n" +
+        "This action cannot be undone from your account."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeleteLoading(conversationId);
+      await api.delete(`/chat/delete/${conversationId}`);
+      setConversations((previous) =>
+        previous.filter((conversation) => conversation.conversation_id !== conversationId)
+      );
+      setArchivedConversations((previous) =>
+        previous.filter((conversation) => conversation.conversation_id !== conversationId)
+      );
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+      alert(error.response?.data?.detail || "Failed to delete conversation.");
+    } finally {
+      setDeleteLoading(null);
     }
   };
 
@@ -468,6 +502,26 @@ function MyChats() {
                     : "Archive Conversation"}
                 </button>
               )}
+
+              {/* Delete for me */}
+              <button
+                onClick={() => deleteConversation(chat.conversation_id)}
+                disabled={deleteLoading === chat.conversation_id}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginTop: "10px",
+                  background: "#FFEBEE",
+                  color: "#C62828",
+                  border: "none",
+                  borderRadius: "7px",
+                  cursor: deleteLoading === chat.conversation_id ? "not-allowed" : "pointer",
+                  fontSize: "15px",
+                  fontWeight: "bold",
+                }}
+              >
+                🗑️ {deleteLoading === chat.conversation_id ? "Deleting..." : "Delete for Me"}
+              </button>
             </div>
           ))
         )}
