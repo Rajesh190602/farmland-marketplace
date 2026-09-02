@@ -1,12 +1,14 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { FaBars, FaTimes } from "react-icons/fa";
+import api from "../services/api";
 
 function Navbar() {
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isMobile, setIsMobile] = useState(
     window.innerWidth <= 1200
   );
@@ -35,6 +37,47 @@ function Navbar() {
   )
     .trim()
     .toLowerCase();
+
+  // =====================================================
+  // NOTIFICATION UNREAD COUNT
+  // =====================================================
+
+  const loadUnreadNotificationCount = async () => {
+    try {
+      const response = await api.get("/notifications/unread-count");
+      setUnreadNotificationCount(
+        Number(response.data?.unread_count || 0)
+      );
+    } catch (error) {
+      console.error("Failed to load notification count:", error);
+    }
+  };
+
+  useEffect(() => {
+    loadUnreadNotificationCount();
+
+    const handleNotificationsUpdated = () => {
+      loadUnreadNotificationCount();
+    };
+
+    window.addEventListener(
+      "notificationsUpdated",
+      handleNotificationsUpdated
+    );
+
+    const interval = window.setInterval(
+      loadUnreadNotificationCount,
+      30000
+    );
+
+    return () => {
+      window.removeEventListener(
+        "notificationsUpdated",
+        handleNotificationsUpdated
+      );
+      window.clearInterval(interval);
+    };
+  }, []);
 
   // =====================================================
   // RESPONSIVE NAVBAR
@@ -339,9 +382,46 @@ function Navbar() {
 
               <NavLink
                 to="/notifications"
-                style={desktopLinkStyle}
+                style={({ isActive }) => ({
+                  ...linkStyle,
+                  position: "relative",
+                  color: isActive ? "#FFD54F" : "#fff",
+                })}
               >
-                🔔 Notifications
+                <span
+                  style={{
+                    position: "relative",
+                    display: "inline-flex",
+                    alignItems: "center",
+                  }}
+                >
+                  🔔 Notifications
+                  {unreadNotificationCount > 0 && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: "-11px",
+                        right: "-14px",
+                        minWidth: "20px",
+                        height: "20px",
+                        padding: "0 5px",
+                        borderRadius: "20px",
+                        background: "#D32F2F",
+                        color: "#fff",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {unreadNotificationCount > 99
+                        ? "99+"
+                        : unreadNotificationCount}
+                    </span>
+                  )}
+                </span>
               </NavLink>
 
               {/* PROFILE */}
@@ -623,7 +703,37 @@ function Navbar() {
                 setMenuOpen(false)
               }
             >
-              🔔 Notifications
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                🔔 Notifications
+                {unreadNotificationCount > 0 && (
+                  <span
+                    style={{
+                      marginLeft: "8px",
+                      minWidth: "22px",
+                      height: "22px",
+                      padding: "0 6px",
+                      borderRadius: "20px",
+                      background: "#D32F2F",
+                      color: "#fff",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {unreadNotificationCount > 99
+                      ? "99+"
+                      : unreadNotificationCount}
+                  </span>
+                )}
+              </span>
             </NavLink>
 
             {/* PROFILE */}
