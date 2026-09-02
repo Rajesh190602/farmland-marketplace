@@ -1510,9 +1510,9 @@ def delete_conversation_for_me(
     db.commit()
     return {"message": "Conversation deleted for you successfully.", "conversation_id": conversation_id, "deleted": True}
 
-
 # =========================================================
 # MY CONVERSATIONS
+# ONE CHAT PER BUYER / FARMER
 # =========================================================
 
 @router.get("/my-conversations")
@@ -1520,19 +1520,16 @@ def my_conversations(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    # Load all conversations first so the newest conversation
-    # becomes the single logical chat for each buyer/farmer pair.
-    # This also prevents an older duplicate from reappearing when
-    # the newest conversation is archived or deleted for the user.
+    # -----------------------------------------------------
+    # Get all conversations involving the current user.
+    # Newest conversations come first.
+    # -----------------------------------------------------
     conversations = (
         db.query(Conversation)
         .filter(
             or_(
-                Conversation.buyer_id ==
-                current_user,
-
-                Conversation.farmer_id ==
-                current_user
+                Conversation.buyer_id == current_user,
+                Conversation.farmer_id == current_user
             )
         )
         .order_by(
@@ -1542,58 +1539,111 @@ def my_conversations(
     )
 
     result = []
+
+    # -----------------------------------------------------
+    # Keep track of people already shown.
+    #
+    # This makes:
+    #
+    # Buyer + Farmer A = ONE chat
+    #
+    # even if they have conversations about multiple lands.
+    # -----------------------------------------------------
     seen_other_users = set()
 
     for conversation in conversations:
 
         # -------------------------------------------------
-        # ONE CHAT PER PERSON
+        # Find the other participant
         # -------------------------------------------------
-        # Older data may already contain multiple conversations
-        # for the same buyer/farmer pair (for different lands).
-        # Show only the newest conversation for that person.
         if conversation.buyer_id == current_user:
             other_user_id = conversation.farmer_id
         else:
             other_user_id = conversation.buyer_id
 
+        # -------------------------------------------------
+        # If this farmer/buyer was already displayed,
+        # skip older duplicate conversations.
+        # -------------------------------------------------
         if other_user_id in seen_other_users:
             continue
 
-        # The newest conversation represents this person.
-        # If it is archived/deleted for the current user, do not
-        # fall back to an older conversation for the same person.
-        archived_for_user = db.query(ConversationArchive).filter(
-            ConversationArchive.conversation_id == conversation.id,
-            ConversationArchive.user_id == current_user
-        ).first()
-        deleted_for_user = db.query(ConversationDeletion).filter(
-            ConversationDeletion.conversation_id == conversation.id,
-            ConversationDeletion.user_id == current_user
-        ).first()
+        # -------------------------------------------------
+        # Get the other user's details
+        # -------------------------------------------------
+        other_user = (
+            db.query(User)
+            .filter(
+                User.id == other_user_id
+            )
+            .first()
+        )
 
+        if not other_user:
+            # Do not allow one bad conversation record
+            # to break the entire My Chats page.
+            seen_other_users.add(other_user_id)
+            continue
+
+        # -------------------------------------------------
+        # Check whether this conversation is archived
+        # for the current user.
+        # -------------------------------------------------
+        archived_for_user = (
+            db.query(ConversationArchive)
+            .filter(
+                ConversationArchive.conversation_id ==
+                conversation.id,
+                ConversationArchive.user_id ==
+                current_user
+            )
+            .first()
+        )
+
+        # -------------------------------------------------
+        # Check whether this conversation is deleted
+        # for the current user.
+        # -------------------------------------------------
+        deleted_for_user = (
+            db.query(ConversationDeletion)
+            .filter(
+                ConversationDeletion.conversation_id ==
+                conversation.id,
+                ConversationDeletion.user_id ==
+                current_user
+            )
+            .first()
+        )
+
+        # -------------------------------------------------
+        # IMPORTANT:
+        #
+        # Mark this person as already processed BEFORE
+        # checking archive/delete.
+        #
+        # Therefore an older duplicate conversation will
+        # never appear if the newest one is archived or
+        # deleted.
+        # -------------------------------------------------
         seen_other_users.add(other_user_id)
 
         if archived_for_user or deleted_for_user:
             continue
 
-        # ----------------------------------
-        # Find land
-        # ----------------------------------
-
+        # -------------------------------------------------
+        # Find land connected to this conversation
+        # -------------------------------------------------
         land = (
             db.query(Land)
             .filter(
-                Land.id ==
-                conversation.land_id
+                Land.id == conversation.land_id
             )
             .first()
         )
 
-        # ----------------------------------
-        # Find last message
-        # ----------------------------------
-
+        # -------------------------------------------------
+        # Find latest message
+        # -------------------------------------------------
         last_message = (
             db.query(Message)
             .filter(
@@ -1606,28 +1656,11 @@ def my_conversations(
             .first()
         )
 
-        # ----------------------------------
+        # -------------------------------------------------
         # Count unread messages
-        # ----------------------------------
         #
-        # Only messages sent by the OTHER participant
-        # are unread for the current user.
-        #
-        # This is intentionally a conversation-level
-        # count for the Home dashboard:
-        #
-        #   0 unread messages -> conversation is not new
-        #   1+ unread messages -> conversation is new
-        #
-        # Therefore, if one conversation has 5 unread
-        # messages, Home Chats counts it as 1 unread chat,
-        # not 5.
-        #
-        # The existing /messages/{conversation_id}
-        # endpoint continues to mark incoming messages
-        # as read when the conversation is opened.
-        # ----------------------------------
-
+        # Only messages from the other participant count.
+        # -------------------------------------------------
         unread_count = (
             db.query(Message)
             .filter(
@@ -1640,6 +1673,9 @@ def my_conversations(
             .count()
         )
 
+        # -------------------------------------------------
+        # Add conversation to response
+        # -------------------------------------------------
         result.append(
             {
                 "conversation_id":
@@ -1671,8 +1707,6 @@ def my_conversations(
                     if last_message
                     else None,
 
-                # Number of unread incoming messages
-                # in this conversation.
                 "unread_count":
                     unread_count
             }
