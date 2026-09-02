@@ -23,7 +23,8 @@ from app.models import (
     User,
     Notification,
     ActivityLog,
-    UserBlock
+    UserBlock,
+    ConversationMute
 )
 
 from app.schemas import (
@@ -37,6 +38,141 @@ router = APIRouter(
     prefix="/chat",
     tags=["Chat"]
 )
+
+
+# =========================================================
+# PHASE 4 - CONVERSATION MUTE
+# =========================================================
+
+def is_conversation_muted(
+    db: Session,
+    conversation_id: int,
+    user_id: int
+):
+    return (
+        db.query(ConversationMute)
+        .filter(
+            ConversationMute.conversation_id == conversation_id,
+            ConversationMute.user_id == user_id
+        )
+        .first()
+        is not None
+    )
+
+
+@router.get("/mute/{conversation_id}")
+def get_mute_status(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id)
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+
+    if current_user not in [conversation.buyer_id, conversation.farmer_id]:
+        raise HTTPException(403, "You are not part of this conversation")
+
+    return {
+        "conversation_id": conversation_id,
+        "muted": is_conversation_muted(db, conversation_id, current_user)
+    }
+
+
+@router.post("/mute/{conversation_id}")
+def mute_conversation(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id)
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+
+    if current_user not in [conversation.buyer_id, conversation.farmer_id]:
+        raise HTTPException(403, "You are not part of this conversation")
+
+    existing_mute = (
+        db.query(ConversationMute)
+        .filter(
+            ConversationMute.conversation_id == conversation_id,
+            ConversationMute.user_id == current_user
+        )
+        .first()
+    )
+
+    if existing_mute:
+        return {
+            "message": "Conversation is already muted.",
+            "conversation_id": conversation_id,
+            "muted": True
+        }
+
+    db.add(ConversationMute(
+        conversation_id=conversation_id,
+        user_id=current_user
+    ))
+    db.commit()
+
+    return {
+        "message": "Conversation muted successfully.",
+        "conversation_id": conversation_id,
+        "muted": True
+    }
+
+
+@router.delete("/mute/{conversation_id}")
+def unmute_conversation(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id)
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+
+    if current_user not in [conversation.buyer_id, conversation.farmer_id]:
+        raise HTTPException(403, "You are not part of this conversation")
+
+    existing_mute = (
+        db.query(ConversationMute)
+        .filter(
+            ConversationMute.conversation_id == conversation_id,
+            ConversationMute.user_id == current_user
+        )
+        .first()
+    )
+
+    if not existing_mute:
+        return {
+            "message": "Conversation is already unmuted.",
+            "conversation_id": conversation_id,
+            "muted": False
+        }
+
+    db.delete(existing_mute)
+    db.commit()
+
+    return {
+        "message": "Conversation unmuted successfully.",
+        "conversation_id": conversation_id,
+        "muted": False
+    }
 
 
 # =========================================================
@@ -104,33 +240,6 @@ def start_chat(
         raise HTTPException(
             status_code=400,
             detail="You cannot chat with yourself."
-        )
-        # ----------------------------------
-    # BLOCK CHECK
-    # ----------------------------------
-
-    existing_block = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == land.owner_id,
-            UserBlock.blocked_id == current_user
-        )
-        .first()
-    )
-
-    current_user_block = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == current_user,
-            UserBlock.blocked_id == land.owner_id
-        )
-        .first()
-    )
-
-    if existing_block or current_user_block:
-        raise HTTPException(
-            status_code=403,
-            detail="You cannot start a chat because one of you has blocked the other."
         )
 
     # ----------------------------------
@@ -303,33 +412,6 @@ def reply_to_buyer(
             status_code=404,
             detail="Buyer not found"
         )
-        # ----------------------------------
-    # BLOCK CHECK
-    # ----------------------------------
-
-    existing_block = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == current_user,
-            UserBlock.blocked_id == buyer.id
-        )
-        .first()
-    )
-
-    buyer_blocked_farmer = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == buyer.id,
-            UserBlock.blocked_id == current_user
-        )
-        .first()
-    )
-
-    if existing_block or buyer_blocked_farmer:
-        raise HTTPException(
-            status_code=403,
-            detail="You cannot start a conversation because one of you has blocked the other."
-        )
 
     # ----------------------------------
     # Create conversation
@@ -405,38 +487,6 @@ def send_message(
             status_code=403,
             detail="You are not part of this conversation"
         )
-        # ----------------------------------
-    # BLOCK CHECK
-    # ----------------------------------
-
-    if current_user == conversation.buyer_id:
-        receiver_id = conversation.farmer_id
-    else:
-        receiver_id = conversation.buyer_id
-
-    blocked_by_receiver = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == receiver_id,
-            UserBlock.blocked_id == current_user
-        )
-        .first()
-    )
-
-    blocked_by_current_user = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == current_user,
-            UserBlock.blocked_id == receiver_id
-        )
-        .first()
-    )
-
-    if blocked_by_receiver or blocked_by_current_user:
-        raise HTTPException(
-            status_code=403,
-            detail="You cannot send messages because one of you has blocked the other."
-        )
 
     # ----------------------------------
     # Prevent empty messages
@@ -503,21 +553,24 @@ def send_message(
 
     # ----------------------------------
     # Notification
+    # Respect the receiver's mute setting.
+    # Muting suppresses notifications only; messages still work.
     # ----------------------------------
 
-    notification = Notification(
-    user_id=receiver_id,
-    title="💬 New Message",
-    message=(
-        f"{sender.full_name if sender else 'User'} "
-        "sent you a new message."
-    ),
-    target_type="conversation",
-    target_id=conversation.id
-)
+    if not is_conversation_muted(db, conversation.id, receiver_id):
+        notification = Notification(
+            user_id=receiver_id,
+            title="💬 New Message",
+            message=(
+                f"{sender.full_name if sender else 'User'} "
+                "sent you a new message."
+            ),
+            target_type="conversation",
+            target_id=conversation.id
+        )
 
-    db.add(notification)
-    db.commit()
+        db.add(notification)
+        db.commit()
 
     return {
         "message": "Message sent successfully",
@@ -565,38 +618,6 @@ async def send_chat_file(
         raise HTTPException(
             status_code=403,
             detail="You are not part of this conversation"
-        )
-        # ----------------------------------
-    # BLOCK CHECK
-    # ----------------------------------
-
-    if current_user == conversation.buyer_id:
-        receiver_id = conversation.farmer_id
-    else:
-        receiver_id = conversation.buyer_id
-
-    blocked_by_receiver = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == receiver_id,
-            UserBlock.blocked_id == current_user
-        )
-        .first()
-    )
-
-    blocked_by_current_user = (
-        db.query(UserBlock)
-        .filter(
-            UserBlock.blocker_id == current_user,
-            UserBlock.blocked_id == receiver_id
-        )
-        .first()
-    )
-
-    if blocked_by_receiver or blocked_by_current_user:
-        raise HTTPException(
-            status_code=403,
-            detail="You cannot send files because one of you has blocked the other."
         )
 
     # ----------------------------------
@@ -792,21 +813,23 @@ async def send_chat_file(
 
     # ----------------------------------
     # Notification
+    # Respect the receiver's mute setting.
     # ----------------------------------
 
-    notification = Notification(
-    user_id=receiver_id,
-    title="📎 New File",
-    message=(
-        f"{sender.full_name if sender else 'User'} "
-        f"sent you a file: {file.filename}"
-    ),
-    target_type="conversation",
-    target_id=conversation.id
-)
+    if not is_conversation_muted(db, conversation.id, receiver_id):
+        notification = Notification(
+            user_id=receiver_id,
+            title="📎 New File",
+            message=(
+                f"{sender.full_name if sender else 'User'} "
+                f"sent you a file: {file.filename}"
+            ),
+            target_type="conversation",
+            target_id=conversation.id
+        )
 
-    db.add(notification)
-    db.commit()
+        db.add(notification)
+        db.commit()
 
     return {
         "message": "File sent successfully",

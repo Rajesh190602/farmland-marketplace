@@ -480,6 +480,68 @@ class Conversation(Base):
     )
 
 
+    # -----------------------------------------------------
+    # Phase 4 - Conversation Mutes
+    # Each participant can mute the same conversation independently.
+    # -----------------------------------------------------
+
+    mutes = relationship(
+        "ConversationMute",
+        back_populates="conversation",
+        cascade="all, delete-orphan"
+    )
+
+
+# =========================================================
+# PHASE 4
+# CONVERSATION MUTE
+# =========================================================
+
+class ConversationMute(Base):
+    __tablename__ = "conversation_mutes"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    conversation_id = Column(
+        Integer,
+        ForeignKey("conversations.id"),
+        nullable=False,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    conversation = relationship(
+        "Conversation",
+        back_populates="mutes"
+    )
+
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "user_id",
+            name="uq_conversation_mute"
+        ),
+    )
+
+
 # =========================================================
 # CHAT - MESSAGE
 # =========================================================

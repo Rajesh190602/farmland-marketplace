@@ -42,40 +42,43 @@ export default function ChatPage() {
 // =====================================================
 
   const [isBlocked, setIsBlocked] = useState(false);
-  const [blockedByOther, setBlockedByOther] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+
+  // =====================================================
+  // PHASE 4 - MUTE CONVERSATION
+  // =====================================================
+
+  const [isMuted, setIsMuted] = useState(false);
+  const [muteLoading, setMuteLoading] = useState(false);
 
   // =====================================================
   // PHASE 2 - BLOCK USER
   // =====================================================
 
   const loadBlockStatus = async (userId) => {
-    if (!userId) return;
+    if (!userId) {
+      return;
+    }
 
     try {
-      const response = await api.get(
-        `/users/${userId}/block-status`
-      );
+      const response = await api.get("/marketplace/users/blocked");
+      const blockedUsers = response.data || [];
 
-      const data = response.data || {};
+      const blocked = Array.isArray(blockedUsers)
+        ? blockedUsers.some((user) => {
+            const blockedId =
+              user.blocked_user_id ??
+              user.user_id ??
+              user.id ??
+              user.blockedUserId;
 
-      setIsBlocked(data.blocked_by_me === true);
-      setBlockedByOther(data.blocked_by_other === true);
+            return Number(blockedId) === Number(userId);
+          })
+        : false;
 
-      if (
-        data.blocked_by_me === true ||
-        data.blocked_by_other === true
-      ) {
-        setIsOnline(false);
-        setLastSeen(null);
-      }
+      setIsBlocked(blocked);
     } catch (error) {
-      console.error(
-        "Failed to load block status:",
-        error
-      );
-      setIsBlocked(false);
-      setBlockedByOther(false);
+      console.error("Failed to load block status:", error);
     }
   };
 
@@ -96,13 +99,10 @@ export default function ChatPage() {
       setBlockLoading(true);
 
       await api.post(
-        `/users/${otherUserId}/block`
+        `/marketplace/users/${otherUserId}/block`
       );
 
       setIsBlocked(true);
-      setBlockedByOther(false);
-      setIsOnline(false);
-      setLastSeen(null);
       setText("");
       setShowEmoji(false);
       setShowAttachMenu(false);
@@ -138,13 +138,10 @@ export default function ChatPage() {
       setBlockLoading(true);
 
       await api.delete(
-        `/users/${otherUserId}/block`
+        `/marketplace/users/${otherUserId}/block`
       );
 
       setIsBlocked(false);
-      setBlockedByOther(false);
-
-      checkOtherUserPresence();
 
       alert(`${otherUserName || "User"} has been unblocked.`);
     } catch (error) {
@@ -156,6 +153,45 @@ export default function ChatPage() {
       );
     } finally {
       setBlockLoading(false);
+    }
+  };
+
+  // =====================================================
+  // PHASE 4 - MUTE CONVERSATION
+  // =====================================================
+
+  const loadMuteStatus = async () => {
+    if (!conversationId) return;
+
+    try {
+      const response = await api.get(
+        `/chat/mute/${conversationId}`
+      );
+      setIsMuted(response.data?.muted === true);
+    } catch (error) {
+      console.error("Failed to load mute status:", error);
+    }
+  };
+
+  const toggleMuteConversation = async () => {
+    if (!conversationId || muteLoading) return;
+
+    try {
+      setMuteLoading(true);
+
+      const response = isMuted
+        ? await api.delete(`/chat/mute/${conversationId}`)
+        : await api.post(`/chat/mute/${conversationId}`);
+
+      setIsMuted(response.data?.muted === true);
+    } catch (error) {
+      console.error("Failed to update mute status:", error);
+      alert(
+        error.response?.data?.detail ||
+          "Unable to update conversation mute status."
+      );
+    } finally {
+      setMuteLoading(false);
     }
   };
 
@@ -302,13 +338,7 @@ export default function ChatPage() {
   // =====================================================
 
   const checkOtherUserPresence = async () => {
-    if (
-      !otherUserId ||
-      isBlocked ||
-      blockedByOther
-    ) {
-      setIsOnline(false);
-      setLastSeen(null);
+    if (!otherUserId) {
       return;
     }
 
@@ -401,7 +431,7 @@ export default function ChatPage() {
     return () => {
       clearInterval(statusInterval);
     };
-  }, [otherUserId, isBlocked, blockedByOther]);
+  }, [otherUserId]);
 
   // =====================================================
   // BLOCK STATUS CHECK
@@ -413,15 +443,15 @@ export default function ChatPage() {
     }
 
     loadBlockStatus(otherUserId);
-
-    const blockStatusInterval = setInterval(() => {
-      loadBlockStatus(otherUserId);
-    }, 5000);
-
-    return () => {
-      clearInterval(blockStatusInterval);
-    };
   }, [otherUserId]);
+
+  // =====================================================
+  // MUTE STATUS CHECK
+  // =====================================================
+
+  useEffect(() => {
+    loadMuteStatus();
+  }, [conversationId]);
 
   // =====================================================
   // SCROLL TO BOTTOM
@@ -446,7 +476,8 @@ export default function ChatPage() {
   // =====================================================
 
   const sendMessage = async () => {
-    if (isBlocked || blockedByOther) {
+    if (isBlocked) {
+      alert("You have blocked this user. Unblock the user to send messages.");
       return;
     }
 
@@ -547,7 +578,8 @@ export default function ChatPage() {
   // =====================================================
 
   const uploadFile = async (event) => {
-    if (isBlocked || blockedByOther) {
+    if (isBlocked) {
+      alert("You have blocked this user. Unblock the user to send messages or files.");
       event.target.value = "";
       return;
     }
@@ -783,7 +815,7 @@ export default function ChatPage() {
       setReportLoading(true);
 
       await api.post(
-        `/users/${otherUserId}/report`,
+        `/marketplace/users/${otherUserId}/report`,
         {
           reported_user_id: Number(otherUserId),
           reason,
@@ -1388,28 +1420,25 @@ export default function ChatPage() {
                 {otherUserName}
               </div>
 
-              {!isBlocked && !blockedByOther && (
-                <div
-                  style={{
-                    fontSize: "12px",
-                    marginTop: "2px",
-                    color: isOnline
-                      ? "#B9FBC0"
-                      : "#D7E8E5",
-                  }}
-                >
-                  {isOnline
-                    ? "● online"
-                    : getLastSeenText()}
-                </div>
-              )}
+              <div
+                style={{
+                  fontSize: "12px",
+                  marginTop: "2px",
+                  color: isOnline
+                    ? "#B9FBC0"
+                    : "#D7E8E5",
+                }}
+              >
+                {isOnline
+                  ? "● online"
+                  : getLastSeenText()}
+              </div>
             </div>
 
             {/* =====================================================
                 PHASE 2 - BLOCK / UNBLOCK USER
             ===================================================== */}
 
-            {!blockedByOther && (
             <button
               type="button"
               onClick={isBlocked ? unblockUser : blockUser}
@@ -1438,7 +1467,31 @@ export default function ChatPage() {
                   : "🚫"}
             </button>
 
-            )}
+            {/* =====================================================
+                PHASE 4 - MUTE / UNMUTE CONVERSATION
+            ===================================================== */}
+
+            <button
+              type="button"
+              onClick={toggleMuteConversation}
+              disabled={!conversationId || muteLoading}
+              title={
+                isMuted
+                  ? "Unmute Conversation"
+                  : "Mute Conversation"
+              }
+              style={{
+                border: "none",
+                background: "transparent",
+                color: isMuted ? "#B9FBC0" : "#fff",
+                fontSize: "20px",
+                opacity: conversationId && !muteLoading ? 0.95 : 0.5,
+                cursor: conversationId && !muteLoading ? "pointer" : "not-allowed",
+                padding: "5px 8px",
+              }}
+            >
+              {muteLoading ? "..." : isMuted ? "🔔" : "🔇"}
+            </button>
 
             <button
               type="button"
@@ -1649,7 +1702,7 @@ export default function ChatPage() {
                 fontSize: "13px",
               }}
             >
-              🚫 You blocked {otherUserName || "this user"}. Messaging and file sharing are disabled.
+              🚫 You have blocked {otherUserName || "this user"}. You cannot send messages or files.
               <button
                 type="button"
                 onClick={unblockUser}
@@ -1669,19 +1722,22 @@ export default function ChatPage() {
             </div>
           )}
 
-          {blockedByOther && (
+          {/* =====================================================
+              PHASE 4 - MUTED CONVERSATION NOTICE
+          ===================================================== */}
+
+          {isMuted && !isBlocked && (
             <div
               style={{
-                background: "#FCE4EC",
-                borderBottom: "1px solid #F8BBD0",
-                padding: "11px 15px",
+                background: "#F3F4F6",
+                borderBottom: "1px solid #D1D5DB",
+                padding: "8px 15px",
                 textAlign: "center",
-                color: "#880E4F",
+                color: "#555",
                 fontSize: "13px",
-                fontWeight: "600",
               }}
             >
-              🚫 {otherUserName || "This user"} has blocked you. You cannot send messages or files in this conversation.
+              🔇 This conversation is muted. You can still send and receive messages.
             </div>
           )}
 
@@ -1894,7 +1950,7 @@ export default function ChatPage() {
 
             <button
               type="button"
-              disabled={isBlocked || blockedByOther}
+              disabled={isBlocked}
               onClick={() => {
                 setShowEmoji(
                   !showEmoji
@@ -1912,13 +1968,7 @@ export default function ChatPage() {
                   "pointer",
                 padding: "5px",
               }}
-              title={
-                isBlocked
-                  ? "Unblock user to use chat"
-                  : blockedByOther
-                    ? "You have been blocked"
-                    : "Emoji"
-              }
+              title={isBlocked ? "Unblock user to use chat" : "Emoji"}
             >
               😊
             </button>
@@ -1927,7 +1977,7 @@ export default function ChatPage() {
 
             <button
               type="button"
-              disabled={isBlocked || blockedByOther}
+              disabled={isBlocked}
               onClick={() => {
                 setShowAttachMenu(
                   !showAttachMenu
@@ -1945,13 +1995,7 @@ export default function ChatPage() {
                 transform:
                   "rotate(-35deg)",
               }}
-              title={
-                isBlocked
-                  ? "Unblock user to attach files"
-                  : blockedByOther
-                    ? "You have been blocked"
-                    : "Attach"
-              }
+              title={isBlocked ? "Unblock user to attach files" : "Attach"}
             >
               📎
             </button>
@@ -1965,7 +2009,7 @@ export default function ChatPage() {
               onChange={
                 uploadFile
               }
-              disabled={isBlocked || blockedByOther}
+              disabled={isBlocked}
               style={{
                 display: "none",
               }}
@@ -1976,19 +2020,13 @@ export default function ChatPage() {
             <input
               type="text"
               placeholder={
-                isBlocked
-                  ? "You blocked this user"
-                  : blockedByOther
-                    ? "You have been blocked"
-                    : uploading
-                      ? "Uploading..."
-                      : "Type a message"
+                uploading
+                  ? "Uploading..."
+                  : "Type a message"
               }
               value={text}
               disabled={
-                uploading ||
-                isBlocked ||
-                blockedByOther
+                uploading
               }
               onChange={(e) =>
                 setText(
@@ -2030,7 +2068,6 @@ export default function ChatPage() {
                 sending ||
                 uploading ||
                 isBlocked ||
-                blockedByOther ||
                 !text.trim()
               }
               style={{
@@ -2043,7 +2080,6 @@ export default function ChatPage() {
                   sending ||
                   uploading ||
                   isBlocked ||
-                  blockedByOther ||
                   !text.trim()
                     ? "#A5D6A7"
                     : "#075E54",
@@ -2052,7 +2088,6 @@ export default function ChatPage() {
                   sending ||
                   uploading ||
                   isBlocked ||
-                  blockedByOther ||
                   !text.trim()
                     ? "not-allowed"
                     : "pointer",
