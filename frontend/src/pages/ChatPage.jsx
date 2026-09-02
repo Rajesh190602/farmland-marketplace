@@ -933,11 +933,49 @@ export default function ChatPage() {
   };
 
   // =====================================================
+  // SERVER DATE/TIME FORMAT
+  // =====================================================
+  // The backend stores chat timestamps with datetime.utcnow(),
+  // which produces a timezone-naive UTC timestamp. JavaScript
+  // otherwise interprets a timezone-naive ISO timestamp as local
+  // time, causing chat times to appear several hours behind.
+  // Treat timezone-naive server timestamps as UTC, then let the
+  // browser convert them to the user's local timezone (IST in India).
+
+  const parseServerDate = (dateValue) => {
+    if (!dateValue) {
+      return null;
+    }
+
+    if (dateValue instanceof Date) {
+      return dateValue;
+    }
+
+    const value = String(dateValue).trim();
+
+    if (!value) {
+      return null;
+    }
+
+    // Already timezone-aware (Z or +/-HH:mm/HHMM).
+    if (/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) {
+      return new Date(value);
+    }
+
+    // Backend chat timestamps are UTC when no timezone is included.
+    return new Date(`${value}Z`);
+  };
+
+  // =====================================================
   // DATE FORMAT
   // =====================================================
 
   const getDateLabel = (dateValue) => {
-    const date = new Date(dateValue);
+    const date = parseServerDate(dateValue);
+
+    if (!date || Number.isNaN(date.getTime())) {
+      return "";
+    }
 
     const today = new Date();
 
@@ -975,9 +1013,13 @@ export default function ChatPage() {
   // =====================================================
 
   const getTime = (dateValue) => {
-    return new Date(
-      dateValue
-    ).toLocaleTimeString(
+    const date = parseServerDate(dateValue);
+
+    if (!date || Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleTimeString(
       [],
       {
         hour: "2-digit",
@@ -999,9 +1041,13 @@ export default function ChatPage() {
       return "offline";
     }
 
-    return `last seen ${new Date(
-      lastSeen
-    ).toLocaleString([], {
+    const lastSeenDate = parseServerDate(lastSeen);
+
+    if (!lastSeenDate || Number.isNaN(lastSeenDate.getTime())) {
+      return "offline";
+    }
+
+    return `last seen ${lastSeenDate.toLocaleString([], {
       day: "numeric",
       month: "short",
       hour: "2-digit",
@@ -1119,9 +1165,9 @@ export default function ChatPage() {
       messages[index - 1];
 
     const currentDate =
-      new Date(
+      parseServerDate(
         msg.created_at
-      ).toDateString();
+      )?.toDateString();
 
     const previousDate =
       previousMessage
