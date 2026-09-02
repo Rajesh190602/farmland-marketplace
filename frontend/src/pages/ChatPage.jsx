@@ -30,6 +30,12 @@ export default function ChatPage() {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
 
   // =====================================================
+  // PHASE 4 - IMAGE PREVIEW
+  // =====================================================
+
+  const [pendingImage, setPendingImage] = useState(null);
+
+  // =====================================================
   // PHASE 2 - REPORT USER
   // =====================================================
 
@@ -453,6 +459,16 @@ export default function ChatPage() {
     loadMuteStatus();
   }, [conversationId]);
 
+  // Revoke temporary browser preview URLs when the preview changes
+  // or when this page is unmounted.
+  useEffect(() => {
+    return () => {
+      if (pendingImage?.previewUrl) {
+        URL.revokeObjectURL(pendingImage.previewUrl);
+      }
+    };
+  }, [pendingImage]);
+
   // =====================================================
   // SCROLL TO BOTTOM
   // =====================================================
@@ -728,6 +744,29 @@ export default function ChatPage() {
         return;
       }
 
+      // Images are previewed first. They are not uploaded until the
+      // user explicitly presses Send.
+      if (file.type.startsWith("image/")) {
+        if (pendingImage?.previewUrl) {
+          URL.revokeObjectURL(pendingImage.previewUrl);
+        }
+
+        const previewUrl = URL.createObjectURL(file);
+
+        setPendingImage({
+          file,
+          previewUrl,
+          name: file.name,
+          size: file.size,
+        });
+
+        setShowEmoji(false);
+        setShowAttachMenu(false);
+        shouldScrollToBottomRef.current = true;
+        return;
+      }
+
+      // Non-image files keep the existing immediate-upload behavior.
       setUploading(true);
 
       const formData = new FormData();
@@ -765,6 +804,79 @@ export default function ChatPage() {
     } finally {
       setUploading(false);
       event.target.value = "";
+    }
+  };
+
+  // =====================================================
+  // SEND PREVIEWED IMAGE
+  // =====================================================
+
+  const sendPendingImage = async () => {
+    if (!pendingImage?.file || isBlocked || uploading) {
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const formData = new FormData();
+
+      formData.append(
+        "conversation_id",
+        Number(conversationId)
+      );
+
+      formData.append(
+        "file",
+        pendingImage.file
+      );
+
+      await api.post(
+        "/chat/send-file",
+        formData
+      );
+
+      if (pendingImage.previewUrl) {
+        URL.revokeObjectURL(pendingImage.previewUrl);
+      }
+
+      setPendingImage(null);
+      setShowEmoji(false);
+      setShowAttachMenu(false);
+
+      await updateMyPresence();
+
+      shouldScrollToBottomRef.current = true;
+
+      await loadMessages();
+    } catch (error) {
+      console.error(
+        "Image upload failed:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to upload image."
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // =====================================================
+  // REMOVE IMAGE PREVIEW
+  // =====================================================
+
+  const removePendingImage = () => {
+    if (pendingImage?.previewUrl) {
+      URL.revokeObjectURL(pendingImage.previewUrl);
+    }
+
+    setPendingImage(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -2055,6 +2167,106 @@ export default function ChatPage() {
           )}
 
           {/* =====================================================
+              PHASE 4 - IMAGE PREVIEW
+          ===================================================== */}
+
+          {pendingImage && !isBlocked && (
+            <div
+              style={{
+                background: "#F0F2F5",
+                borderTop: "1px solid #ddd",
+                padding: "10px 12px",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: "700px",
+                  margin: "0 auto",
+                  background: "#fff",
+                  border: "1px solid #D5D9DC",
+                  borderRadius: "12px",
+                  padding: "10px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                }}
+              >
+                <img
+                  src={pendingImage.previewUrl}
+                  alt={pendingImage.name || "Image preview"}
+                  style={{
+                    width: "72px",
+                    height: "72px",
+                    objectFit: "cover",
+                    borderRadius: "8px",
+                    display: "block",
+                    flexShrink: 0,
+                  }}
+                />
+
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {pendingImage.name}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#666",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {formatFileSize(pendingImage.size)}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#2E7D32",
+                      marginTop: "4px",
+                    }}
+                  >
+                    🖼️ Image ready to send
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={removePendingImage}
+                  disabled={uploading}
+                  title="Remove image"
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    border: "none",
+                    borderRadius: "50%",
+                    background: "#F5F5F5",
+                    color: "#C62828",
+                    fontSize: "18px",
+                    cursor: uploading ? "not-allowed" : "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =====================================================
               INPUT AREA
           ===================================================== */}
 
@@ -2188,13 +2400,15 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={
-                sendMessage
+                pendingImage
+                  ? sendPendingImage
+                  : sendMessage
               }
               disabled={
                 sending ||
                 uploading ||
                 isBlocked ||
-                !text.trim()
+                (!text.trim() && !pendingImage)
               }
               style={{
                 width: "44px",
@@ -2206,7 +2420,7 @@ export default function ChatPage() {
                   sending ||
                   uploading ||
                   isBlocked ||
-                  !text.trim()
+                  (!text.trim() && !pendingImage)
                     ? "#A5D6A7"
                     : "#075E54",
                 color: "#fff",
@@ -2214,7 +2428,7 @@ export default function ChatPage() {
                   sending ||
                   uploading ||
                   isBlocked ||
-                  !text.trim()
+                  (!text.trim() && !pendingImage)
                     ? "not-allowed"
                     : "pointer",
                 fontSize: "20px",
@@ -2226,9 +2440,11 @@ export default function ChatPage() {
                 flexShrink: 0,
               }}
             >
-              {sending
+              {sending || uploading
                 ? "..."
-                : "➤"}
+                : pendingImage
+                  ? "📤"
+                  : "➤"}
             </button>
           </div>
         </div>
