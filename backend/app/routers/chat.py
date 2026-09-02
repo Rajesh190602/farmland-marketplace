@@ -251,13 +251,15 @@ def start_chat(
     # Check existing conversation
     # ----------------------------------
 
+    # One buyer and one farmer must share ONE conversation,
+    # even when the buyer opens chat from different land listings.
     conversation = (
         db.query(Conversation)
         .filter(
-            Conversation.land_id == land.id,
             Conversation.buyer_id == current_user,
             Conversation.farmer_id == land.owner_id
         )
+        .order_by(desc(Conversation.id))
         .first()
     )
 
@@ -398,13 +400,15 @@ def reply_to_buyer(
         )
 
     
+    # One buyer and one farmer must share ONE conversation,
+    # regardless of which of the farmer's lands triggered the chat.
     conversation = (
         db.query(Conversation)
         .filter(
-            Conversation.land_id == land.id,
             Conversation.buyer_id == data.buyer_id,
             Conversation.farmer_id == current_user
         )
+        .order_by(desc(Conversation.id))
         .first()
     )
 
@@ -413,6 +417,31 @@ def reply_to_buyer(
     # ----------------------------------
 
     if conversation:
+        # Explicitly replying to a buyer revives the same logical
+        # conversation if the farmer previously deleted/archived it.
+        existing_deletion = db.query(ConversationDeletion).filter(
+            ConversationDeletion.conversation_id == conversation.id,
+            ConversationDeletion.user_id == current_user
+        ).first()
+
+        if existing_deletion:
+            db.delete(existing_deletion)
+
+        existing_archive = db.query(ConversationArchive).filter(
+            ConversationArchive.conversation_id == conversation.id,
+            ConversationArchive.user_id == current_user
+        ).first()
+
+        if existing_archive:
+            db.delete(existing_archive)
+
+        if existing_deletion or existing_archive:
+            db.commit()
+            return {
+                "conversation_id": conversation.id,
+                "message": "Conversation restored because you replied to the buyer"
+            }
+
         return {
             "conversation_id": conversation.id,
             "message": "Conversation already exists"
@@ -1329,30 +1358,46 @@ def my_archived_conversations(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    archives = (
-        db.query(ConversationArchive)
+    # Only the newest conversation for each buyer/farmer pair is
+    # considered the active logical conversation.
+    conversations = (
+        db.query(Conversation)
         .filter(
-            ConversationArchive.user_id == current_user
+            or_(
+                Conversation.buyer_id == current_user,
+                Conversation.farmer_id == current_user
+            )
         )
-        .order_by(
-            desc(ConversationArchive.archived_at)
-        )
+        .order_by(desc(Conversation.id))
         .all()
     )
 
     result = []
+    seen_other_users = set()
 
-    for archive in archives:
-        conversation = archive.conversation
+    for conversation in conversations:
+        if conversation.buyer_id == current_user:
+            other_user_id = conversation.farmer_id
+        else:
+            other_user_id = conversation.buyer_id
 
-        if not conversation:
+        if other_user_id in seen_other_users:
             continue
+
+        seen_other_users.add(other_user_id)
+
+        archive = db.query(ConversationArchive).filter(
+            ConversationArchive.conversation_id == conversation.id,
+            ConversationArchive.user_id == current_user
+        ).first()
 
         deleted_for_user = db.query(ConversationDeletion).filter(
             ConversationDeletion.conversation_id == conversation.id,
             ConversationDeletion.user_id == current_user
         ).first()
-        if deleted_for_user:
+
+        # A deleted conversation is not shown anywhere.
+        if deleted_for_user or not archive:
             continue
 
         if conversation.buyer_id == current_user:
@@ -1376,12 +1421,8 @@ def my_archived_conversations(
 
         last_message = (
             db.query(Message)
-            .filter(
-                Message.conversation_id == conversation.id
-            )
-            .order_by(
-                Message.created_at.desc()
-            )
+            .filter(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at.desc())
             .first()
         )
 
@@ -1479,32 +1520,12 @@ def my_conversations(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # Load all conversations first so the newest conversation
+    # becomes the single logical chat for each buyer/farmer pair.
+    # This also prevents an older duplicate from reappearing when
+    # the newest conversation is archived or deleted for the user.
     conversations = (
         db.query(Conversation)
-        .outerjoin(
-            ConversationArchive,
-            (
-                ConversationArchive.conversation_id ==
-                Conversation.id
-            )
-            &
-            (
-                ConversationArchive.user_id ==
-                current_user
-            )
-        )
-        .outerjoin(
-            ConversationDeletion,
-            (
-                ConversationDeletion.conversation_id ==
-                Conversation.id
-            )
-            &
-            (
-                ConversationDeletion.user_id ==
-                current_user
-            )
-        )
         .filter(
             or_(
                 Conversation.buyer_id ==
@@ -1514,12 +1535,6 @@ def my_conversations(
                 current_user
             )
         )
-        .filter(
-            ConversationArchive.id.is_(None)
-        )
-        .filter(
-            ConversationDeletion.id.is_(None)
-        )
         .order_by(
             desc(Conversation.id)
         )
@@ -1527,34 +1542,40 @@ def my_conversations(
     )
 
     result = []
+    seen_other_users = set()
 
     for conversation in conversations:
 
-        # ----------------------------------
-        # Find other user
-        # ----------------------------------
-
+        # -------------------------------------------------
+        # ONE CHAT PER PERSON
+        # -------------------------------------------------
+        # Older data may already contain multiple conversations
+        # for the same buyer/farmer pair (for different lands).
+        # Show only the newest conversation for that person.
         if conversation.buyer_id == current_user:
-
-            other_user = (
-                db.query(User)
-                .filter(
-                    User.id ==
-                    conversation.farmer_id
-                )
-                .first()
-            )
-
+            other_user_id = conversation.farmer_id
         else:
+            other_user_id = conversation.buyer_id
 
-            other_user = (
-                db.query(User)
-                .filter(
-                    User.id ==
-                    conversation.buyer_id
-                )
-                .first()
-            )
+        if other_user_id in seen_other_users:
+            continue
+
+        # The newest conversation represents this person.
+        # If it is archived/deleted for the current user, do not
+        # fall back to an older conversation for the same person.
+        archived_for_user = db.query(ConversationArchive).filter(
+            ConversationArchive.conversation_id == conversation.id,
+            ConversationArchive.user_id == current_user
+        ).first()
+        deleted_for_user = db.query(ConversationDeletion).filter(
+            ConversationDeletion.conversation_id == conversation.id,
+            ConversationDeletion.user_id == current_user
+        ).first()
+
+        seen_other_users.add(other_user_id)
+
+        if archived_for_user or deleted_for_user:
+            continue
 
         # ----------------------------------
         # Find land
