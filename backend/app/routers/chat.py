@@ -27,7 +27,8 @@ from app.models import (
     Notification,
     ActivityLog,
     UserBlock,
-    ConversationMute
+    ConversationMute,
+    ConversationArchive
 )
 
 from app.schemas import (
@@ -1119,6 +1120,261 @@ def get_messages(
 
 
 # =========================================================
+# PHASE 4 - CONVERSATION ARCHIVE
+# Archive is per-user. It never deletes messages.
+# =========================================================
+
+def verify_conversation_participant(
+    conversation,
+    current_user
+):
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    if current_user not in [
+        conversation.buyer_id,
+        conversation.farmer_id
+    ]:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not part of this conversation"
+        )
+
+
+@router.post("/archive/{conversation_id}")
+def archive_conversation(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id)
+        .first()
+    )
+
+    verify_conversation_participant(
+        conversation,
+        current_user
+    )
+
+    existing_archive = (
+        db.query(ConversationArchive)
+        .filter(
+            ConversationArchive.conversation_id == conversation_id,
+            ConversationArchive.user_id == current_user
+        )
+        .first()
+    )
+
+    if existing_archive:
+        return {
+            "message": "Conversation is already archived.",
+            "conversation_id": conversation_id,
+            "archived": True
+        }
+
+    archive = ConversationArchive(
+        conversation_id=conversation_id,
+        user_id=current_user
+    )
+
+    db.add(archive)
+
+    activity_log = ActivityLog(
+        user_id=current_user,
+        action="CHAT_CONVERSATION_ARCHIVED",
+        description=(
+            f"Archived conversation {conversation_id}."
+        ),
+        target_type="conversation",
+        target_id=conversation_id
+    )
+
+    db.add(activity_log)
+    db.commit()
+
+    return {
+        "message": "Conversation archived successfully.",
+        "conversation_id": conversation_id,
+        "archived": True
+    }
+
+
+@router.delete("/archive/{conversation_id}")
+def restore_conversation(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id)
+        .first()
+    )
+
+    verify_conversation_participant(
+        conversation,
+        current_user
+    )
+
+    existing_archive = (
+        db.query(ConversationArchive)
+        .filter(
+            ConversationArchive.conversation_id == conversation_id,
+            ConversationArchive.user_id == current_user
+        )
+        .first()
+    )
+
+    if not existing_archive:
+        return {
+            "message": "Conversation is already active.",
+            "conversation_id": conversation_id,
+            "archived": False
+        }
+
+    db.delete(existing_archive)
+
+    activity_log = ActivityLog(
+        user_id=current_user,
+        action="CHAT_CONVERSATION_RESTORED",
+        description=(
+            f"Restored conversation {conversation_id}."
+        ),
+        target_type="conversation",
+        target_id=conversation_id
+    )
+
+    db.add(activity_log)
+    db.commit()
+
+    return {
+        "message": "Conversation restored successfully.",
+        "conversation_id": conversation_id,
+        "archived": False
+    }
+
+
+@router.get("/archive/{conversation_id}")
+def get_archive_status(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id)
+        .first()
+    )
+
+    verify_conversation_participant(
+        conversation,
+        current_user
+    )
+
+    archived = (
+        db.query(ConversationArchive)
+        .filter(
+            ConversationArchive.conversation_id == conversation_id,
+            ConversationArchive.user_id == current_user
+        )
+        .first()
+        is not None
+    )
+
+    return {
+        "conversation_id": conversation_id,
+        "archived": archived
+    }
+
+
+@router.get("/my-archived-conversations")
+def my_archived_conversations(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
+):
+    archives = (
+        db.query(ConversationArchive)
+        .filter(
+            ConversationArchive.user_id == current_user
+        )
+        .order_by(
+            desc(ConversationArchive.archived_at)
+        )
+        .all()
+    )
+
+    result = []
+
+    for archive in archives:
+        conversation = archive.conversation
+
+        if not conversation:
+            continue
+
+        if conversation.buyer_id == current_user:
+            other_user = (
+                db.query(User)
+                .filter(User.id == conversation.farmer_id)
+                .first()
+            )
+        else:
+            other_user = (
+                db.query(User)
+                .filter(User.id == conversation.buyer_id)
+                .first()
+            )
+
+        land = (
+            db.query(Land)
+            .filter(Land.id == conversation.land_id)
+            .first()
+        )
+
+        last_message = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == conversation.id
+            )
+            .order_by(
+                Message.created_at.desc()
+            )
+            .first()
+        )
+
+        result.append({
+            "conversation_id": conversation.id,
+            "land_title": land.title if land else "",
+            "other_user": (
+                other_user.full_name
+                if other_user
+                else ""
+            ),
+            "last_message": (
+                last_message.message
+                if last_message and last_message.message
+                else (
+                    "📎 File"
+                    if last_message and last_message.file_url
+                    else ""
+                )
+            ),
+            "last_message_time": (
+                last_message.created_at
+                if last_message
+                else None
+            ),
+            "archived_at": archive.archived_at
+        })
+
+    return result
+
+
+# =========================================================
 # MY CONVERSATIONS
 # =========================================================
 
@@ -1129,6 +1385,18 @@ def my_conversations(
 ):
     conversations = (
         db.query(Conversation)
+        .outerjoin(
+            ConversationArchive,
+            (
+                ConversationArchive.conversation_id ==
+                Conversation.id
+            )
+            &
+            (
+                ConversationArchive.user_id ==
+                current_user
+            )
+        )
         .filter(
             or_(
                 Conversation.buyer_id ==
@@ -1137,6 +1405,9 @@ def my_conversations(
                 Conversation.farmer_id ==
                 current_user
             )
+        )
+        .filter(
+            ConversationArchive.id.is_(None)
         )
         .order_by(
             desc(Conversation.id)

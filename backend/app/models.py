@@ -543,6 +543,54 @@ class ConversationMute(Base):
 
 
 # =========================================================
+# PHASE 4
+# CONVERSATION ARCHIVE
+# Each participant can archive independently.
+# Archiving does NOT delete the conversation or messages.
+# =========================================================
+
+class ConversationArchive(Base):
+    __tablename__ = "conversation_archives"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    conversation_id = Column(
+        Integer,
+        ForeignKey("conversations.id"),
+        nullable=False,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    archived_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    conversation = relationship("Conversation")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "user_id",
+            name="uq_conversation_archive"
+        ),
+    )
+
+
+# =========================================================
 # CHAT - MESSAGE
 # =========================================================
 

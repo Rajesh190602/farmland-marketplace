@@ -7,6 +7,11 @@ function MyChats() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [archivedConversations, setArchivedConversations] =
+    useState([]);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(null);
+
   const navigate = useNavigate();
 
   // =====================================================
@@ -15,6 +20,7 @@ function MyChats() {
 
   useEffect(() => {
     loadConversations();
+    loadArchivedConversations();
   }, []);
 
   const loadConversations = async () => {
@@ -41,12 +47,130 @@ function MyChats() {
     }
   };
 
+  const loadArchivedConversations = async () => {
+    try {
+      const response = await api.get(
+        "/chat/my-archived-conversations"
+      );
+
+      setArchivedConversations(
+        response.data || []
+      );
+    } catch (error) {
+      console.error(
+        "Failed to load archived conversations:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load archived conversations."
+      );
+    }
+  };
+
   // =====================================================
   // OPEN CHAT
   // =====================================================
 
   const openChat = (conversationId) => {
     navigate(`/chat/${conversationId}`);
+  };
+
+  // =====================================================
+  // ARCHIVE CONVERSATION
+  // =====================================================
+
+  const archiveConversation = async (conversationId) => {
+    if (
+      !conversationId ||
+      archiveLoading === conversationId
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Archive this conversation?\n\n" +
+        "The conversation and messages will not be deleted. " +
+        "It will simply be removed from your active chats."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setArchiveLoading(conversationId);
+
+      await api.post(
+        `/chat/archive/${conversationId}`
+      );
+
+      setConversations((previous) =>
+        previous.filter(
+          (conversation) =>
+            conversation.conversation_id !==
+            conversationId
+        )
+      );
+
+      await loadArchivedConversations();
+    } catch (error) {
+      console.error(
+        "Failed to archive conversation:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to archive conversation."
+      );
+    } finally {
+      setArchiveLoading(null);
+    }
+  };
+
+  // =====================================================
+  // RESTORE CONVERSATION
+  // =====================================================
+
+  const restoreConversation = async (conversationId) => {
+    if (
+      !conversationId ||
+      archiveLoading === conversationId
+    ) {
+      return;
+    }
+
+    try {
+      setArchiveLoading(conversationId);
+
+      await api.delete(
+        `/chat/archive/${conversationId}`
+      );
+
+      setArchivedConversations((previous) =>
+        previous.filter(
+          (conversation) =>
+            conversation.conversation_id !==
+            conversationId
+        )
+      );
+
+      await loadConversations();
+    } catch (error) {
+      console.error(
+        "Failed to restore conversation:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to restore conversation."
+      );
+    } finally {
+      setArchiveLoading(null);
+    }
   };
 
   // =====================================================
@@ -73,6 +197,10 @@ function MyChats() {
     );
   }
 
+  const displayedConversations = showArchived
+    ? archivedConversations
+    : conversations;
+
   // =====================================================
   // UI
   // =====================================================
@@ -97,9 +225,59 @@ function MyChats() {
           💬 My Chats
         </h1>
 
+        {/* Active / Archived */}
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginBottom: "20px",
+          }}
+        >
+          <button
+            onClick={() => setShowArchived(false)}
+            style={{
+              padding: "10px 18px",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              background: showArchived
+                ? "#E3F2FD"
+                : "#1976D2",
+              color: showArchived
+                ? "#1976D2"
+                : "#fff",
+            }}
+          >
+            💬 Active Chats
+          </button>
+
+          <button
+            onClick={() => setShowArchived(true)}
+            style={{
+              padding: "10px 18px",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              background: showArchived
+                ? "#757575"
+                : "#EEEEEE",
+              color: showArchived
+                ? "#fff"
+                : "#555",
+            }}
+          >
+            📦 Archived Chats
+          </button>
+        </div>
+
         {/* Refresh */}
         <button
-          onClick={loadConversations}
+          onClick={() => {
+            loadConversations();
+            loadArchivedConversations();
+          }}
           style={{
             marginBottom: "25px",
             background: "#1976D2",
@@ -115,7 +293,7 @@ function MyChats() {
         </button>
 
         {/* No conversations */}
-        {conversations.length === 0 ? (
+        {displayedConversations.length === 0 ? (
           <div
             style={{
               textAlign: "center",
@@ -127,16 +305,20 @@ function MyChats() {
                 "0 3px 10px rgba(0,0,0,0.1)",
             }}
           >
-            <h2>💬 No Conversations Yet</h2>
+            <h2>
+              {showArchived
+                ? "📦 No Archived Conversations"
+                : "💬 No Conversations Yet"}
+            </h2>
 
             <p>
-              Start chatting with a farmer from any
-              land listing.
+              {showArchived
+                ? "Archived conversations will appear here."
+                : "Start chatting with a farmer from any land listing."}
             </p>
           </div>
         ) : (
-          /* Conversations */
-          conversations.map((chat) => (
+          displayedConversations.map((chat) => (
             <div
               key={chat.conversation_id}
               style={{
@@ -197,7 +379,7 @@ function MyChats() {
                 </small>
               )}
 
-              {/* Open chat button */}
+              {/* Open chat */}
               <button
                 onClick={() =>
                   openChat(chat.conversation_id)
@@ -212,10 +394,80 @@ function MyChats() {
                   cursor: "pointer",
                   fontSize: "16px",
                   fontWeight: "bold",
+                  marginBottom: "10px",
                 }}
               >
                 💬 Open Chat & Reply
               </button>
+
+              {/* Archive / Restore */}
+              {showArchived ? (
+                <button
+                  onClick={() =>
+                    restoreConversation(
+                      chat.conversation_id
+                    )
+                  }
+                  disabled={
+                    archiveLoading ===
+                    chat.conversation_id
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    background: "#E8F5E9",
+                    color: "#2E7D32",
+                    border: "none",
+                    borderRadius: "7px",
+                    cursor:
+                      archiveLoading ===
+                      chat.conversation_id
+                        ? "not-allowed"
+                        : "pointer",
+                    fontSize: "15px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  ↩️{" "}
+                  {archiveLoading ===
+                  chat.conversation_id
+                    ? "Restoring..."
+                    : "Restore Conversation"}
+                </button>
+              ) : (
+                <button
+                  onClick={() =>
+                    archiveConversation(
+                      chat.conversation_id
+                    )
+                  }
+                  disabled={
+                    archiveLoading ===
+                    chat.conversation_id
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    background: "#EEEEEE",
+                    color: "#555",
+                    border: "none",
+                    borderRadius: "7px",
+                    cursor:
+                      archiveLoading ===
+                      chat.conversation_id
+                        ? "not-allowed"
+                        : "pointer",
+                    fontSize: "15px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  📦{" "}
+                  {archiveLoading ===
+                  chat.conversation_id
+                    ? "Archiving..."
+                    : "Archive Conversation"}
+                </button>
+              )}
             </div>
           ))
         )}
