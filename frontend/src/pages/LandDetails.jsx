@@ -2917,7 +2917,7 @@ function LandDetails() {
                           type="button"
                           onClick={() =>
                             navigate(
-                              `/land/${similarLand.id}`
+                              `/lands/${similarLand.id}`
                             )
                           }
                           style={{
