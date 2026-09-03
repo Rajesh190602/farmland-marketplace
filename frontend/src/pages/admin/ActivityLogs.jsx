@@ -10,9 +10,15 @@ function ActivityLogs() {
   const [limit] = useState(20);
   const [total, setTotal] = useState(0);
 
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("");
+  const [status, setStatus] = useState("active");
   const [action, setAction] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [appliedFromDate, setAppliedFromDate] = useState("");
+  const [appliedToDate, setAppliedToDate] = useState("");
+  const [selectedLog, setSelectedLog] = useState(null);
 
   const [exporting, setExporting] = useState(false);
 
@@ -29,9 +35,12 @@ function ActivityLogs() {
       params.append("page", page);
       params.append("limit", limit);
 
-      if (action) {
-        params.append("action", action);
-      }
+      if (search) params.append("search", search);
+      if (role) params.append("role", role);
+      if (status) params.append("status", status);
+      if (action) params.append("action", action);
+      if (appliedFromDate) params.append("from_date", appliedFromDate);
+      if (appliedToDate) params.append("to_date", appliedToDate);
 
       const response = await api.get(
         `/admin/activity-logs?${params.toString()}`
@@ -56,15 +65,20 @@ function ActivityLogs() {
 
   useEffect(() => {
     fetchLogs();
-  }, [page, action]);
+  }, [page, search, role, status, action, appliedFromDate, appliedToDate]);
 
   // =====================================================
   // APPLY FILTER
   // =====================================================
 
   const applyFilters = () => {
+    if (fromDate && toDate && fromDate > toDate) {
+      alert("From Date cannot be later than To Date.");
+      return;
+    }
+    setAppliedFromDate(fromDate);
+    setAppliedToDate(toDate);
     setPage(1);
-    fetchLogs();
   };
 
   // =====================================================
@@ -72,9 +86,14 @@ function ActivityLogs() {
   // =====================================================
 
   const clearFilters = () => {
+    setSearch("");
+    setRole("");
+    setStatus("active");
     setAction("");
     setFromDate("");
     setToDate("");
+    setAppliedFromDate("");
+    setAppliedToDate("");
     setPage(1);
   };
 
@@ -115,9 +134,10 @@ function ActivityLogs() {
       params.append("from_date", fromDate);
       params.append("to_date", toDate);
 
-      if (action) {
-        params.append("action", action);
-      }
+      if (search) params.append("search", search);
+      if (role) params.append("role", role);
+      if (status) params.append("status", status);
+      if (action) params.append("action", action);
 
       const response = await api.get(
         `/admin/activity-logs/export?${params.toString()}`,
@@ -426,6 +446,39 @@ function ActivityLogs() {
               }}
             >
 
+              {/* SEARCH */}
+              <div>
+                <label style={labelStyle}>Search</label>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  placeholder="Search user, email, action, description, target..."
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* ROLE */}
+              <div>
+                <label style={labelStyle}>User Role</label>
+                <select value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }} style={inputStyle}>
+                  <option value="">All Roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="farmer">Farmer</option>
+                  <option value="buyer">Buyer</option>
+                </select>
+              </div>
+
+              {/* LOG STATUS */}
+              <div>
+                <label style={labelStyle}>Log Status</label>
+                <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} style={inputStyle}>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                  <option value="all">All Logs</option>
+                </select>
+              </div>
+
               {/* FROM DATE */}
 
               <div>
@@ -694,6 +747,9 @@ function ActivityLogs() {
                     <th style={thStyle}>
                       Action
                     </th>
+                    <th style={thStyle}>
+                      Status
+                    </th>
 
                     <th style={thStyle}>
                       Description
@@ -742,8 +798,8 @@ function ActivityLogs() {
                               "#666",
                           }}
                         >
-                          {log.user_email ||
-                            ""}
+                          {log.user_email || ""}
+                          {log.user_role && log.user_role !== "system" ? ` • ${log.user_role}` : ""}
                         </small>
                       </td>
 
@@ -776,9 +832,12 @@ function ActivityLogs() {
                         </span>
                       </td>
 
-                      <td
-                        style={tdStyle}
-                      >
+                      <td style={tdStyle}>
+                        <span style={{ display: "inline-block", padding: "5px 9px", borderRadius: "15px", background: log.is_archived ? "#757575" : "#2E7D32", color: "#fff", fontWeight: "bold", fontSize: "11px" }}>
+                          {log.is_archived ? "ARCHIVED" : "ACTIVE"}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
                         {log.description}
                       </td>
 
@@ -788,9 +847,14 @@ function ActivityLogs() {
                         {log.target_type ||
                           "-"}
 
-                        {log.target_id
-                          ? ` #${log.target_id}`
-                          : ""}
+                        {log.target_id ? ` #${log.target_id}` : ""}
+                        <br />
+                        <button
+                          onClick={() => setSelectedLog(log)}
+                          style={{ border: "none", background: "transparent", color: "#1565C0", cursor: "pointer", fontWeight: "bold", padding: 0, marginTop: "6px" }}
+                        >
+                          View Details
+                        </button>
                       </td>
 
                       <td
@@ -884,6 +948,29 @@ function ActivityLogs() {
               >
                 Next →
               </button>
+            </div>
+          )}
+
+          {selectedLog && (
+            <div onClick={() => setSelectedLog(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", zIndex: 1000 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "14px", width: "100%", maxWidth: "650px", maxHeight: "85vh", overflowY: "auto", padding: "25px", boxShadow: "0 10px 35px rgba(0,0,0,0.25)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "15px" }}>
+                  <h2 style={{ margin: 0, color: "#2E7D32" }}>Activity Log Details</h2>
+                  <button onClick={() => setSelectedLog(null)} style={{ ...actionButtonStyle, background: "#757575", cursor: "pointer" }}>Close</button>
+                </div>
+                <div style={{ marginTop: "20px", display: "grid", gap: "12px" }}>
+                  <div><strong>ID:</strong> {selectedLog.id}</div>
+                  <div><strong>User:</strong> {selectedLog.user_name || "System"}</div>
+                  <div><strong>Email:</strong> {selectedLog.user_email || "-"}</div>
+                  <div><strong>Role:</strong> {selectedLog.user_role || "system"}</div>
+                  <div><strong>Action:</strong> {selectedLog.action}</div>
+                  <div><strong>Status:</strong> {selectedLog.is_archived ? "Archived" : "Active"}</div>
+                  <div><strong>Target:</strong> {selectedLog.target_type || "-"}{selectedLog.target_id ? ` #${selectedLog.target_id}` : ""}</div>
+                  <div><strong>Date & Time:</strong> {selectedLog.created_at ? new Date(selectedLog.created_at).toLocaleString() : "-"}</div>
+                  {selectedLog.archived_at && <div><strong>Archived At:</strong> {new Date(selectedLog.archived_at).toLocaleString()}</div>}
+                  <div><strong>Description:</strong><div style={{ marginTop: "6px", padding: "12px", background: "#f5f5f5", borderRadius: "8px", whiteSpace: "pre-wrap" }}>{selectedLog.description || "No description"}</div></div>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends,HTTPException,Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, String
 from app.auth import get_current_admin
 from app.database import get_db
 from app.models import (
@@ -24,6 +25,9 @@ from app.models import (
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
 from sqlalchemy import func,extract
+from datetime import datetime, timedelta
+from io import BytesIO
+from openpyxl import Workbook
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"]
@@ -401,6 +405,237 @@ def get_recent_activity(
         "total": len(result),
         "activities": result,
     }
+# =========================================================
+# PHASE 5 - AUDIT / ACTIVITY LOG VIEWER
+# =========================================================
+
+@router.get("/activity-logs")
+def get_activity_logs(
+    search: str = Query(default=""),
+    action: str = Query(default=""),
+    role: str = Query(default=""),
+    status: str = Query(default="active"),
+    from_date: str = Query(default=""),
+    to_date: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """Return activity logs for the admin Audit / Activity Log viewer."""
+    status = status.strip().lower()
+    role = role.strip().lower()
+    action = action.strip()
+    search = search.strip()
+
+    if status not in {"active", "archived", "all"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid activity log status. Use active, archived, or all.",
+        )
+
+    if role and role not in {"admin", "farmer", "buyer"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user role. Use admin, farmer, or buyer.",
+        )
+
+    query = db.query(ActivityLog, User).outerjoin(
+        User, User.id == ActivityLog.user_id
+    )
+
+    if status == "active":
+        query = query.filter(ActivityLog.is_archived == False)
+    elif status == "archived":
+        query = query.filter(ActivityLog.is_archived == True)
+
+    if action:
+        query = query.filter(ActivityLog.action == action)
+
+    if role:
+        query = query.filter(User.role == role)
+
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                User.full_name.ilike(search_pattern),
+                User.email.ilike(search_pattern),
+                ActivityLog.description.ilike(search_pattern),
+                ActivityLog.target_type.ilike(search_pattern),
+                func.cast(ActivityLog.target_id, String).ilike(search_pattern),
+                ActivityLog.action.ilike(search_pattern),
+            )
+        )
+
+    if from_date:
+        try:
+            start_date = datetime.strptime(from_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid from_date. Use YYYY-MM-DD.")
+        query = query.filter(ActivityLog.created_at >= start_date)
+
+    if to_date:
+        try:
+            end_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid to_date. Use YYYY-MM-DD.")
+        query = query.filter(ActivityLog.created_at < end_date)
+
+    total = query.count()
+    rows = (
+        query.order_by(ActivityLog.id.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    logs = []
+    for log, user in rows:
+        logs.append({
+            "id": log.id,
+            "user_id": log.user_id,
+            "user_name": user.full_name if user else "System",
+            "user_email": user.email if user else "",
+            "user_role": user.role if user else "system",
+            "action": log.action,
+            "description": log.description,
+            "target_type": log.target_type,
+            "target_id": log.target_id,
+            "created_at": log.created_at,
+            "is_archived": log.is_archived,
+            "archived_at": log.archived_at,
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "logs": logs,
+    }
+
+
+@router.get("/activity-logs/export")
+def export_activity_logs(
+    from_date: str = Query(...),
+    to_date: str = Query(...),
+    action: str = Query(default=""),
+    search: str = Query(default=""),
+    role: str = Query(default=""),
+    status: str = Query(default="active"),
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """Export matching activity logs to Excel and archive the exported active logs."""
+    status = status.strip().lower()
+    role = role.strip().lower()
+    action = action.strip()
+    search = search.strip()
+
+    if status not in {"active", "archived", "all"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid activity log status. Use active, archived, or all.",
+        )
+
+    if role and role not in {"admin", "farmer", "buyer"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user role. Use admin, farmer, or buyer.",
+        )
+
+    try:
+        start_date = datetime.strptime(from_date, "%Y-%m-%d")
+        end_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must use YYYY-MM-DD format.")
+
+    if start_date >= end_date:
+        raise HTTPException(status_code=400, detail="From Date cannot be later than To Date.")
+
+    query = db.query(ActivityLog, User).outerjoin(
+        User, User.id == ActivityLog.user_id
+    ).filter(
+        ActivityLog.created_at >= start_date,
+        ActivityLog.created_at < end_date,
+    )
+
+    if status == "active":
+        query = query.filter(ActivityLog.is_archived == False)
+    elif status == "archived":
+        query = query.filter(ActivityLog.is_archived == True)
+
+    if action:
+        query = query.filter(ActivityLog.action == action)
+
+    if role:
+        query = query.filter(User.role == role)
+
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                User.full_name.ilike(search_pattern),
+                User.email.ilike(search_pattern),
+                ActivityLog.description.ilike(search_pattern),
+                ActivityLog.target_type.ilike(search_pattern),
+                func.cast(ActivityLog.target_id, String).ilike(search_pattern),
+                ActivityLog.action.ilike(search_pattern),
+            )
+        )
+
+    rows = query.order_by(ActivityLog.id.desc()).all()
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Activity Logs"
+    sheet.append([
+        "ID", "User ID", "User Name", "User Email", "Role", "Action",
+        "Description", "Target Type", "Target ID", "Created At",
+        "Archived", "Archived At"
+    ])
+
+    for log, user in rows:
+        sheet.append([
+            log.id,
+            log.user_id,
+            user.full_name if user else "System",
+            user.email if user else "",
+            user.role if user else "system",
+            log.action,
+            log.description or "",
+            log.target_type or "",
+            log.target_id,
+            log.created_at,
+            "Yes" if log.is_archived else "No",
+            log.archived_at,
+        ])
+
+    for column_cells in sheet.columns:
+        max_length = max(len(str(cell.value or "")) for cell in column_cells)
+        sheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 12), 45)
+
+    # Preserve the existing export workflow: only active logs included in an active export
+    # are archived. Archived/all exports are read-only and do not mutate existing archives.
+    if status == "active":
+        exported_at = datetime.utcnow()
+        for log, _user in rows:
+            log.is_archived = True
+            log.archived_at = exported_at
+        db.commit()
+
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+
+    filename = f"activity_logs_{from_date}_to_{to_date}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/users")
 def get_all_users(
     search: str = Query(default=""),
