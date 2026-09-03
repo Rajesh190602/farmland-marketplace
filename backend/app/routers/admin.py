@@ -26,7 +26,8 @@ from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
 from sqlalchemy import func,extract
 from datetime import datetime, timedelta
-from io import BytesIO
+from io import BytesIO, StringIO
+import csv
 from openpyxl import Workbook
 router = APIRouter(
     prefix="/admin",
@@ -2014,6 +2015,316 @@ def monthly_growth(
         if year is not None and month is not None
     ]
 # =========================================================
+
+# =========================================================
+# PHASE 5 - STEP 48 - ADMIN EXPORT REPORTS
+# =========================================================
+
+@router.get("/export/{report_type}")
+def export_admin_report(
+    report_type: str,
+    format: str = Query(default="xlsx"),
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Export admin data as Excel or CSV.
+
+    Supported report types:
+    users, lands, inquiries, offers, site_visits, activity_logs
+
+    This endpoint is read-only and does not archive or modify records.
+    """
+
+    report_type = report_type.strip().lower()
+    export_format = format.strip().lower()
+
+    allowed_report_types = {
+        "users", "lands", "inquiries", "offers",
+        "site_visits", "activity_logs",
+    }
+
+    if report_type not in allowed_report_types:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid report type. Use users, lands, inquiries, "
+                "offers, site_visits, or activity_logs."
+            ),
+        )
+
+    if export_format not in {"xlsx", "csv"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid format. Use xlsx or csv.",
+        )
+
+    headers = []
+    rows = []
+
+    if report_type == "users":
+        headers = [
+            "ID", "Full Name", "Email", "Mobile", "Role",
+            "Suspended", "Created At",
+        ]
+
+        for user in db.query(User).order_by(User.id.desc()).all():
+            rows.append([
+                user.id,
+                user.full_name or "",
+                user.email or "",
+                user.mobile or "",
+                user.role or "",
+                "Yes" if user.is_suspended else "No",
+                getattr(user, "created_at", None),
+            ])
+
+    elif report_type == "lands":
+        headers = [
+            "ID", "Title", "Owner Name", "Owner Email", "Owner Mobile",
+            "Price", "Area", "Village", "Mandal", "District", "State",
+            "Pincode", "Survey Number", "Soil Type", "Water Source",
+            "Crop Type", "Status", "Published", "Created At",
+        ]
+
+        for land in db.query(Land).order_by(Land.id.desc()).all():
+            owner = (
+                db.query(User)
+                .filter(User.id == land.owner_id)
+                .first()
+            )
+
+            rows.append([
+                land.id,
+                land.title or "",
+                owner.full_name if owner else "Unknown",
+                owner.email if owner else "",
+                owner.mobile if owner else "",
+                land.price,
+                land.area,
+                land.village or "",
+                land.mandal or "",
+                land.district or "",
+                land.state or "",
+                land.pincode or "",
+                land.survey_number or "",
+                land.soil_type or "",
+                land.water_source or "",
+                land.crop_type or "",
+                land.status or "",
+                "Yes" if land.is_published else "No",
+                getattr(land, "created_at", None),
+            ])
+
+    elif report_type == "inquiries":
+        headers = [
+            "ID", "Land ID", "Land Title", "Buyer Name", "Buyer Mobile",
+            "Owner Name", "Status", "Message", "Created At",
+        ]
+
+        for inquiry in (
+            db.query(LandInquiry)
+            .order_by(LandInquiry.created_at.desc())
+            .all()
+        ):
+            land = (
+                db.query(Land)
+                .filter(Land.id == inquiry.land_id)
+                .first()
+            )
+            buyer = (
+                db.query(User)
+                .filter(User.id == inquiry.buyer_id)
+                .first()
+            )
+            owner = (
+                db.query(User)
+                .filter(User.id == land.owner_id)
+                .first()
+                if land else None
+            )
+
+            rows.append([
+                inquiry.id,
+                inquiry.land_id,
+                land.title if land else "Land no longer available",
+                buyer.full_name if buyer else "Unknown",
+                buyer.mobile if buyer else "",
+                owner.full_name if owner else "Unknown",
+                inquiry.status or "",
+                getattr(inquiry, "message", "") or "",
+                inquiry.created_at,
+            ])
+
+    elif report_type == "offers":
+        headers = [
+            "ID", "Land ID", "Land Title", "Buyer Name", "Buyer Mobile",
+            "Owner Name", "Amount", "Status", "Message", "Created At",
+        ]
+
+        for offer in (
+            db.query(LandOffer)
+            .order_by(LandOffer.created_at.desc())
+            .all()
+        ):
+            land = (
+                db.query(Land)
+                .filter(Land.id == offer.land_id)
+                .first()
+            )
+            buyer = (
+                db.query(User)
+                .filter(User.id == offer.buyer_id)
+                .first()
+            )
+            owner = (
+                db.query(User)
+                .filter(User.id == land.owner_id)
+                .first()
+                if land else None
+            )
+
+            rows.append([
+                offer.id,
+                offer.land_id,
+                land.title if land else "Land no longer available",
+                buyer.full_name if buyer else "Unknown",
+                buyer.mobile if buyer else "",
+                owner.full_name if owner else "Unknown",
+                offer.amount,
+                offer.status or "",
+                getattr(offer, "message", "") or "",
+                offer.created_at,
+            ])
+
+    elif report_type == "site_visits":
+        headers = [
+            "ID", "Land ID", "Land Title", "Buyer Name", "Buyer Mobile",
+            "Owner Name", "Requested Date", "Status", "Message",
+            "Created At",
+        ]
+
+        for visit in (
+            db.query(SiteVisit)
+            .order_by(SiteVisit.requested_date.asc(), SiteVisit.id.desc())
+            .all()
+        ):
+            land = (
+                db.query(Land)
+                .filter(Land.id == visit.land_id)
+                .first()
+            )
+            buyer = (
+                db.query(User)
+                .filter(User.id == visit.buyer_id)
+                .first()
+            )
+            owner = (
+                db.query(User)
+                .filter(User.id == land.owner_id)
+                .first()
+                if land else None
+            )
+
+            rows.append([
+                visit.id,
+                visit.land_id,
+                land.title if land else "Land no longer available",
+                buyer.full_name if buyer else "Unknown",
+                buyer.mobile if buyer else "",
+                owner.full_name if owner else "Unknown",
+                visit.requested_date,
+                visit.status or "",
+                getattr(visit, "message", "") or "",
+                getattr(visit, "created_at", None),
+            ])
+
+    else:
+        headers = [
+            "ID", "User ID", "User Name", "User Email", "Role",
+            "Action", "Description", "Target Type", "Target ID",
+            "Created At", "Archived", "Archived At",
+        ]
+
+        logs = (
+            db.query(ActivityLog, User)
+            .outerjoin(User, User.id == ActivityLog.user_id)
+            .order_by(ActivityLog.id.desc())
+            .all()
+        )
+
+        for log, user in logs:
+            rows.append([
+                log.id,
+                log.user_id,
+                user.full_name if user else "System",
+                user.email if user else "",
+                user.role if user else "system",
+                log.action or "",
+                log.description or "",
+                log.target_type or "",
+                log.target_id,
+                log.created_at,
+                "Yes" if log.is_archived else "No",
+                log.archived_at,
+            ])
+
+    if export_format == "csv":
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+
+        for row in rows:
+            writer.writerow([
+                value.isoformat() if isinstance(value, datetime) else value
+                for value in row
+            ])
+
+        output.seek(0)
+
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="{report_type}.csv"'
+            },
+        )
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = report_type[:31].replace("_", " ").title()
+    sheet.append(headers)
+
+    for row in rows:
+        sheet.append(row)
+
+    for column_cells in sheet.columns:
+        max_length = max(
+            len(str(cell.value or ""))
+            for cell in column_cells
+        )
+        sheet.column_dimensions[
+            column_cells[0].column_letter
+        ].width = min(max(max_length + 2, 12), 45)
+
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{report_type}.xlsx"'
+        },
+    )
+
+
 # PHASE 2 #11 - RESOLVE / DISMISS REPORT
 # =========================================================
 

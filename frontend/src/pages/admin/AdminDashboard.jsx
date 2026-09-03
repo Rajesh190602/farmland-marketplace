@@ -350,6 +350,58 @@ function AdminDashboard() {
 
 
   // =========================================================
+  // STEP 48 - DOWNLOAD ADMIN EXPORT
+  // =========================================================
+
+  const downloadAdminExport = async (type, format) => {
+    try {
+      const token = sessionStorage.getItem("token");
+
+      const response = await api.get(
+        `/admin/export/${type}`,
+        {
+          params: { format },
+          responseType: "blob",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const mimeType =
+        format === "csv"
+          ? "text/csv"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+      const url = window.URL.createObjectURL(
+        new Blob([response.data], { type: mimeType })
+      );
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `${type}_report.${format}`
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(
+        "Admin Export Error:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          `Failed to download ${type} report.`
+      );
+    }
+  };
+
+
+  // =========================================================
   // FETCH MARKETPLACE STATISTICS
   // =========================================================
 
@@ -2359,6 +2411,99 @@ function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* =====================================================
+          STEP 48 - EXPORT REPORTS
+      ===================================================== */}
+      <h2
+        style={{
+          color: "#2E7D32",
+          marginTop: "50px",
+        }}
+      >
+        📥 Export Reports
+      </h2>
+
+      <div
+        style={{
+          background: "#fff",
+          padding: "25px",
+          borderRadius: "18px",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
+          marginTop: "20px",
+        }}
+      >
+        <p
+          style={{
+            color: "#666",
+            marginTop: 0,
+            marginBottom: "20px",
+          }}
+        >
+          Download complete admin data in Excel or CSV format. These exports are read-only and do not modify marketplace data.
+        </p>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+            gap: "15px",
+          }}
+        >
+          {[
+            ["users", "👥 Users"],
+            ["lands", "🌾 Land Listings"],
+            ["inquiries", "📋 Inquiries"],
+            ["offers", "💰 Offers"],
+            ["site_visits", "📅 Site Visits"],
+            ["activity_logs", "📝 Activity Logs"],
+          ].map(([type, label]) => (
+            <div
+              key={type}
+              style={{
+                border: "1px solid #e0e0e0",
+                borderRadius: "14px",
+                padding: "16px",
+                background: "#fafafa",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: "bold",
+                  color: "#333",
+                  marginBottom: "12px",
+                }}
+              >
+                {label}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  style={actionButton("#2E7D32")}
+                  onClick={() => downloadAdminExport(type, "xlsx")}
+                >
+                  <FaDownload /> Excel
+                </button>
+
+                <button
+                  type="button"
+                  style={actionButton("#1565C0")}
+                  onClick={() => downloadAdminExport(type, "csv")}
+                >
+                  <FaDownload /> CSV
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* =====================================================
           REPORTS
