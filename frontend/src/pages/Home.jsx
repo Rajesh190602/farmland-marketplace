@@ -84,6 +84,8 @@ function Home() {
 
   const [listingAnalytics, setListingAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsDetails, setAnalyticsDetails] = useState(null);
+  const [analyticsDetailsLoading, setAnalyticsDetailsLoading] = useState(false);
 
 
   // =====================================================
@@ -262,6 +264,40 @@ function Home() {
     } finally {
       setAnalyticsLoading(false);
     }
+  };
+
+  const openAnalyticsDetails = async (category) => {
+    if (userRole !== "farmer") return;
+
+    try {
+      setAnalyticsDetailsLoading(true);
+      const response = await api.get("/lands/my/analytics/details", {
+        params: { category },
+      });
+      setAnalyticsDetails(response.data || null);
+    } catch (error) {
+      console.log("Failed to load analytics details:", error);
+      alert(
+        error.response?.data?.detail ||
+        "Failed to load analytics details."
+      );
+    } finally {
+      setAnalyticsDetailsLoading(false);
+    }
+  };
+
+  const analyticsDetailTitle = (category) => {
+    const titles = {
+      total_views: "👁️ Total Views",
+      my_listings: "🌾 My Listings",
+      available: "🟢 Available Listings",
+      reserved: "🟡 Reserved Listings",
+      sold: "🔴 Sold Listings",
+      inquiries: "💬 Buyer Inquiries",
+      offers: "💰 Buyer Offers",
+      site_visits: "📅 Site Visits",
+    };
+    return titles[category] || "Analytics Details";
   };
 
   // =====================================================
@@ -1142,28 +1178,52 @@ function Home() {
                   }}
                 >
                   {[
-                    ["👁️", "Total Views", listingAnalytics.summary?.total_views || 0],
-                    ["🌾", "My Listings", listingAnalytics.summary?.total_lands || 0],
-                    ["🟢", "Available", listingAnalytics.summary?.available || 0],
-                    ["🟡", "Reserved", listingAnalytics.summary?.reserved || 0],
-                    ["🔴", "Sold", listingAnalytics.summary?.sold || 0],
-                    ["💬", "Inquiries", listingAnalytics.summary?.total_inquiries || 0],
-                    ["💰", "Offers", listingAnalytics.summary?.total_offers || 0],
-                    ["📅", "Site Visits", listingAnalytics.summary?.total_site_visits || 0],
-                  ].map(([icon, label, value]) => (
+                    ["👁️", "Total Views", listingAnalytics.summary?.total_views || 0, "total_views"],
+                    ["🌾", "My Listings", listingAnalytics.summary?.total_lands || 0, "my_listings"],
+                    ["🟢", "Available", listingAnalytics.summary?.available || 0, "available"],
+                    ["🟡", "Reserved", listingAnalytics.summary?.reserved || 0, "reserved"],
+                    ["🔴", "Sold", listingAnalytics.summary?.sold || 0, "sold"],
+                    ["💬", "Inquiries", listingAnalytics.summary?.total_inquiries || 0, "inquiries"],
+                    ["💰", "Offers", listingAnalytics.summary?.total_offers || 0, "offers"],
+                    ["📅", "Site Visits", listingAnalytics.summary?.total_site_visits || 0, "site_visits"],
+                  ].map(([icon, label, value, category]) => (
                     <div
                       key={label}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openAnalyticsDetails(category)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openAnalyticsDetails(category);
+                        }
+                      }}
                       style={{
                         background: "#fff",
                         border: "1px solid #DFE9E1",
                         borderRadius: "16px",
                         padding: "20px 16px",
                         boxShadow: "0 8px 22px rgba(31,72,35,.07)",
+                        cursor: "pointer",
+                        transition: "transform .2s ease, box-shadow .2s ease, border-color .2s ease",
+                        textAlign: "center",
                       }}
+                      onMouseEnter={(event) => {
+                        event.currentTarget.style.transform = "translateY(-4px)";
+                        event.currentTarget.style.boxShadow = "0 14px 28px rgba(31,72,35,.14)";
+                        event.currentTarget.style.borderColor = "#B8D8BD";
+                      }}
+                      onMouseLeave={(event) => {
+                        event.currentTarget.style.transform = "translateY(0)";
+                        event.currentTarget.style.boxShadow = "0 8px 22px rgba(31,72,35,.07)";
+                        event.currentTarget.style.borderColor = "#DFE9E1";
+                      }}
+                      title={`Click to view ${label.toLowerCase()}`}
                     >
                       <div style={{ fontSize: "25px", marginBottom: "7px" }}>{icon}</div>
                       <div style={{ color: "#66736A", fontSize: "13px", fontWeight: "700" }}>{label}</div>
                       <div style={{ color: "#142219", fontSize: "30px", fontWeight: "850", marginTop: "4px" }}>{value}</div>
+                      <div style={{ color: "#2E7D32", fontSize: "11px", fontWeight: "800", marginTop: "7px" }}>Click to view →</div>
                     </div>
                   ))}
                 </div>
@@ -1221,6 +1281,159 @@ function Home() {
             )}
           </section>
         )}
+
+        {/* =================================================
+            FARMER ANALYTICS DETAILS MODAL
+        ================================================= */}
+        {analyticsDetails &&
+          createPortal(
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,.48)",
+                zIndex: 10000,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "20px",
+              }}
+              onClick={() => setAnalyticsDetails(null)}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  width: "min(1050px, 100%)",
+                  maxHeight: "85vh",
+                  overflow: "hidden",
+                  background: "#fff",
+                  borderRadius: "20px",
+                  boxShadow: "0 24px 70px rgba(0,0,0,.25)",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "18px 22px",
+                    borderBottom: "1px solid #E5ECE6",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "12px",
+                  }}
+                >
+                  <div>
+                    <h2 style={{ margin: 0, color: "#174D1C", fontSize: "20px" }}>
+                      {analyticsDetailTitle(analyticsDetails.category)}
+                    </h2>
+                    <div style={{ marginTop: "4px", color: "#66736A", fontSize: "13px" }}>
+                      {analyticsDetails.total || 0} record{analyticsDetails.total === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsDetails(null)}
+                    style={{
+                      border: "none",
+                      background: "#F1F5F1",
+                      color: "#26352A",
+                      borderRadius: "10px",
+                      padding: "9px 14px",
+                      cursor: "pointer",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div style={{ overflow: "auto", padding: "18px" }}>
+                  {analyticsDetailsLoading ? (
+                    <div style={{ padding: "35px", textAlign: "center", color: "#66736A" }}>
+                      Loading details...
+                    </div>
+                  ) : !analyticsDetails.records?.length ? (
+                    <div style={{ padding: "35px", textAlign: "center", color: "#66736A" }}>
+                      No records found for this category.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      {analyticsDetails.category === "inquiries" ? (
+                        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
+                          <thead><tr style={{ background: "#F5F9F5", textAlign: "left" }}>
+                            {['Land', 'Buyer', 'Mobile', 'Message', 'Status', 'Date'].map((h) => <th key={h} style={{ padding: "12px", fontSize: "12px", color: "#526057" }}>{h}</th>)}
+                          </tr></thead>
+                          <tbody>{analyticsDetails.records.map((r) => (
+                            <tr key={r.id} style={{ borderTop: "1px solid #E8EFE9" }}>
+                              <td style={{ padding: "12px", fontWeight: "700" }}>{r.land_title || `Land #${r.land_id}`}</td>
+                              <td style={{ padding: "12px" }}>{r.buyer_name}</td>
+                              <td style={{ padding: "12px" }}>{r.buyer_mobile || "-"}</td>
+                              <td style={{ padding: "12px", maxWidth: "260px" }}>{r.message || "-"}</td>
+                              <td style={{ padding: "12px", textTransform: "capitalize" }}>{String(r.status || "-").replaceAll("_", " ")}</td>
+                              <td style={{ padding: "12px", whiteSpace: "nowrap" }}>{r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      ) : analyticsDetails.category === "offers" ? (
+                        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "820px" }}>
+                          <thead><tr style={{ background: "#F5F9F5", textAlign: "left" }}>
+                            {['Land', 'Buyer', 'Mobile', 'Amount', 'Message', 'Status', 'Date'].map((h) => <th key={h} style={{ padding: "12px", fontSize: "12px", color: "#526057" }}>{h}</th>)}
+                          </tr></thead>
+                          <tbody>{analyticsDetails.records.map((r) => (
+                            <tr key={r.id} style={{ borderTop: "1px solid #E8EFE9" }}>
+                              <td style={{ padding: "12px", fontWeight: "700" }}>{r.land_title || `Land #${r.land_id}`}</td>
+                              <td style={{ padding: "12px" }}>{r.buyer_name}</td>
+                              <td style={{ padding: "12px" }}>{r.buyer_mobile || "-"}</td>
+                              <td style={{ padding: "12px", fontWeight: "700" }}>₹{Number(r.amount || 0).toLocaleString("en-IN")}</td>
+                              <td style={{ padding: "12px", maxWidth: "220px" }}>{r.message || "-"}</td>
+                              <td style={{ padding: "12px", textTransform: "capitalize" }}>{String(r.status || "-").replaceAll("_", " ")}</td>
+                              <td style={{ padding: "12px", whiteSpace: "nowrap" }}>{r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      ) : analyticsDetails.category === "site_visits" ? (
+                        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "850px" }}>
+                          <thead><tr style={{ background: "#F5F9F5", textAlign: "left" }}>
+                            {['Land', 'Buyer', 'Mobile', 'Requested Date', 'Message', 'Status', 'Created'].map((h) => <th key={h} style={{ padding: "12px", fontSize: "12px", color: "#526057" }}>{h}</th>)}
+                          </tr></thead>
+                          <tbody>{analyticsDetails.records.map((r) => (
+                            <tr key={r.id} style={{ borderTop: "1px solid #E8EFE9" }}>
+                              <td style={{ padding: "12px", fontWeight: "700" }}>{r.land_title || `Land #${r.land_id}`}</td>
+                              <td style={{ padding: "12px" }}>{r.buyer_name}</td>
+                              <td style={{ padding: "12px" }}>{r.buyer_mobile || "-"}</td>
+                              <td style={{ padding: "12px", whiteSpace: "nowrap" }}>{r.requested_date ? new Date(r.requested_date).toLocaleString() : "-"}</td>
+                              <td style={{ padding: "12px", maxWidth: "220px" }}>{r.message || "-"}</td>
+                              <td style={{ padding: "12px", textTransform: "capitalize" }}>{String(r.status || "-").replaceAll("_", " ")}</td>
+                              <td style={{ padding: "12px", whiteSpace: "nowrap" }}>{r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      ) : (
+                        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+                          <thead><tr style={{ background: "#F5F9F5", textAlign: "left" }}>
+                            {['Land', 'Approval', 'Availability', 'Views', 'Published'].map((h) => <th key={h} style={{ padding: "12px", fontSize: "12px", color: "#526057" }}>{h}</th>)}
+                          </tr></thead>
+                          <tbody>{analyticsDetails.records.map((r) => (
+                            <tr key={r.land_id} style={{ borderTop: "1px solid #E8EFE9" }}>
+                              <td style={{ padding: "12px", fontWeight: "700" }}>{r.title || `Land #${r.land_id}`}</td>
+                              <td style={{ padding: "12px", textTransform: "capitalize" }}>{String(r.approval_status || "-").replaceAll("_", " ")}</td>
+                              <td style={{ padding: "12px", textTransform: "capitalize" }}>{r.availability || "-"}</td>
+                              <td style={{ padding: "12px", fontWeight: "700" }}>{r.views || 0}</td>
+                              <td style={{ padding: "12px" }}>{r.is_published ? "Yes" : "No"}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
         {/* =================================================
             QUICK ACTIONS

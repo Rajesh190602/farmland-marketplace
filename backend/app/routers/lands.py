@@ -471,6 +471,187 @@ def get_my_listing_analytics(
     }
 
 
+
+# =========================================================
+# PHASE 7 - FARMER LISTING ANALYTICS DETAILS
+# =========================================================
+
+@router.get("/my/analytics/details")
+def get_my_listing_analytics_details(
+    category: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """Return detailed records for a farmer analytics card."""
+
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role != "farmer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only farmers can access listing analytics"
+        )
+
+    allowed_categories = {
+        "total_views",
+        "my_listings",
+        "available",
+        "reserved",
+        "sold",
+        "inquiries",
+        "offers",
+        "site_visits",
+    }
+
+    category = category.strip().lower()
+
+    if category not in allowed_categories:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid analytics category. Use one of: "
+                + ", ".join(sorted(allowed_categories))
+            ),
+        )
+
+    lands = (
+        db.query(Land)
+        .filter(Land.owner_id == current_user)
+        .order_by(Land.id.desc())
+        .all()
+    )
+
+    def availability_for(land):
+        availability = (
+            db.query(LandAvailability)
+            .filter(LandAvailability.land_id == land.id)
+            .first()
+        )
+        return (
+            availability.status.lower()
+            if availability and availability.status
+            else "available"
+        )
+
+    # Listing-based cards show one row per listing.
+    if category in {"my_listings", "available", "reserved", "sold", "total_views"}:
+        records = []
+
+        for land in lands:
+            availability_status = availability_for(land)
+            view_count = (
+                db.query(ListingView)
+                .filter(ListingView.land_id == land.id)
+                .count()
+            )
+
+            if category == "available" and availability_status != "available":
+                continue
+            if category == "reserved" and availability_status != "reserved":
+                continue
+            if category == "sold" and availability_status != "sold":
+                continue
+            if category == "total_views" and view_count <= 0:
+                continue
+
+            records.append({
+                "land_id": land.id,
+                "title": land.title,
+                "approval_status": land.status,
+                "is_published": bool(land.is_published),
+                "availability": availability_status,
+                "views": view_count,
+            })
+
+        return {
+            "category": category,
+            "total": len(records),
+            "records": records,
+        }
+
+    # Buyer activity cards show individual buyer activity.
+    if category == "inquiries":
+        inquiries = (
+            db.query(LandInquiry)
+            .filter(LandInquiry.land_id.in_([land.id for land in lands]))
+            .order_by(LandInquiry.created_at.desc())
+            .all()
+        )
+
+        records = []
+        for inquiry in inquiries:
+            buyer = db.query(User).filter(User.id == inquiry.buyer_id).first()
+            land = db.query(Land).filter(Land.id == inquiry.land_id).first()
+            records.append({
+                "id": inquiry.id,
+                "land_id": inquiry.land_id,
+                "land_title": land.title if land else "",
+                "buyer_id": inquiry.buyer_id,
+                "buyer_name": buyer.full_name if buyer else "Unknown buyer",
+                "buyer_mobile": buyer.mobile if buyer else "",
+                "message": inquiry.message or "",
+                "status": inquiry.status,
+                "created_at": inquiry.created_at,
+            })
+
+        return {"category": category, "total": len(records), "records": records}
+
+    if category == "offers":
+        offers = (
+            db.query(LandOffer)
+            .filter(LandOffer.land_id.in_([land.id for land in lands]))
+            .order_by(LandOffer.created_at.desc())
+            .all()
+        )
+
+        records = []
+        for offer in offers:
+            buyer = db.query(User).filter(User.id == offer.buyer_id).first()
+            land = db.query(Land).filter(Land.id == offer.land_id).first()
+            records.append({
+                "id": offer.id,
+                "land_id": offer.land_id,
+                "land_title": land.title if land else "",
+                "buyer_id": offer.buyer_id,
+                "buyer_name": buyer.full_name if buyer else "Unknown buyer",
+                "buyer_mobile": buyer.mobile if buyer else "",
+                "amount": offer.amount,
+                "message": offer.message or "",
+                "status": offer.status,
+                "created_at": offer.created_at,
+            })
+
+        return {"category": category, "total": len(records), "records": records}
+
+    site_visits = (
+        db.query(SiteVisit)
+        .filter(SiteVisit.land_id.in_([land.id for land in lands]))
+        .order_by(SiteVisit.created_at.desc())
+        .all()
+    )
+
+    records = []
+    for visit in site_visits:
+        buyer = db.query(User).filter(User.id == visit.buyer_id).first()
+        land = db.query(Land).filter(Land.id == visit.land_id).first()
+        records.append({
+            "id": visit.id,
+            "land_id": visit.land_id,
+            "land_title": land.title if land else "",
+            "buyer_id": visit.buyer_id,
+            "buyer_name": buyer.full_name if buyer else "Unknown buyer",
+            "buyer_mobile": buyer.mobile if buyer else "",
+            "requested_date": visit.requested_date,
+            "message": visit.message or "",
+            "status": visit.status,
+            "created_at": visit.created_at,
+        })
+
+    return {"category": category, "total": len(records), "records": records}
+
 # ==========================
 # Get My Land By ID
 # ==========================
