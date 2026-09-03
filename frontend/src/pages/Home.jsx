@@ -77,6 +77,8 @@ function Home() {
 
   const [featuredLands, setFeaturedLands] = useState([]);
   const [recentlyViewedLands, setRecentlyViewedLands] = useState([]);
+  const [recommendedLands, setRecommendedLands] = useState([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
 
   // =====================================================
   // FARMER LISTING ANALYTICS
@@ -107,12 +109,37 @@ function Home() {
       fetchListingAnalytics();
     }
 
+    if (userRole === "buyer") {
+      fetchBuyerRecommendations();
+    }
+
     // Farmers must not load other farmers' public lands on Home.
     // Buyers and admins can load featured lands.
     if (userRole !== "farmer") {
       fetchFeaturedLands();
     }
   }, []);
+
+  // =====================================================
+  // BUYER RECOMMENDATIONS - PHASE 7 STEP 45
+  // =====================================================
+
+  const fetchBuyerRecommendations = async () => {
+    if (userRole !== "buyer") return;
+
+    try {
+      setRecommendationsLoading(true);
+      const response = await api.get("/lands/recommendations", {
+        params: { limit: 6 },
+      });
+      setRecommendedLands(response.data?.recommendations || []);
+    } catch (error) {
+      console.log("Failed to load buyer recommendations:", error);
+      setRecommendedLands([]);
+    } finally {
+      setRecommendationsLoading(false);
+    }
+  };
 
   // =====================================================
   // FETCH FEATURED LANDS
@@ -1126,6 +1153,105 @@ function Home() {
             </div>
           </div>
         </div>
+
+        {/* =================================================
+            BUYER RECOMMENDATIONS - PHASE 7 STEP 45
+        ================================================= */}
+        {userRole === "buyer" && (
+          <section style={{ marginTop: "42px" }}>
+            <div className="home-section-title">
+              <div>
+                <h2>🌟 Recommended For You</h2>
+                <span>Farmland selected from your marketplace activity and preferences</span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchBuyerRecommendations}
+                disabled={recommendationsLoading}
+                style={{
+                  border: "1px solid #C8DCCB",
+                  background: "#fff",
+                  color: "#2E7D32",
+                  borderRadius: "10px",
+                  padding: "9px 14px",
+                  cursor: recommendationsLoading ? "wait" : "pointer",
+                  fontWeight: "700",
+                }}
+              >
+                {recommendationsLoading ? "Refreshing..." : "↻ Refresh"}
+              </button>
+            </div>
+
+            {recommendationsLoading && !recommendedLands.length ? (
+              <div style={{
+                background: "#fff",
+                border: "1px solid #DFE9E1",
+                borderRadius: "16px",
+                padding: "28px",
+                textAlign: "center",
+                color: "#66736A",
+              }}>
+                Finding farmland recommendations for you...
+              </div>
+            ) : recommendedLands.length ? (
+              <div
+                className="home-land-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
+                  gap: "18px",
+                }}
+              >
+                {recommendedLands.map((land) => (
+                  <div
+                    key={land.id}
+                    className="home-land-card"
+                    style={{ borderRadius: "16px", overflow: "hidden", cursor: "pointer" }}
+                    onClick={() => navigate(`/land/${land.id}`)}
+                  >
+                    <div className="home-land-image-wrap" style={{ height: "165px", overflow: "hidden" }}>
+                      {land.image_url ? (
+                        <img
+                          src={land.image_url}
+                          alt={land.title || "Recommended farmland"}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "48px", color: "#7A9B7F" }}>🌾</div>
+                      )}
+                    </div>
+
+                    <div className="home-land-details" style={{ padding: "18px" }}>
+                      <h3 style={{ margin: "0 0 8px", color: "#174D1C" }}>{land.title || `Land #${land.id}`}</h3>
+                      <p>📍 {land.village}, {land.district}</p>
+                      <p>🌱 Soil: <strong>{land.soil_type || "-"}</strong></p>
+                      <p>📐 Area: <strong>{land.area || 0} Acres</strong></p>
+                      <p style={{ fontSize: "18px", fontWeight: "850", color: "#E65100" }}>₹{land.price}</p>
+
+                      <div style={{ marginTop: "7px", padding: "9px 10px", background: "#F1F7F1", borderRadius: "9px", color: "#2E7D32", fontSize: "12px", fontWeight: "700", lineHeight: 1.45 }}>
+                        <div style={{ marginBottom: "3px" }}>✨ Recommended because:</div>
+                        <div>{(land.recommendation_reasons || []).join(" • ")}</div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="home-view-button"
+                        onClick={(event) => { event.stopPropagation(); navigate(`/land/${land.id}`); }}
+                        style={{ width: "100%", marginTop: "14px", border: "none", background: "#2E7D32", color: "#fff", padding: "12px", fontWeight: "800", cursor: "pointer" }}
+                      >
+                        View Details →
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ background: "#fff", border: "1px solid #DFE9E1", borderRadius: "16px", padding: "28px", textAlign: "center", color: "#66736A" }}>
+                We don't have enough activity yet to personalize recommendations. Browse, favorite, or view a few lands and recommendations will improve.
+              </div>
+            )}
+          </section>
+        )}
 
         {/* =================================================
             FARMER LISTING ANALYTICS - PHASE 7 STEP 44

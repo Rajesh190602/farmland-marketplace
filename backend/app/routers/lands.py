@@ -101,6 +101,299 @@ def create_land(
     }
 
 
+# =========================================================
+# STEP 45 - BUYER RECOMMENDATIONS
+# =========================================================
+
+@router.get("/recommendations")
+def get_buyer_recommendations(
+    limit: int = Query(6, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Return personalized farmland recommendations for buyers.
+
+    Recommendations are based on the buyer's existing marketplace
+    activity: favorites, listing views, inquiries, offers, site visits,
+    recently viewed lands, and saved searches.  Only approved and
+    published marketplace listings are recommended.
+    """
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role != "buyer":
+        raise HTTPException(
+            status_code=403,
+            detail="Buyer recommendations are available only for buyers",
+        )
+
+    # Import existing marketplace models through the module so this
+    # endpoint remains compatible with the current models.py.
+    Favorite = models.Favorite
+    LandInquiry = models.LandInquiry
+    LandOffer = models.LandOffer
+    SiteVisit = models.SiteVisit
+    SavedSearch = models.SavedSearch
+
+    # ---------------------------------------------------------
+    # Collect the buyer's activity and convert it into weighted
+    # preferences. Higher weights indicate stronger intent.
+    # ---------------------------------------------------------
+    activity_weights = {}
+    activity_reason = {}
+
+    def add_activity(land_id, weight, reason):
+        if not land_id:
+            return
+        activity_weights[land_id] = activity_weights.get(land_id, 0) + weight
+        activity_reason.setdefault(land_id, set()).add(reason)
+
+    for row in db.query(Favorite).filter(Favorite.user_id == current_user).all():
+        add_activity(row.land_id, 5, "favorited by you")
+
+    for row in db.query(ListingView).filter(ListingView.user_id == current_user).all():
+        add_activity(row.land_id, 4, "viewed by you")
+
+    for row in db.query(RecentlyViewedLand).filter(RecentlyViewedLand.user_id == current_user).all():
+        add_activity(row.land_id, 3, "recently viewed")
+
+    for row in db.query(LandInquiry).filter(LandInquiry.buyer_id == current_user).all():
+        add_activity(row.land_id, 6, "you inquired about similar land")
+
+    for row in db.query(LandOffer).filter(LandOffer.buyer_id == current_user).all():
+        add_activity(row.land_id, 8, "you made an offer on similar land")
+
+    for row in db.query(SiteVisit).filter(SiteVisit.buyer_id == current_user).all():
+        add_activity(row.land_id, 10, "you requested a site visit for similar land")
+
+    saved_searches = db.query(SavedSearch).filter(SavedSearch.user_id == current_user).all()
+
+    # Use interacted lands as the main preference source.
+    interacted_ids = set(activity_weights.keys())
+    interacted_lands = []
+    if interacted_ids:
+        interacted_lands = (
+            db.query(Land)
+            .filter(Land.id.in_(interacted_ids))
+            .all()
+        )
+
+    # Weighted frequency of categorical preferences.
+    preference_fields = [
+        "district",
+        "village",
+        "mandal",
+        "crop_type",
+        "soil_type",
+        "water_source",
+    ]
+    preference_scores = {field: {} for field in preference_fields}
+
+    total_preference_weight = 0
+    weighted_price = 0.0
+    weighted_area = 0.0
+
+    for land in interacted_lands:
+        weight = activity_weights.get(land.id, 0)
+        if weight <= 0:
+            continue
+
+        total_preference_weight += weight
+        weighted_price += float(land.price or 0) * weight
+        weighted_area += float(land.area or 0) * weight
+
+        for field in preference_fields:
+            value = getattr(land, field, None)
+            if value:
+                normalized = str(value).strip().lower()
+                preference_scores[field][normalized] = (
+                    preference_scores[field].get(normalized, 0) + weight
+                )
+
+    preferred_price = (
+        weighted_price / total_preference_weight
+        if total_preference_weight
+        else None
+    )
+    preferred_area = (
+        weighted_area / total_preference_weight
+        if total_preference_weight
+        else None
+    )
+
+    # ---------------------------------------------------------
+    # Candidate listings: public marketplace only, excluding
+    # the buyer's own records (normally none, but kept defensive).
+    # ---------------------------------------------------------
+    candidates = (
+        db.query(Land)
+        .filter(
+            Land.status == "approved",
+            Land.is_published == True,
+            Land.owner_id != current_user,
+        )
+        .order_by(Land.id.desc())
+        .all()
+    )
+
+    scored = []
+
+    # Helper to format readable recommendation reasons.
+    field_labels = {
+        "district": "same district",
+        "village": "same village",
+        "mandal": "same mandal",
+        "crop_type": "same crop type",
+        "soil_type": "same soil type",
+        "water_source": "same water source",
+    }
+
+    for land in candidates:
+        score = 0.0
+        reasons = []
+
+        # Strong signal: similarity to listings the buyer actually used.
+        for field in preference_fields:
+            value = getattr(land, field, None)
+            if not value:
+                continue
+            normalized = str(value).strip().lower()
+            field_score = preference_scores[field].get(normalized, 0)
+            if field_score > 0 and total_preference_weight:
+                # Normalize the influence so one field cannot dominate.
+                score += min(field_score / total_preference_weight, 1.0) * 18
+                if field_score >= max(2, total_preference_weight * 0.20):
+                    reasons.append(field_labels[field])
+
+        # Price/area similarity to the buyer's historical activity.
+        if preferred_price is not None and preferred_price > 0:
+            price_distance = abs(float(land.price or 0) - preferred_price) / preferred_price
+            if price_distance <= 0.10:
+                score += 16
+                reasons.append("similar price range")
+            elif price_distance <= 0.25:
+                score += 9
+
+        if preferred_area is not None and preferred_area > 0:
+            area_distance = abs(float(land.area or 0) - preferred_area) / preferred_area
+            if area_distance <= 0.15:
+                score += 10
+                reasons.append("similar land area")
+            elif area_distance <= 0.30:
+                score += 5
+
+        # Saved-search filters are explicit buyer preferences.
+        for saved in saved_searches:
+            search_match = 0
+            search_total = 0
+
+            for field in preference_fields:
+                expected = getattr(saved, field, None)
+                if expected:
+                    search_total += 1
+                    actual = getattr(land, field, None)
+                    if actual and str(actual).strip().lower() == str(expected).strip().lower():
+                        search_match += 1
+
+            if saved.min_price is not None:
+                search_total += 1
+                if float(land.price or 0) >= float(saved.min_price):
+                    search_match += 1
+            if saved.max_price is not None:
+                search_total += 1
+                if float(land.price or 0) <= float(saved.max_price):
+                    search_match += 1
+            if saved.min_area is not None:
+                search_total += 1
+                if float(land.area or 0) >= float(saved.min_area):
+                    search_match += 1
+            if saved.max_area is not None:
+                search_total += 1
+                if float(land.area or 0) <= float(saved.max_area):
+                    search_match += 1
+
+            if search_total:
+                ratio = search_match / search_total
+                score += ratio * 30
+                if ratio >= 0.75:
+                    reasons.append("matches your saved search")
+                    break
+
+        # Mild popularity/freshness signal for buyers with little/no history.
+        view_count = db.query(ListingView).filter(ListingView.land_id == land.id).count()
+        score += min(view_count, 20) * 0.5
+
+        # If there is no history, keep useful marketplace listings visible.
+        if not activity_weights and not saved_searches:
+            if view_count > 0:
+                reasons.append("popular listing")
+            else:
+                reasons.append("new marketplace listing")
+
+        # If there is activity but no explicit textual reason, provide a clear fallback.
+        if not reasons:
+            reasons.append("similar to your marketplace activity")
+
+        # Avoid recommending listings the buyer has already interacted with.
+        # They can still discover them through Favorites/Recently Viewed.
+        if land.id in interacted_ids:
+            continue
+
+        scored.append({
+            "land": land,
+            "score": round(score, 2),
+            "reasons": list(dict.fromkeys(reasons))[:3],
+            "view_count": view_count,
+        })
+
+    scored.sort(key=lambda item: (item["score"], item["land"].id), reverse=True)
+
+    results = []
+    for item in scored[:limit]:
+        land = item["land"]
+        results.append({
+            "id": land.id,
+            "title": land.title,
+            "description": land.description,
+            "image_url": land.image_url,
+            "price": land.price,
+            "area": land.area,
+            "village": land.village,
+            "mandal": land.mandal,
+            "district": land.district,
+            "state": land.state,
+            "pincode": land.pincode,
+            "survey_number": land.survey_number,
+            "soil_type": land.soil_type,
+            "water_source": land.water_source,
+            "crop_type": land.crop_type,
+            "latitude": land.latitude,
+            "longitude": land.longitude,
+            "status": land.status,
+            "is_published": land.is_published,
+            "owner_id": land.owner_id,
+            "recommendation_score": item["score"],
+            "recommendation_reasons": item["reasons"],
+            "view_count": item["view_count"],
+        })
+
+    return {
+        "count": len(results),
+        "based_on": {
+            "favorites": sum(1 for land_id in activity_weights if "favorited by you" in activity_reason.get(land_id, set())),
+            "views": sum(1 for land_id in activity_weights if "viewed by you" in activity_reason.get(land_id, set())),
+            "inquiries": sum(1 for land_id in activity_weights if "you inquired about similar land" in activity_reason.get(land_id, set())),
+            "offers": sum(1 for land_id in activity_weights if "you made an offer on similar land" in activity_reason.get(land_id, set())),
+            "site_visits": sum(1 for land_id in activity_weights if "you requested a site visit for similar land" in activity_reason.get(land_id, set())),
+            "saved_searches": len(saved_searches),
+        },
+        "recommendations": results,
+    }
+
+
 # ==========================
 # Get Lands
 # ==========================
