@@ -92,6 +92,17 @@ function AdminDashboard() {
     },
   });
 
+  // Marketplace record viewer
+  const [marketplaceRecords, setMarketplaceRecords] = useState([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState("");
+  const [recordsModal, setRecordsModal] = useState({
+    open: false,
+    category: "",
+    status: "",
+    title: "",
+  });
+
 
   // =========================================================
   // LOAD DASHBOARD
@@ -395,6 +406,131 @@ function AdminDashboard() {
 
     }
 
+  };
+
+  // =========================================================
+  // OPEN MARKETPLACE RECORDS
+  // =========================================================
+
+  const openMarketplaceRecords = async (category, status, title) => {
+    setRecordsModal({
+      open: true,
+      category,
+      status,
+      title,
+    });
+    setMarketplaceRecords([]);
+    setRecordsError("");
+    setRecordsLoading(true);
+
+    try {
+      const response = await api.get(
+        "/admin/marketplace-records",
+        {
+          params: {
+            category,
+            status,
+          },
+        }
+      );
+
+      setMarketplaceRecords(
+        response.data?.records || []
+      );
+    } catch (error) {
+      console.error(
+        "Marketplace Records Error:",
+        error
+      );
+      setRecordsError(
+        error.response?.data?.detail ||
+          "Failed to load marketplace records."
+      );
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
+
+  const closeMarketplaceRecords = () => {
+    setRecordsModal({
+      open: false,
+      category: "",
+      status: "",
+      title: "",
+    });
+    setMarketplaceRecords([]);
+    setRecordsError("");
+  };
+
+
+  // =========================================================
+  // DOWNLOAD MARKETPLACE RECORDS
+  // =========================================================
+
+  const downloadMarketplaceRecords = () => {
+    if (marketplaceRecords.length === 0) {
+      alert("There are no records to download.");
+      return;
+    }
+
+    try {
+      const columns = Array.from(
+        new Set(
+          marketplaceRecords.flatMap((record) =>
+            Object.keys(record)
+          )
+        )
+      );
+
+      const escapeCsvValue = (value) => {
+        if (value === null || value === undefined) {
+          return "";
+        }
+
+        const text = String(value);
+        return /[\",\n]/.test(text)
+          ? `\"${text.replace(/\"/g, '\"\"')}\"`
+          : text;
+      };
+
+      const csvRows = [
+        columns.map(escapeCsvValue).join(","),
+        ...marketplaceRecords.map((record) =>
+          columns
+            .map((column) => escapeCsvValue(record[column]))
+            .join(",")
+        ),
+      ];
+
+      const blob = new Blob(
+        [csvRows.join("\r\n")],
+        { type: "text/csv;charset=utf-8;" }
+      );
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeTitle = (recordsModal.title || "marketplace-records")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `${safeTitle || "marketplace-records"}.csv`
+      );
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(
+        "Marketplace Records Download Error:",
+        error
+      );
+      alert("Failed to download marketplace records.");
+    }
   };
 
 
@@ -1317,21 +1453,93 @@ function AdminDashboard() {
           }}
         >
 
-          <div style={cardStyle("#43A047")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "listing",
+                "available",
+                "Available Listings"
+              )
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                openMarketplaceRecords(
+                  "listing",
+                  "available",
+                  "Available Listings"
+                );
+              }
+            }}
+            style={{
+              ...cardStyle("#43A047"),
+              cursor: "pointer",
+            }}
+            title="Click to view available listings"
+          >
             <h3>🟢 Available</h3>
             <h1>
               {marketplaceStats.listing_availability.available}
             </h1>
           </div>
 
-          <div style={cardStyle("#F9A825")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "listing",
+                "reserved",
+                "Reserved Listings"
+              )
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                openMarketplaceRecords(
+                  "listing",
+                  "reserved",
+                  "Reserved Listings"
+                );
+              }
+            }}
+            style={{
+              ...cardStyle("#F9A825"),
+              cursor: "pointer",
+            }}
+            title="Click to view reserved listings"
+          >
             <h3>🟡 Reserved</h3>
             <h1>
               {marketplaceStats.listing_availability.reserved}
             </h1>
           </div>
 
-          <div style={cardStyle("#E53935")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "listing",
+                "sold",
+                "Sold Listings"
+              )
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                openMarketplaceRecords(
+                  "listing",
+                  "sold",
+                  "Sold Listings"
+                );
+              }
+            }}
+            style={{
+              ...cardStyle("#E53935"),
+              cursor: "pointer",
+            }}
+            title="Click to view sold listings"
+          >
             <h3>🔴 Sold</h3>
             <h1>
               {marketplaceStats.listing_availability.sold}
@@ -1360,22 +1568,82 @@ function AdminDashboard() {
           }}
         >
 
-          <div style={cardStyle("#1565C0")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "inquiry",
+                "",
+                "All Inquiries"
+              )
+            }
+            style={{
+              ...cardStyle("#1565C0"),
+              cursor: "pointer",
+            }}
+            title="Click to view all inquiries"
+          >
             <h3>Total Inquiries</h3>
             <h1>{marketplaceStats.inquiries.total}</h1>
           </div>
 
-          <div style={cardStyle("#F9A825")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "inquiry",
+                "pending",
+                "Pending Inquiries"
+              )
+            }
+            style={{
+              ...cardStyle("#F9A825"),
+              cursor: "pointer",
+            }}
+            title="Click to view pending inquiries"
+          >
             <h3>🟡 Pending</h3>
             <h1>{marketplaceStats.inquiries.pending}</h1>
           </div>
 
-          <div style={cardStyle("#43A047")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "inquiry",
+                "accepted",
+                "Accepted Inquiries"
+              )
+            }
+            style={{
+              ...cardStyle("#43A047"),
+              cursor: "pointer",
+            }}
+            title="Click to view accepted inquiries"
+          >
             <h3>✅ Accepted</h3>
             <h1>{marketplaceStats.inquiries.accepted}</h1>
           </div>
 
-          <div style={cardStyle("#E53935")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "inquiry",
+                "rejected",
+                "Rejected Inquiries"
+              )
+            }
+            style={{
+              ...cardStyle("#E53935"),
+              cursor: "pointer",
+            }}
+            title="Click to view rejected inquiries"
+          >
             <h3>❌ Rejected</h3>
             <h1>{marketplaceStats.inquiries.rejected}</h1>
           </div>
@@ -1402,22 +1670,82 @@ function AdminDashboard() {
           }}
         >
 
-          <div style={cardStyle("#1565C0")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "offer",
+                "",
+                "All Offers"
+              )
+            }
+            style={{
+              ...cardStyle("#1565C0"),
+              cursor: "pointer",
+            }}
+            title="Click to view all offers"
+          >
             <h3>Total Offers</h3>
             <h1>{marketplaceStats.offers.total}</h1>
           </div>
 
-          <div style={cardStyle("#F9A825")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "offer",
+                "pending",
+                "Pending Offers"
+              )
+            }
+            style={{
+              ...cardStyle("#F9A825"),
+              cursor: "pointer",
+            }}
+            title="Click to view pending offers"
+          >
             <h3>🟡 Pending</h3>
             <h1>{marketplaceStats.offers.pending}</h1>
           </div>
 
-          <div style={cardStyle("#43A047")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "offer",
+                "accepted",
+                "Accepted Offers"
+              )
+            }
+            style={{
+              ...cardStyle("#43A047"),
+              cursor: "pointer",
+            }}
+            title="Click to view accepted offers"
+          >
             <h3>✅ Accepted</h3>
             <h1>{marketplaceStats.offers.accepted}</h1>
           </div>
 
-          <div style={cardStyle("#E53935")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "offer",
+                "rejected",
+                "Rejected Offers"
+              )
+            }
+            style={{
+              ...cardStyle("#E53935"),
+              cursor: "pointer",
+            }}
+            title="Click to view rejected offers"
+          >
             <h3>❌ Rejected</h3>
             <h1>{marketplaceStats.offers.rejected}</h1>
           </div>
@@ -1443,32 +1771,122 @@ function AdminDashboard() {
           }}
         >
 
-          <div style={cardStyle("#1565C0")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "site_visit",
+                "",
+                "All Site Visits"
+              )
+            }
+            style={{
+              ...cardStyle("#1565C0"),
+              cursor: "pointer",
+            }}
+            title="Click to view all site visits"
+          >
             <h3>Total Visits</h3>
             <h1>{marketplaceStats.site_visits.total}</h1>
           </div>
 
-          <div style={cardStyle("#F9A825")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "site_visit",
+                "pending",
+                "Pending Site Visits"
+              )
+            }
+            style={{
+              ...cardStyle("#F9A825"),
+              cursor: "pointer",
+            }}
+            title="Click to view pending site visits"
+          >
             <h3>🟡 Pending</h3>
             <h1>{marketplaceStats.site_visits.pending}</h1>
           </div>
 
-          <div style={cardStyle("#1976D2")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "site_visit",
+                "accepted",
+                "Accepted Site Visits"
+              )
+            }
+            style={{
+              ...cardStyle("#1976D2"),
+              cursor: "pointer",
+            }}
+            title="Click to view accepted site visits"
+          >
             <h3>🔵 Accepted</h3>
             <h1>{marketplaceStats.site_visits.accepted}</h1>
           </div>
 
-          <div style={cardStyle("#E53935")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "site_visit",
+                "rejected",
+                "Rejected Site Visits"
+              )
+            }
+            style={{
+              ...cardStyle("#E53935"),
+              cursor: "pointer",
+            }}
+            title="Click to view rejected site visits"
+          >
             <h3>❌ Rejected</h3>
             <h1>{marketplaceStats.site_visits.rejected}</h1>
           </div>
 
-          <div style={cardStyle("#43A047")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "site_visit",
+                "completed",
+                "Completed Site Visits"
+              )
+            }
+            style={{
+              ...cardStyle("#43A047"),
+              cursor: "pointer",
+            }}
+            title="Click to view completed site visits"
+          >
             <h3>✅ Completed</h3>
             <h1>{marketplaceStats.site_visits.completed}</h1>
           </div>
 
-          <div style={cardStyle("#616161")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              openMarketplaceRecords(
+                "site_visit",
+                "cancelled",
+                "Cancelled Site Visits"
+              )
+            }
+            style={{
+              ...cardStyle("#616161"),
+              cursor: "pointer",
+            }}
+            title="Click to view cancelled site visits"
+          >
             <h3>⚪ Cancelled</h3>
             <h1>{marketplaceStats.site_visits.cancelled}</h1>
           </div>
@@ -1476,7 +1894,250 @@ function AdminDashboard() {
         </div>
 
       </div>
+\n\n      {/* =====================================================
+          MARKETPLACE RECORD VIEWER
+      ===================================================== */}
+      {recordsModal.open && (
+        <div
+          onClick={closeMarketplaceRecords}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              background: "#fff",
+              width: "100%",
+              maxWidth: "1100px",
+              maxHeight: "85vh",
+              overflow: "auto",
+              borderRadius: "18px",
+              padding: "25px",
+              boxShadow: "0 12px 35px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "15px",
+                marginBottom: "20px",
+              }}
+            >
+              <h2 style={{ margin: 0, color: "#2E7D32" }}>
+                {recordsModal.title}
+              </h2>
 
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={downloadMarketplaceRecords}
+                  disabled={
+                    recordsLoading ||
+                    marketplaceRecords.length === 0
+                  }
+                  style={{
+                    border: "none",
+                    background:
+                      recordsLoading || marketplaceRecords.length === 0
+                        ? "#BDBDBD"
+                        : "#2E7D32",
+                    color: "#fff",
+                    borderRadius: "8px",
+                    padding: "9px 14px",
+                    cursor:
+                      recordsLoading || marketplaceRecords.length === 0
+                        ? "not-allowed"
+                        : "pointer",
+                    fontWeight: "bold",
+                    fontSize: "15px",
+                  }}
+                  title="Download these records as CSV"
+                >
+                  <FaDownload /> Download CSV
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closeMarketplaceRecords}
+                  style={{
+                    border: "none",
+                    background: "#E53935",
+                    color: "#fff",
+                    borderRadius: "8px",
+                    padding: "9px 14px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                    fontSize: "16px",
+                  }}
+                >
+                  ✕ Close
+                </button>
+              </div>
+            </div>
+
+            {recordsLoading ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "50px",
+                  color: "#2E7D32",
+                  fontWeight: "bold",
+                }}
+              >
+                Loading records...
+              </div>
+            ) : recordsError ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "40px",
+                  color: "#C62828",
+                  fontWeight: "bold",
+                }}
+              >
+                {recordsError}
+              </div>
+            ) : marketplaceRecords.length === 0 ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "40px",
+                  color: "#777",
+                }}
+              >
+                No records found.
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    minWidth: "700px",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ background: "#E8F5E9" }}>
+                      <th style={modalThStyle}>ID</th>
+                      <th style={modalThStyle}>Land</th>
+
+                      {recordsModal.category === "listing" ? (
+                        <>
+                          <th style={modalThStyle}>Owner</th>
+                          <th style={modalThStyle}>Location</th>
+                          <th style={modalThStyle}>Status</th>
+                        </>
+                      ) : (
+                        <>
+                          <th style={modalThStyle}>Buyer</th>
+                          <th style={modalThStyle}>Owner</th>
+                          {recordsModal.category === "offer" && (
+                            <th style={modalThStyle}>Amount</th>
+                          )}
+                          {recordsModal.category === "site_visit" && (
+                            <th style={modalThStyle}>Visit Date</th>
+                          )}
+                          <th style={modalThStyle}>Status</th>
+                          <th style={modalThStyle}>Created</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {marketplaceRecords.map((record) => (
+                      <tr key={record.id}>
+                        <td style={modalTdStyle}>{record.id}</td>
+                        <td style={modalTdStyle}>
+                          <strong>{record.land_title}</strong>
+                        </td>
+
+                        {recordsModal.category === "listing" ? (
+                          <>
+                            <td style={modalTdStyle}>
+                              {record.owner_name}
+                              {record.owner_mobile && (
+                                <div style={{ fontSize: "12px", color: "#777" }}>
+                                  {record.owner_mobile}
+                                </div>
+                              )}
+                            </td>
+                            <td style={modalTdStyle}>
+                              {record.location || "-"}
+                            </td>
+                            <td style={modalTdStyle}>
+                              <span style={modalStatusStyle}>
+                                {record.status}
+                              </span>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={modalTdStyle}>
+                              {record.buyer_name}
+                              {record.buyer_mobile && (
+                                <div style={{ fontSize: "12px", color: "#777" }}>
+                                  {record.buyer_mobile}
+                                </div>
+                              )}
+                            </td>
+                            <td style={modalTdStyle}>
+                              {record.owner_name}
+                            </td>
+
+                            {recordsModal.category === "offer" && (
+                              <td style={modalTdStyle}>
+                                ₹{Number(record.amount || 0).toLocaleString("en-IN")}
+                              </td>
+                            )}
+
+                            {recordsModal.category === "site_visit" && (
+                              <td style={modalTdStyle}>
+                                {record.requested_date
+                                  ? new Date(record.requested_date).toLocaleString()
+                                  : "-"}
+                              </td>
+                            )}
+
+                            <td style={modalTdStyle}>
+                              <span style={modalStatusStyle}>
+                                {record.status}
+                              </span>
+                            </td>
+
+                            <td style={modalTdStyle}>
+                              {record.created_at
+                                ? new Date(record.created_at).toLocaleString()
+                                : "-"}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* =====================================================
           REPORTS
@@ -1905,6 +2566,31 @@ function AdminDashboard() {
   );
 
 }
+
+
+const modalThStyle = {
+  padding: "12px",
+  textAlign: "left",
+  borderBottom: "2px solid #ddd",
+  whiteSpace: "nowrap",
+};
+
+const modalTdStyle = {
+  padding: "12px",
+  borderBottom: "1px solid #eee",
+  verticalAlign: "top",
+};
+
+const modalStatusStyle = {
+  display: "inline-block",
+  padding: "5px 9px",
+  borderRadius: "14px",
+  background: "#E8F5E9",
+  color: "#2E7D32",
+  fontWeight: "bold",
+  fontSize: "12px",
+  textTransform: "capitalize",
+};
 
 
 export default AdminDashboard;

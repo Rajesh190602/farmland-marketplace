@@ -2148,6 +2148,200 @@ def restore_user(
 # #35 Site Visit Statistics
 # =========================================================
 
+# =========================================================
+# ADMIN - MARKETPLACE RECORDS
+# =========================================================
+
+@router.get("/marketplace-records")
+def marketplace_records(
+    category: str = Query(default=""),
+    status: str = Query(default=""),
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Return marketplace records for the Admin Dashboard statistic cards.
+
+    Supported categories:
+    - listing
+    - inquiry
+    - offer
+    - site_visit
+
+    Status is optional. When omitted, all records in the selected
+    category are returned.
+    """
+    category = category.strip().lower()
+    status = status.strip().lower()
+
+    allowed_categories = {"listing", "inquiry", "offer", "site_visit"}
+    if category not in allowed_categories:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid marketplace category.",
+        )
+
+    result = []
+
+    if category == "listing":
+        allowed_statuses = {"", "available", "reserved", "sold"}
+        if status not in allowed_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid listing status. Use available, reserved, or sold.",
+            )
+
+        query = (
+            db.query(Land, LandAvailability)
+            .join(
+                LandAvailability,
+                LandAvailability.land_id == Land.id,
+            )
+        )
+        if status:
+            query = query.filter(LandAvailability.status == status)
+
+        rows = query.order_by(LandAvailability.updated_at.desc(), Land.id.desc()).all()
+
+        for land, availability in rows:
+            owner = (
+                db.query(User)
+                .filter(User.id == land.owner_id)
+                .first()
+            )
+            result.append({
+                "id": land.id,
+                "land_id": land.id,
+                "land_title": land.title,
+                "location": ", ".join(
+                    part for part in [land.village, land.mandal, land.district] if part
+                ),
+                "owner_name": owner.full_name if owner else "Unknown",
+                "owner_mobile": owner.mobile if owner else "",
+                "land_status": land.status,
+                "status": availability.status,
+                "updated_at": availability.updated_at,
+            })
+
+    elif category == "inquiry":
+        allowed_statuses = {"", "pending", "accepted", "rejected"}
+        if status not in allowed_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid inquiry status. Use pending, accepted, or rejected.",
+            )
+
+        query = db.query(LandInquiry)
+        if status:
+            query = query.filter(LandInquiry.status == status)
+
+        rows = query.order_by(LandInquiry.created_at.desc()).all()
+
+        for inquiry in rows:
+            land = db.query(Land).filter(Land.id == inquiry.land_id).first()
+            buyer = db.query(User).filter(User.id == inquiry.buyer_id).first()
+            owner = (
+                db.query(User).filter(User.id == land.owner_id).first()
+                if land else None
+            )
+            result.append({
+                "id": inquiry.id,
+                "land_id": inquiry.land_id,
+                "land_title": land.title if land else "Land no longer available",
+                "buyer_name": buyer.full_name if buyer else "Unknown",
+                "buyer_mobile": buyer.mobile if buyer else "",
+                "owner_name": owner.full_name if owner else "Unknown",
+                "status": inquiry.status,
+                "message": inquiry.message,
+                "created_at": inquiry.created_at,
+            })
+
+    elif category == "offer":
+        allowed_statuses = {"", "pending", "accepted", "rejected"}
+        if status not in allowed_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid offer status. Use pending, accepted, or rejected.",
+            )
+
+        query = db.query(LandOffer)
+        if status:
+            query = query.filter(LandOffer.status == status)
+
+        rows = query.order_by(LandOffer.created_at.desc()).all()
+
+        for offer in rows:
+            land = db.query(Land).filter(Land.id == offer.land_id).first()
+            buyer = db.query(User).filter(User.id == offer.buyer_id).first()
+            owner = (
+                db.query(User).filter(User.id == land.owner_id).first()
+                if land else None
+            )
+            result.append({
+                "id": offer.id,
+                "land_id": offer.land_id,
+                "land_title": land.title if land else "Land no longer available",
+                "buyer_name": buyer.full_name if buyer else "Unknown",
+                "buyer_mobile": buyer.mobile if buyer else "",
+                "owner_name": owner.full_name if owner else "Unknown",
+                "amount": offer.amount,
+                "status": offer.status,
+                "message": offer.message,
+                "created_at": offer.created_at,
+            })
+
+    else:  # site_visit
+        allowed_statuses = {
+            "",
+            "pending",
+            "accepted",
+            "rejected",
+            "completed",
+            "cancelled",
+        }
+        if status not in allowed_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid site visit status. Use pending, accepted, rejected, "
+                    "completed, or cancelled."
+                ),
+            )
+
+        query = db.query(SiteVisit)
+        if status:
+            query = query.filter(SiteVisit.status == status)
+
+        rows = query.order_by(SiteVisit.requested_date.asc(), SiteVisit.id.desc()).all()
+
+        for visit in rows:
+            land = db.query(Land).filter(Land.id == visit.land_id).first()
+            buyer = db.query(User).filter(User.id == visit.buyer_id).first()
+            owner = (
+                db.query(User).filter(User.id == land.owner_id).first()
+                if land else None
+            )
+            result.append({
+                "id": visit.id,
+                "land_id": visit.land_id,
+                "land_title": land.title if land else "Land no longer available",
+                "buyer_name": buyer.full_name if buyer else "Unknown",
+                "buyer_mobile": buyer.mobile if buyer else "",
+                "owner_name": owner.full_name if owner else "Unknown",
+                "requested_date": visit.requested_date,
+                "status": visit.status,
+                "message": visit.message,
+                "created_at": visit.created_at,
+            })
+
+    return {
+        "category": category,
+        "status": status,
+        "total": len(result),
+        "records": result,
+    }
+
+
 @router.get("/marketplace-statistics")
 def marketplace_statistics(
     db: Session = Depends(get_db),
