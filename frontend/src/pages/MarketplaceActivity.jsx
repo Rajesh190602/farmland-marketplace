@@ -15,6 +15,13 @@ function MarketplaceActivity() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
 
+  // PHASE 6 - REVIEWS & RATINGS
+  const [reviewState, setReviewState] = useState({});
+  const [reviewRating, setReviewRating] = useState({});
+  const [reviewComment, setReviewComment] = useState({});
+  const [reviewLoading, setReviewLoading] = useState(null);
+  const [reviewError, setReviewError] = useState({});
+
   // =====================================================
   // LOAD MARKETPLACE ACTIVITY
   // =====================================================
@@ -41,6 +48,7 @@ function MarketplaceActivity() {
         setInquiries(inquiriesResponse.data || []);
         setOffers(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
+        await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else if (userRole === "buyer") {
         const [
           inquiriesResponse,
@@ -55,6 +63,7 @@ function MarketplaceActivity() {
         setInquiries(inquiriesResponse.data || []);
         setOffers(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
+        await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else {
         setInquiries([]);
         setOffers([]);
@@ -74,83 +83,6 @@ function MarketplaceActivity() {
       setLoading(false);
     }
   };
-
-  // =====================================================
-  // BUYER ACTIVITY / HISTORY HELPERS
-  // =====================================================
-
-  const openLand = (landId) => {
-    if (!landId) {
-      return;
-    }
-
-    navigate(`/lands/${landId}`);
-  };
-
-  const formatDate = (value) => {
-    if (!value) {
-      return "Date unavailable";
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "Date unavailable";
-    }
-
-    return date.toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  };
-
-  const getRecentActivity = () => {
-    const activity = [
-      ...inquiries.map((item) => ({
-        type: "Inquiry",
-        icon: "💬",
-        landId: item.land_id,
-        status: item.status,
-        message: item.message,
-        date: item.created_at,
-        id: item.id,
-      })),
-      ...offers.map((item) => ({
-        type: "Offer",
-        icon: "💰",
-        landId: item.land_id,
-        status: item.status,
-        message: item.message,
-        amount: item.amount,
-        date: item.created_at,
-        id: item.id,
-      })),
-      ...siteVisits.map((item) => ({
-        type: "Site Visit",
-        icon: "📅",
-        landId: item.land_id,
-        status: item.status,
-        message: item.message,
-        date: item.created_at || item.requested_date,
-        requestedDate: item.requested_date,
-        id: item.id,
-      })),
-    ];
-
-    return activity
-      .sort((a, b) => {
-        const first = new Date(a.date || 0).getTime();
-        const second = new Date(b.date || 0).getTime();
-        return second - first;
-      })
-      .slice(0, 10);
-  };
-
-  const getStatusCount = (items, status) =>
-    items.filter(
-      (item) =>
-        String(item.status || "").toLowerCase() === status
-    ).length;
 
   // =====================================================
   // START CHAT
@@ -280,6 +212,328 @@ function MarketplaceActivity() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  // =====================================================
+  // PHASE 6 - REVIEW HELPERS
+  // =====================================================
+
+  const getReviewKey = (item) => `${item.land_id}-${item.buyer_id}`;
+
+  const getReviewTargetId = async (item) => {
+    if (userRole === "farmer") {
+      return Number(item.buyer_id || 0);
+    }
+
+    try {
+      const response = await api.get(`/lands/${Number(item.land_id)}`);
+      return Number(response.data?.owner_id || 0);
+    } catch (error) {
+      console.error("Failed to load farmer for review:", error);
+      return 0;
+    }
+  };
+
+  const checkReviewEligibility = async (item) => {
+    if (item.status !== "completed") return;
+
+    const reviewedUserId = await getReviewTargetId(item);
+    const key = getReviewKey(item);
+
+    if (!reviewedUserId) {
+      setReviewState((prev) => ({
+        ...prev,
+        [key]: {
+          eligible: false,
+          reason: "The other user's information is unavailable for this site visit.",
+        },
+      }));
+      return;
+    }
+
+    try {
+      const response = await api.get("/reviews/eligibility", {
+        params: {
+          land_id: Number(item.land_id),
+          reviewed_user_id: reviewedUserId,
+        },
+      });
+
+      setReviewState((prev) => ({
+        ...prev,
+        [key]: {
+          ...response.data,
+          reviewed_user_id: reviewedUserId,
+        },
+      }));
+    } catch (error) {
+      console.error("Failed to check review eligibility:", error);
+      setReviewState((prev) => ({
+        ...prev,
+        [key]: {
+          eligible: false,
+          reviewed_user_id: reviewedUserId,
+          reason:
+            error.response?.data?.detail ||
+            "Unable to check review eligibility.",
+        },
+      }));
+    }
+  };
+
+  const checkCompletedReviewEligibility = async (items) => {
+    await Promise.all(
+      items
+        .filter((item) => item.status === "completed")
+        .map((item) => checkReviewEligibility(item))
+    );
+  };
+
+  const submitActivityReview = async (item) => {
+    const key = getReviewKey(item);
+    const state = reviewState[key];
+
+    if (!state?.eligible) {
+      alert(
+        state?.reason ||
+          "You are not eligible to submit this review."
+      );
+      return;
+    }
+
+    const rating = Number(reviewRating[key] || 5);
+    const comment = String(reviewComment[key] || "").trim();
+
+    if (rating < 1 || rating > 5) {
+      alert("Please select a rating from 1 to 5.");
+      return;
+    }
+
+    if (comment.length > 2000) {
+      alert("Review comment must be 2000 characters or less.");
+      return;
+    }
+
+    try {
+      setReviewLoading(key);
+      setReviewError((prev) => ({ ...prev, [key]: "" }));
+
+      await api.post("/reviews", {
+        reviewed_user_id: Number(state.reviewed_user_id),
+        land_id: Number(item.land_id),
+        rating,
+        comment: comment || null,
+      });
+
+      setReviewRating((prev) => ({ ...prev, [key]: 5 }));
+      setReviewComment((prev) => ({ ...prev, [key]: "" }));
+
+      await checkReviewEligibility(item);
+      alert("Review submitted successfully.");
+    } catch (error) {
+      console.error("Failed to submit review:", error);
+      const message =
+        error.response?.data?.detail ||
+        "Failed to submit review.";
+      setReviewError((prev) => ({ ...prev, [key]: message }));
+      alert(message);
+    } finally {
+      setReviewLoading(null);
+    }
+  };
+
+  const ReviewCard = ({ item }) => {
+    const key = getReviewKey(item);
+    const state = reviewState[key];
+    const rating = Number(reviewRating[key] || 5);
+    const comment = reviewComment[key] || "";
+    const targetLabel = userRole === "farmer" ? "Buyer" : "Farmer";
+    const isSubmitting = reviewLoading === key;
+
+    if (!state) {
+      return (
+        <button
+          type="button"
+          onClick={() => checkReviewEligibility(item)}
+          style={{
+            width: "100%",
+            marginTop: "15px",
+            border: "none",
+            borderRadius: "9px",
+            padding: "10px",
+            background: "#6A1B9A",
+            color: "#fff",
+            cursor: "pointer",
+            fontWeight: "700",
+          }}
+        >
+          ⭐ Check Review Eligibility
+        </button>
+      );
+    }
+
+    if (!state.eligible) {
+      return (
+        <div
+          style={{
+            marginTop: "15px",
+            padding: "10px",
+            background: "#F5F5F5",
+            borderRadius: "9px",
+            color: "#666",
+            fontSize: "13px",
+            lineHeight: 1.5,
+          }}
+        >
+          ⭐ {state.reason || "This review is not available."}
+        </div>
+      );
+    }
+
+    if (state.showForm !== true) {
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            setReviewState((prev) => ({
+              ...prev,
+              [key]: { ...prev[key], showForm: true },
+            }))
+          }
+          style={{
+            width: "100%",
+            marginTop: "15px",
+            border: "none",
+            borderRadius: "9px",
+            padding: "10px",
+            background: "#6A1B9A",
+            color: "#fff",
+            cursor: "pointer",
+            fontWeight: "700",
+          }}
+        >
+          ⭐ Rate {targetLabel}
+        </button>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          marginTop: "15px",
+          paddingTop: "15px",
+          borderTop: "1px solid #eee",
+        }}
+      >
+        <div
+          style={{
+            fontWeight: "700",
+            color: "#6A1B9A",
+            marginBottom: "8px",
+          }}
+        >
+          ⭐ Rate {targetLabel}
+        </div>
+
+        <div style={{ display: "flex", gap: "5px", marginBottom: "10px" }}>
+          {[1, 2, 3, 4, 5].map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() =>
+                setReviewRating((prev) => ({
+                  ...prev,
+                  [key]: value,
+                }))
+              }
+              aria-label={`${value} star`}
+              style={{
+                border: "none",
+                background: "transparent",
+                fontSize: "28px",
+                cursor: "pointer",
+                padding: "0 2px",
+                opacity: value <= rating ? 1 : 0.3,
+              }}
+            >
+              ⭐
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          value={comment}
+          maxLength={2000}
+          rows={4}
+          placeholder={`Write your review about the ${targetLabel.toLowerCase()}...`}
+          onChange={(e) =>
+            setReviewComment((prev) => ({
+              ...prev,
+              [key]: e.target.value,
+            }))
+          }
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            resize: "vertical",
+            padding: "10px",
+            border: "1px solid #ccc",
+            borderRadius: "9px",
+            marginBottom: "6px",
+          }}
+        />
+
+        <div style={{ fontSize: "12px", color: "#777", marginBottom: "8px" }}>
+          {comment.length}/2000 characters
+        </div>
+
+        {reviewError[key] && (
+          <div style={{ color: "#C62828", fontSize: "13px", marginBottom: "8px" }}>
+            {reviewError[key]}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+          <button
+            type="button"
+            onClick={() => submitActivityReview(item)}
+            disabled={isSubmitting}
+            style={{
+              border: "none",
+              borderRadius: "9px",
+              padding: "10px",
+              background: "#2E7D32",
+              color: "#fff",
+              cursor: isSubmitting ? "not-allowed" : "pointer",
+              fontWeight: "700",
+            }}
+          >
+            {isSubmitting ? "Submitting..." : "Submit Review"}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setReviewState((prev) => ({
+                ...prev,
+                [key]: { ...prev[key], showForm: false },
+              }))
+            }
+            disabled={isSubmitting}
+            style={{
+              border: "1px solid #aaa",
+              borderRadius: "9px",
+              padding: "10px",
+              background: "#fff",
+              color: "#555",
+              cursor: isSubmitting ? "not-allowed" : "pointer",
+              fontWeight: "700",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
   };
 
   // =====================================================
@@ -488,247 +742,6 @@ function MarketplaceActivity() {
               LOADING
           ================================================= */}
 
-          {/* =================================================
-              BUYER ACTIVITY / HISTORY SUMMARY
-          ================================================= */}
-
-          {userRole === "buyer" && (
-            <>
-              <section
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit,minmax(170px,1fr))",
-                  gap: "15px",
-                  marginBottom: "30px",
-                }}
-              >
-                {[
-                  {
-                    label: "Total Inquiries",
-                    value: inquiries.length,
-                    icon: "💬",
-                  },
-                  {
-                    label: "Total Offers",
-                    value: offers.length,
-                    icon: "💰",
-                  },
-                  {
-                    label: "Site Visits",
-                    value: siteVisits.length,
-                    icon: "📅",
-                  },
-                  {
-                    label: "Pending",
-                    value:
-                      getStatusCount(inquiries, "pending") +
-                      getStatusCount(offers, "pending") +
-                      getStatusCount(siteVisits, "pending"),
-                    icon: "⏳",
-                  },
-                  {
-                    label: "Accepted",
-                    value:
-                      getStatusCount(inquiries, "accepted") +
-                      getStatusCount(offers, "accepted") +
-                      getStatusCount(siteVisits, "accepted"),
-                    icon: "✅",
-                  },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    style={{
-                      background: "#fff",
-                      borderRadius: "15px",
-                      padding: "20px 16px",
-                      boxShadow:
-                        "0 5px 18px rgba(0,0,0,0.07)",
-                      border: "1px solid #eee",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div style={{ fontSize: "27px" }}>
-                      {stat.icon}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "28px",
-                        fontWeight: "800",
-                        color: "#2E7D32",
-                        marginTop: "5px",
-                      }}
-                    >
-                      {stat.value}
-                    </div>
-                    <div
-                      style={{
-                        color: "#666",
-                        fontSize: "13px",
-                        fontWeight: "600",
-                        marginTop: "3px",
-                      }}
-                    >
-                      {stat.label}
-                    </div>
-                  </div>
-                ))}
-              </section>
-
-              <section style={{ marginBottom: "40px" }}>
-                <h2
-                  style={{
-                    color: "#6A1B9A",
-                    marginBottom: "18px",
-                  }}
-                >
-                  🕘 Recent Activity
-                </h2>
-
-                {getRecentActivity().length === 0 ? (
-                  <Card>
-                    <p
-                      style={{
-                        margin: 0,
-                        color: "#777",
-                        textAlign: "center",
-                      }}
-                    >
-                      No marketplace activity yet. When you
-                      send an inquiry, make an offer, or request
-                      a site visit, it will appear here.
-                    </p>
-                  </Card>
-                ) : (
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "12px",
-                    }}
-                  >
-                    {getRecentActivity().map((item) => (
-                      <Card key={`${item.type}-${item.id}`}>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            gap: "15px",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <div style={{ flex: 1 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <strong
-                                style={{
-                                  color: "#333",
-                                  fontSize: "16px",
-                                }}
-                              >
-                                {item.icon} {item.type}
-                              </strong>
-
-                              <StatusBadge
-                                status={item.status}
-                              />
-                            </div>
-
-                            <p
-                              style={{
-                                margin: "9px 0 4px",
-                                color: "#666",
-                                fontSize: "13px",
-                              }}
-                            >
-                              Land ID: {item.landId}
-                            </p>
-
-                            <p
-                              style={{
-                                margin: 0,
-                                color: "#888",
-                                fontSize: "12px",
-                              }}
-                            >
-                              {formatDate(item.date)}
-                            </p>
-
-                            {item.requestedDate && (
-                              <p
-                                style={{
-                                  margin: "7px 0 0",
-                                  color: "#555",
-                                  fontSize: "13px",
-                                }}
-                              >
-                                <strong>
-                                  Requested visit:
-                                </strong>{" "}
-                                {formatDate(item.requestedDate)}
-                              </p>
-                            )}
-
-                            {item.amount !== undefined && (
-                              <p
-                                style={{
-                                  margin: "7px 0 0",
-                                  color: "#1565C0",
-                                  fontWeight: "700",
-                                }}
-                              >
-                                Offer: ₹
-                                {Number(
-                                  item.amount || 0
-                                ).toLocaleString("en-IN")}
-                              </p>
-                            )}
-
-                            {item.message && (
-                              <p
-                                style={{
-                                  margin: "8px 0 0",
-                                  color: "#555",
-                                  lineHeight: 1.4,
-                                }}
-                              >
-                                {item.message}
-                              </p>
-                            )}
-                          </div>
-
-                          <button
-                            onClick={() =>
-                              openLand(item.landId)
-                            }
-                            style={{
-                              border: "none",
-                              borderRadius: "9px",
-                              padding: "10px 15px",
-                              background: "#2E7D32",
-                              color: "#fff",
-                              cursor: "pointer",
-                              fontWeight: "700",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            🌾 View Land
-                          </button>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </>
-          )}
-
           {loading ? (
             <div
               style={{
@@ -831,7 +844,7 @@ function MarketplaceActivity() {
                           }
                           disabled={
                             actionLoading ===
-                            `chat-${item.id}`
+                            `chat-${item.land_id}`
                           }
                           style={{
                             width: "100%",
@@ -844,7 +857,7 @@ function MarketplaceActivity() {
                             color: "#fff",
                             cursor:
                               actionLoading ===
-                              `chat-${item.id}`
+                              `chat-${item.land_id}`
                                 ? "not-allowed"
                                 : "pointer",
                             fontWeight: "700",
@@ -852,7 +865,7 @@ function MarketplaceActivity() {
                         >
                           💬{" "}
                           {actionLoading ===
-                          `chat-${item.id}`
+                          `chat-${item.land_id}`
                             ? "Opening Chat..."
                             : userRole === "farmer"
                             ? "Reply to Buyer"
@@ -1037,7 +1050,7 @@ function MarketplaceActivity() {
                           }
                           disabled={
                             actionLoading ===
-                            `chat-${item.id}`
+                            `chat-${item.land_id}`
                           }
                           style={{
                             width: "100%",
@@ -1050,7 +1063,7 @@ function MarketplaceActivity() {
                             color: "#fff",
                             cursor:
                               actionLoading ===
-                              `chat-${item.id}`
+                              `chat-${item.land_id}`
                                 ? "not-allowed"
                                 : "pointer",
                             fontWeight: "700",
@@ -1058,7 +1071,7 @@ function MarketplaceActivity() {
                         >
                           💬{" "}
                           {actionLoading ===
-                          `chat-${item.id}`
+                          `chat-${item.land_id}`
                             ? "Opening Chat..."
                             : userRole === "farmer"
                             ? "Reply to Buyer"
@@ -1202,9 +1215,9 @@ function MarketplaceActivity() {
                           <strong>
                             Requested:
                           </strong>{" "}
-                          {formatDate(
+                          {new Date(
                             item.requested_date
-                          )}
+                          ).toLocaleString()}
                         </p>
 
                         {item.message && (
@@ -1236,7 +1249,7 @@ function MarketplaceActivity() {
                           }
                           disabled={
                             actionLoading ===
-                            `chat-${item.id}`
+                            `chat-${item.land_id}`
                           }
                           style={{
                             width: "100%",
@@ -1249,7 +1262,7 @@ function MarketplaceActivity() {
                             color: "#fff",
                             cursor:
                               actionLoading ===
-                              `chat-${item.id}`
+                              `chat-${item.land_id}`
                                 ? "not-allowed"
                                 : "pointer",
                             fontWeight: "700",
@@ -1257,7 +1270,7 @@ function MarketplaceActivity() {
                         >
                           💬{" "}
                           {actionLoading ===
-                          `chat-${item.id}`
+                          `chat-${item.land_id}`
                             ? "Opening Chat..."
                             : userRole === "farmer"
                             ? "Reply to Buyer"
@@ -1356,6 +1369,10 @@ function MarketplaceActivity() {
                               Mark Completed
                             </button>
                           )}
+
+                        {item.status === "completed" && (
+                          <ReviewCard item={item} />
+                        )}
                       </Card>
                     ))}
                   </div>
