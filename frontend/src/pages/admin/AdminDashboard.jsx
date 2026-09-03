@@ -735,6 +735,38 @@ function AdminDashboard() {
   ];
 
 
+
+  // =========================================================
+  // STEP 47 - MARKETPLACE CHART DATA
+  // =========================================================
+
+  const listingAvailabilityChartData = [
+    { name: "Available", value: marketplaceStats.listing_availability.available },
+    { name: "Reserved", value: marketplaceStats.listing_availability.reserved },
+    { name: "Sold", value: marketplaceStats.listing_availability.sold },
+  ];
+
+  const inquiryChartData = [
+    { name: "Pending", value: marketplaceStats.inquiries.pending },
+    { name: "Accepted", value: marketplaceStats.inquiries.accepted },
+    { name: "Rejected", value: marketplaceStats.inquiries.rejected },
+  ];
+
+  const offerChartData = [
+    { name: "Pending", value: marketplaceStats.offers.pending },
+    { name: "Accepted", value: marketplaceStats.offers.accepted },
+    { name: "Rejected", value: marketplaceStats.offers.rejected },
+  ];
+
+  const siteVisitChartData = [
+    { name: "Pending", value: marketplaceStats.site_visits.pending },
+    { name: "Accepted", value: marketplaceStats.site_visits.accepted },
+    { name: "Rejected", value: marketplaceStats.site_visits.rejected },
+    { name: "Completed", value: marketplaceStats.site_visits.completed },
+    { name: "Cancelled", value: marketplaceStats.site_visits.cancelled },
+  ];
+
+
   // =========================================================
   // PIE COLORS
   // =========================================================
@@ -1895,6 +1927,195 @@ function AdminDashboard() {
 
       </div>
 \n\n      {/* =====================================================
+          STEP 47 - MARKETPLACE ANALYTICS CHARTS
+      ===================================================== */}
+      <div
+        style={{
+          marginTop: "40px",
+          background: "#fff",
+          padding: "30px",
+          borderRadius: "18px",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.10)",
+        }}
+      >
+        <h2
+          style={{
+            color: "#2E7D32",
+            textAlign: "center",
+            marginBottom: "30px",
+          }}
+        >
+          📊 Marketplace Analytics Charts
+        </h2>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(420px,1fr))",
+            gap: "30px",
+          }}
+        >
+          {/* LISTING AVAILABILITY */}
+          <div
+            style={{
+              background: "#F9FBF9",
+              padding: "20px",
+              borderRadius: "16px",
+              border: "1px solid #E0E0E0",
+            }}
+          >
+            <h3 style={{ textAlign: "center", color: "#2E7D32" }}>
+              🌾 Listing Availability
+            </h3>
+
+            {listingAvailabilityChartData.some((item) => item.value > 0) ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie
+                    data={listingAvailabilityChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    outerRadius={105}
+                    label
+                  >
+                    {listingAvailabilityChartData.map((entry, index) => (
+                      <Cell
+                        key={`listing-${index}`}
+                        fill={["#43A047", "#F9A825", "#E53935"][index]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p
+                style={{
+                  textAlign: "center",
+                  color: "#777",
+                  padding: "100px 20px",
+                }}
+              >
+                No listing availability data available.
+              </p>
+            )}
+          </div>
+
+          {/* INQUIRIES */}
+          <div
+            style={{
+              background: "#F9FBF9",
+              padding: "20px",
+              borderRadius: "16px",
+              border: "1px solid #E0E0E0",
+            }}
+          >
+            <h3 style={{ textAlign: "center", color: "#2E7D32" }}>
+              📩 Inquiry Status
+            </h3>
+
+            {inquiryChartData.some((item) => item.value > 0) ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={inquiryChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="value" name="Inquiries" fill="#1976D2" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p
+                style={{
+                  textAlign: "center",
+                  color: "#777",
+                  padding: "100px 20px",
+                }}
+              >
+                No inquiry data available.
+              </p>
+            )}
+          </div>
+
+          {/* OFFERS */}
+          <div
+            style={{
+              background: "#F9FBF9",
+              padding: "20px",
+              borderRadius: "16px",
+              border: "1px solid #E0E0E0",
+            }}
+          >
+            <h3 style={{ textAlign: "center", color: "#2E7D32" }}>
+              💰 Offer Status
+            </h3>
+
+            {offerChartData.some((item) => item.value > 0) ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={offerChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="value" name="Offers" fill="#8E24AA" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p
+                style={{
+                  textAlign: "center",
+                  color: "#777",
+                  padding: "100px 20px",
+                }}
+              >
+                No offer data available.
+              </p>
+            )}
+          </div>
+
+          {/* SITE VISITS */}
+          <div
+            style={{
+              background: "#F9FBF9",
+              padding: "20px",
+              borderRadius: "16px",
+              border: "1px solid #E0E0E0",
+            }}
+          >
+            <h3 style={{ textAlign: "center", color: "#2E7D32" }}>
+              📅 Site Visit Status
+            </h3>
+
+            {siteVisitChartData.some((item) => item.value > 0) ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={siteVisitChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="value" name="Site Visits" fill="#EF6C00" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p
+                style={{
+                  textAlign: "center",
+                  color: "#777",
+                  padding: "100px 20px",
+                }}
+              >
+                No site visit data available.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* =====================================================
           MARKETPLACE RECORD VIEWER
       ===================================================== */}
       {recordsModal.open && (
