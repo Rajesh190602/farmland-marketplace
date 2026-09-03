@@ -14,9 +14,79 @@ function Profile() {
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  // =========================================================
+  // FARMER RATING & REVIEWS
+  // =========================================================
+
+  const [ratingSummary, setRatingSummary] = useState({
+    average_rating: 0,
+    total_reviews: 0,
+  });
+  const [receivedReviews, setReceivedReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
   useEffect(() => {
     fetchProfile();
   }, []);
+
+  const fetchUserRating = async (userId) => {
+    if (!userId) {
+      return;
+    }
+
+    setReviewsLoading(true);
+
+    try {
+      const [summaryResponse, reviewsResponse] = await Promise.all([
+        api.get(`/reviews/user/${userId}/summary`),
+        api.get(`/reviews/user/${userId}`),
+      ]);
+
+      setRatingSummary({
+        average_rating: Number(
+          summaryResponse.data?.average_rating || 0
+        ),
+        total_reviews: Number(
+          summaryResponse.data?.total_reviews || 0
+        ),
+      });
+
+      setReceivedReviews(
+        Array.isArray(reviewsResponse.data)
+          ? reviewsResponse.data
+          : []
+      );
+    } catch (error) {
+      console.error("Buyer/Farmer Rating Load Error:", error);
+
+      // Rating data must not prevent the normal profile page
+      // from loading or functioning.
+      setRatingSummary({
+        average_rating: 0,
+        total_reviews: 0,
+      });
+      setReceivedReviews([]);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  const renderRatingStars = (rating) => {
+    const roundedRating = Math.round(Number(rating) || 0);
+
+    return (
+      <span
+        aria-label={`${rating} out of 5 stars`}
+        style={styles.ratingStars}
+      >
+        {[1, 2, 3, 4, 5].map((star) => (
+          <span key={star}>
+            {star <= roundedRating ? "★" : "☆"}
+          </span>
+        ))}
+      </span>
+    );
+  };
 
   // =========================================================
   // LOAD PROFILE
@@ -26,6 +96,13 @@ function Profile() {
     try {
       const response = await api.get("/users/profile");
       setUser(response.data);
+
+      if (
+        response.data?.role === "farmer" ||
+        response.data?.role === "buyer"
+      ) {
+        await fetchUserRating(response.data.id);
+      }
 
       localStorage.setItem(
         "user",
@@ -366,6 +443,121 @@ function Profile() {
               </div>
             </div>
           </section>
+
+          {/* =================================================
+              BUYER / FARMER RATING & REVIEWS
+              Shown on farmer and buyer profiles.
+          ================================================= */}
+
+          {(user.role === "farmer" || user.role === "buyer") && (
+            <section style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div>
+                  <h2 style={styles.cardTitle}>
+                    ⭐ {user.role === "farmer"
+                      ? "Farmer"
+                      : "Buyer"} Rating & Reviews
+                  </h2>
+
+                  <p style={styles.cardSubtitle}>
+                    See how other marketplace users have rated you after
+                    completed site visits.
+                  </p>
+                </div>
+              </div>
+
+              {reviewsLoading ? (
+                <div style={styles.ratingLoading}>
+                  Loading your ratings...
+                </div>
+              ) : (
+                <>
+                  <div style={styles.ratingSummaryBox}>
+                    <div style={styles.averageRating}>
+                      <div style={styles.averageRatingNumber}>
+                        {ratingSummary.total_reviews > 0
+                          ? ratingSummary.average_rating.toFixed(1)
+                          : "0.0"}
+                      </div>
+
+                      <div>
+                        {renderRatingStars(
+                          ratingSummary.average_rating
+                        )}
+
+                        <div style={styles.ratingCount}>
+                          {ratingSummary.total_reviews}{" "}
+                          {ratingSummary.total_reviews === 1
+                            ? "review"
+                            : "reviews"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={styles.ratingExplanation}>
+                      Your rating is based on published reviews
+                      from marketplace users who completed a site visit.
+                    </div>
+                  </div>
+
+                  {receivedReviews.length === 0 ? (
+                    <div style={styles.noReviews}>
+                      <div style={styles.noReviewsIcon}>⭐</div>
+                      <strong>No reviews yet</strong>
+                      <p style={styles.noReviewsText}>
+                        Your rating will appear here when an eligible
+                        marketplace user submits a review.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={styles.reviewList}>
+                      {receivedReviews.map((review) => (
+                        <div
+                          key={review.id}
+                          style={styles.reviewItem}
+                        >
+                          <div style={styles.reviewHeader}>
+                            <div>
+                              <strong style={styles.reviewerName}>
+                                {review.reviewer_name ||
+                                  (user.role === "farmer"
+                                    ? "Buyer"
+                                    : "Farmer")}
+                              </strong>
+
+                              <div style={styles.reviewMeta}>
+                                {review.land_title
+                                  ? `Land: ${review.land_title}`
+                                  : "Marketplace review"}
+                              </div>
+                            </div>
+
+                            <div style={styles.reviewRating}>
+                              {renderRatingStars(review.rating)}
+                            </div>
+                          </div>
+
+                          {review.comment && (
+                            <p style={styles.reviewComment}>
+                              "{review.comment}"
+                            </p>
+                          )}
+
+                          {review.created_at && (
+                            <div style={styles.reviewDate}>
+                              {new Date(
+                                review.created_at
+                              ).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
 
           {/* =================================================
               PERSONAL INFORMATION
@@ -904,6 +1096,132 @@ const styles = {
 
   dot: {
     color: "#d1d5db",
+  },
+
+  // =========================================================
+  // BUYER / FARMER RATING STYLES
+  // =========================================================
+
+  ratingLoading: {
+    padding: "25px",
+    textAlign: "center",
+    color: "#6b7280",
+    fontSize: "14px",
+  },
+
+  ratingSummaryBox: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "20px",
+    padding: "20px",
+    background: "#fffbeb",
+    border: "1px solid #fde68a",
+    borderRadius: "12px",
+    marginBottom: "18px",
+  },
+
+  averageRating: {
+    display: "flex",
+    alignItems: "center",
+    gap: "14px",
+    flexShrink: 0,
+  },
+
+  averageRatingNumber: {
+    fontSize: "38px",
+    fontWeight: "800",
+    color: "#92400e",
+    lineHeight: 1,
+  },
+
+  ratingStars: {
+    display: "inline-flex",
+    gap: "2px",
+    color: "#f59e0b",
+    fontSize: "22px",
+    letterSpacing: "1px",
+  },
+
+  ratingCount: {
+    marginTop: "4px",
+    color: "#78716c",
+    fontSize: "12px",
+  },
+
+  ratingExplanation: {
+    maxWidth: "430px",
+    color: "#78716c",
+    fontSize: "13px",
+    lineHeight: 1.5,
+  },
+
+  noReviews: {
+    padding: "25px",
+    textAlign: "center",
+    background: "#f9fafb",
+    borderRadius: "12px",
+    border: "1px dashed #d1d5db",
+    color: "#4b5563",
+  },
+
+  noReviewsIcon: {
+    fontSize: "28px",
+    marginBottom: "7px",
+  },
+
+  noReviewsText: {
+    margin: "7px 0 0",
+    color: "#9ca3af",
+    fontSize: "13px",
+  },
+
+  reviewList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+
+  reviewItem: {
+    padding: "16px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "11px",
+    background: "#ffffff",
+  },
+
+  reviewHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "15px",
+  },
+
+  reviewerName: {
+    color: "#111827",
+    fontSize: "14px",
+  },
+
+  reviewMeta: {
+    marginTop: "4px",
+    color: "#9ca3af",
+    fontSize: "12px",
+  },
+
+  reviewRating: {
+    flexShrink: 0,
+  },
+
+  reviewComment: {
+    margin: "12px 0 0",
+    color: "#4b5563",
+    fontSize: "14px",
+    lineHeight: 1.6,
+  },
+
+  reviewDate: {
+    marginTop: "10px",
+    color: "#9ca3af",
+    fontSize: "11px",
   },
 
   loadingContainer: {

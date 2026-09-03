@@ -202,21 +202,40 @@ function LandDetails() {
     setLand(response.data);
 
     // =====================================================
+    // PHASE 6 - LISTING VIEWS
+    // Record one unique view for the logged-in user.
+    // This request is non-blocking so it cannot break the
+    // existing Land Details page.
+    // =====================================================
+    try {
+      const viewResponse = await api.post(
+        `/lands/${id}/view`
+      );
+
+      if (viewResponse.data?.view_count !== undefined) {
+        setLand((previous) =>
+          previous
+            ? {
+                ...previous,
+                view_count: Number(
+                  viewResponse.data.view_count
+                ),
+              }
+            : previous
+        );
+      }
+    } catch (listingViewError) {
+      console.error(
+        "Failed to record listing view:",
+        listingViewError
+      );
+    }
+
+    // =====================================================
     // PHASE 3 - RECENTLY VIEWED LANDS
     // Record this land only after it has loaded successfully.
     // Failure here must NOT break the Land Details page.
     // =====================================================
-    try {
-      await api.post(
-        `/lands/${id}/view`
-      );
-    } catch (viewError) {
-      console.error(
-        "Failed to record recently viewed land:",
-        viewError
-      );
-    }
-
     await checkFavoriteStatus(id);
 
     // Availability is a Phase 1 marketplace feature.
@@ -1257,6 +1276,26 @@ function LandDetails() {
           >
             🌾 {land.title}
           </h1>
+
+          {/* =====================================================
+              PHASE 6 - LISTING VIEWS
+          ====================================================== */}
+
+          <div
+            style={{
+              marginTop: "10px",
+              color: "#6B7280",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            👁️ {Number(land.view_count || 0)}{" "}
+            {Number(land.view_count || 0) === 1
+              ? "view"
+              : "views"}
+          </div>
 
           {/* =====================================================
               PRICE

@@ -4,7 +4,7 @@ from app import models
 from sqlalchemy import or_
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Land, User, RecentlyViewedLand
+from app.models import Land, User, RecentlyViewedLand, ListingView
 from app.schemas import LandCreate
 from app.utils.activity_log import create_activity_log
 from typing import Optional
@@ -425,6 +425,36 @@ def record_land_view(
             detail="Land is not available"
         )
 
+    now = datetime.utcnow()
+
+    # =====================================================
+    # PHASE 6 - LISTING VIEWS
+    # Record one unique view per authenticated user/listing.
+    # Re-opening the same listing updates the timestamp but
+    # does not inflate the view count.
+    # =====================================================
+    listing_view = (
+        db.query(ListingView)
+        .filter(
+            ListingView.user_id == current_user,
+            ListingView.land_id == land_id
+        )
+        .first()
+    )
+
+    if listing_view:
+        listing_view.viewed_at = now
+    else:
+        listing_view = ListingView(
+            user_id=current_user,
+            land_id=land_id,
+            viewed_at=now
+        )
+        db.add(listing_view)
+
+    # =====================================================
+    # EXISTING - RECENTLY VIEWED LANDS
+    # =====================================================
     existing = (
         db.query(RecentlyViewedLand)
         .filter(
@@ -435,28 +465,18 @@ def record_land_view(
     )
 
     if existing:
-        existing.viewed_at = datetime.utcnow()
+        existing.viewed_at = now
+    else:
+        viewed = RecentlyViewedLand(
+            user_id=current_user,
+            land_id=land_id,
+            viewed_at=now
+        )
+        db.add(viewed)
 
-        db.commit()
-        db.refresh(existing)
-
-        return {
-            "message": "Land view updated",
-            "land_id": land_id,
-            "viewed_at": existing.viewed_at
-        }
-
-    viewed = RecentlyViewedLand(
-        user_id=current_user,
-        land_id=land_id,
-        viewed_at=datetime.utcnow()
-    )
-
-    db.add(viewed)
     db.commit()
-    db.refresh(viewed)
 
-    # Keep only the latest 20 viewed lands.
+    # Keep only the latest 20 recently viewed lands.
     old_views = (
         db.query(RecentlyViewedLand)
         .filter(
@@ -474,10 +494,78 @@ def record_land_view(
 
     db.commit()
 
+    view_count = (
+        db.query(ListingView)
+        .filter(ListingView.land_id == land_id)
+        .count()
+    )
+
     return {
         "message": "Land view recorded",
         "land_id": land_id,
-        "viewed_at": viewed.viewed_at
+        "viewed_at": now,
+        "view_count": view_count
+    }
+
+
+# =========================================================
+# GET LISTING VIEW COUNT
+# =========================================================
+
+@router.get("/{land_id}/view-count")
+def get_land_view_count(
+    land_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found"
+        )
+
+    # Farmers may see the count for their own listing.
+    # Buyers/admins may see counts for approved marketplace listings.
+    if user.role == "farmer":
+        if land.owner_id != current_user:
+            raise HTTPException(
+                status_code=403,
+                detail="Farmers can access only their own lands"
+            )
+    else:
+        if land.status != "approved" or not land.is_published:
+            raise HTTPException(
+                status_code=404,
+                detail="Land not found"
+            )
+
+    view_count = (
+        db.query(ListingView)
+        .filter(ListingView.land_id == land_id)
+        .count()
+    )
+
+    return {
+        "land_id": land_id,
+        "view_count": view_count
     }
 
 
@@ -637,6 +725,11 @@ def get_land(
         "id": land.id,
         "title": land.title,
         "description": land.description,
+        "view_count": (
+            db.query(ListingView)
+            .filter(ListingView.land_id == land.id)
+            .count()
+        ),
         "image_url": land.image_url,
         "price": land.price,
         "area": land.area,

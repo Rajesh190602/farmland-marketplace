@@ -386,6 +386,16 @@ class Land(Base):
     )
 
     # -----------------------------------------------------
+    # Phase 6 - Listing Views
+    # -----------------------------------------------------
+
+    listing_views = relationship(
+        "ListingView",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+    # -----------------------------------------------------
     # Phase 2 - Land Reports
     # -----------------------------------------------------
 
@@ -1320,6 +1330,69 @@ class RecentlyViewedLand(Base):
         "Land",
         foreign_keys=[land_id]
     )
+# =========================================================
+# PHASE 6
+# LISTING VIEWS
+# =========================================================
+
+class ListingView(Base):
+    """
+    Stores one view per authenticated user and listing.
+
+    A unique user/listing pair prevents repeated refreshes from
+    artificially inflating the listing's view count. The viewed_at
+    timestamp is updated when the same user opens the listing again.
+    """
+
+    __tablename__ = "listing_views"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    viewed_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
+
+    user = relationship(
+        "User",
+        foreign_keys=[user_id]
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="listing_views",
+        foreign_keys=[land_id]
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "land_id",
+            name="uq_listing_view_user_land"
+        ),
+    )
+
+
 # =========================================================
 # STEP 19
 # SAVED SEARCHES
