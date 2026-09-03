@@ -770,7 +770,7 @@ function SearchLands() {
 
               <Link
                 className="btn btn-primary"
-                to={`/land/${land.id}`}
+                to={`/lands/${land.id}`}
               >
                 View Details
               </Link>

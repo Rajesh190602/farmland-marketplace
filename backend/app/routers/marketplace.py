@@ -954,6 +954,27 @@ def create_site_visit(
             status_code=409,
             detail="You already have a pending site visit request for this land.",
         )
+        # ----------------------------------
+    # ANTI-SPAM COOLDOWN
+    # ----------------------------------
+
+    recent_visit = (
+        db.query(SiteVisit)
+        .filter(
+            SiteVisit.land_id == land.id,
+            SiteVisit.buyer_id == buyer.id,
+            SiteVisit.created_at >= (
+                datetime.utcnow() - timedelta(minutes=5)
+            ),
+        )
+        .first()
+    )
+
+    if recent_visit:
+        raise HTTPException(
+            status_code=429,
+            detail="Please wait 5 minutes before requesting another site visit for this land.",
+        )
 
     visit = SiteVisit(
         land_id=land.id,

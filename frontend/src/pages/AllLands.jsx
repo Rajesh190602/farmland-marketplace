@@ -490,11 +490,11 @@ function AllLands() {
                           navigator.share({
                             title: land.title,
                             text: land.description,
-                            url: window.location.origin + `/land/${land.id}`,
+                            url: window.location.origin + `/lands/${land.id}`,
                           });
                         } else {
                           navigator.clipboard.writeText(
-                            window.location.origin + `/land/${land.id}`
+                            window.location.origin + `/lands/${land.id}`
                           );
 
                           alert("Land link copied.");
@@ -511,7 +511,7 @@ function AllLands() {
                       style={viewButton}
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/land/${land.id}`);
+                        navigate(`/lands/${land.id}`);
                       }}
                     >
                       <FaEye />

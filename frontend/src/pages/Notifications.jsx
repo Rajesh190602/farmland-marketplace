@@ -226,7 +226,7 @@ function Notifications() {
 
       if (targetType === "land") {
         navigate(
-          `/land/${notification.target_id}`
+          `/lands/${notification.target_id}`
         );
 
         return;

@@ -394,7 +394,7 @@ function MyFavorites() {
                     <button
                       onClick={() =>
                         navigate(
-                          `/land/${land.land_id}`
+                          `/lands/${land.land_id}`
                         )
                       }
                       style={{

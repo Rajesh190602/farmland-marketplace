@@ -579,7 +579,7 @@ function Home() {
       "land"
     ) {
       navigate(
-        `/land/${activity.target_id}`
+        `/lands/${activity.target_id}`
       );
 
       return;
@@ -1207,7 +1207,7 @@ function Home() {
                     key={land.id}
                     className="home-land-card"
                     style={{ borderRadius: "16px", overflow: "hidden", cursor: "pointer" }}
-                    onClick={() => navigate(`/land/${land.id}`)}
+                    onClick={() => navigate(`/lands/${land.id}`)}
                   >
                     <div className="home-land-image-wrap" style={{ height: "165px", overflow: "hidden" }}>
                       {land.image_url ? (
@@ -1236,7 +1236,7 @@ function Home() {
                       <button
                         type="button"
                         className="home-view-button"
-                        onClick={(event) => { event.stopPropagation(); navigate(`/land/${land.id}`); }}
+                        onClick={(event) => { event.stopPropagation(); navigate(`/lands/${land.id}`); }}
                         style={{ width: "100%", marginTop: "14px", border: "none", background: "#2E7D32", color: "#fff", padding: "12px", fontWeight: "800", cursor: "pointer" }}
                       >
                         View Details →
@@ -1806,7 +1806,7 @@ function Home() {
                       onClick={() => {
                         if (userRole !== "farmer") {
                           navigate(
-                            `/land/${land.id}`
+                            `/lands/${land.id}`
                           );
                         }
                       }}
@@ -1959,7 +1959,7 @@ function Home() {
 
                     <button
                       className="home-view-button"
-                      onClick={() => navigate(`/land/${land.id}`)}
+                      onClick={() => navigate(`/lands/${land.id}`)}
                       style={{
                         marginTop: "15px",
                         width: "100%",
