@@ -285,11 +285,11 @@ function LandDetails() {
   };
 
   // =========================================================
-  // PHASE 3 - LOAD SIMILAR LANDS
+  // PHASE 3 - STEP 46 - LOAD SIMILAR LANDS
   // =========================================================
-  // Similar listings are calculated on the frontend so the
-  // existing land-search backend and all current functionality
-  // remain unchanged.
+  // Similar listings are calculated by the backend.
+  // Existing Similar Lands UI continues to use the same
+  // similarLands state and remains buyer-only.
   const fetchSimilarLands = async (currentLand) => {
     if (!currentLand || currentRole !== "buyer") {
       setSimilarLands([]);
@@ -299,163 +299,163 @@ function LandDetails() {
     try {
       setSimilarLandsLoading(true);
 
-      // Start with the same district because location is the
-      // strongest similarity signal for farmland buyers.
-      const params = {};
-      if (currentLand.district) {
-        params.district = currentLand.district;
-      }
+      const response = await api.get(
+        `/lands/${currentLand.id}/similar?limit=6`
+      );
 
-      let response = await api.get("/lands/search", {
-        params,
-      });
-
-      let candidates = Array.isArray(response.data)
-        ? response.data
+      const recommendations = Array.isArray(response.data?.recommendations)
+        ? response.data.recommendations
         : [];
 
-      // If there are no same-district results, use all searchable
-      // marketplace lands as a fallback.
-      if (
-        candidates.length === 0 &&
-        currentLand.district
-      ) {
-        response = await api.get("/lands/search");
-        candidates = Array.isArray(response.data)
-          ? response.data
-          : [];
-      }
-
-      const normalize = (value) =>
-        String(value ?? "").trim().toLowerCase();
-
-      const currentId = Number(currentLand.id);
-      const currentPrice = Number(currentLand.price);
-      const currentArea = Number(currentLand.area);
-
-      const isMeaningfulNumber = (value) =>
-        Number.isFinite(value) && value > 0;
-
-      const getSimilarityScore = (candidate) => {
-        let score = 0;
-
-        if (
-          normalize(candidate.district) &&
-          normalize(candidate.district) ===
-            normalize(currentLand.district)
-        ) {
-          score += 5;
-        }
-
-        if (
-          normalize(candidate.mandal) &&
-          normalize(candidate.mandal) ===
-            normalize(currentLand.mandal)
-        ) {
-          score += 4;
-        }
-
-        if (
-          normalize(candidate.crop_type) &&
-          normalize(candidate.crop_type) ===
-            normalize(currentLand.crop_type)
-        ) {
-          score += 4;
-        }
-
-        if (
-          normalize(candidate.soil_type) &&
-          normalize(candidate.soil_type) ===
-            normalize(currentLand.soil_type)
-        ) {
-          score += 3;
-        }
-
-        if (
-          normalize(candidate.water_source) &&
-          normalize(candidate.water_source) ===
-            normalize(currentLand.water_source)
-        ) {
-          score += 2;
-        }
-
-        const candidatePrice = Number(candidate.price);
-        if (
-          isMeaningfulNumber(currentPrice) &&
-          isMeaningfulNumber(candidatePrice)
-        ) {
-          const priceDifference =
-            Math.abs(candidatePrice - currentPrice) /
-            currentPrice;
-
-          if (priceDifference <= 0.25) {
-            score += 2;
-          }
-        }
-
-        const candidateArea = Number(candidate.area);
-        if (
-          isMeaningfulNumber(currentArea) &&
-          isMeaningfulNumber(candidateArea)
-        ) {
-          const areaDifference =
-            Math.abs(candidateArea - currentArea) /
-            currentArea;
-
-          if (areaDifference <= 0.25) {
-            score += 2;
-          }
-        }
-
-        return score;
-      };
-
-      const ranked = candidates
-        .filter(
-          (candidate) =>
-            Number(candidate.id) !== currentId &&
-            candidate.status === "approved" &&
-            candidate.is_published !== false
-        )
-        .map((candidate) => ({
-          ...candidate,
-          _similarityScore:
-            getSimilarityScore(candidate),
-        }))
-        .filter(
-          (candidate) =>
-            candidate._similarityScore > 0
-        )
-        .sort((a, b) => {
-          if (
-            b._similarityScore !==
-            a._similarityScore
-          ) {
-            return (
-              b._similarityScore -
-              a._similarityScore
-            );
-          }
-
-          return (
-            Number(b.id) - Number(a.id)
-          );
-        })
-        .slice(0, 6);
-
-      setSimilarLands(ranked);
+      setSimilarLands(recommendations);
     } catch (error) {
       console.error(
         "Failed to load similar lands:",
         error
       );
+
       setSimilarLands([]);
     } finally {
       setSimilarLandsLoading(false);
     }
   };
 
+  // Step 46: backend-provided similarity information.
+  const getSimilarLandReasons = (similarLand) => {
+    if (
+      Array.isArray(similarLand?.similarity_reasons) &&
+      similarLand.similarity_reasons.length > 0
+    ) {
+      return similarLand.similarity_reasons.join(", ");
+    }
+
+    return "Based on farmland characteristics";
+  };
+
+  const getSimilarLandAvailability = (similarLand) => {
+    return (
+      similarLand?.availability_status ||
+      similarLand?.availability ||
+      "Available"
+    );
+  };
+
   // =========================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   // CHECK FAVORITE STATUS
   // =========================================================
 

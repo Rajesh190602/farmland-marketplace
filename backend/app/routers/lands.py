@@ -1298,6 +1298,193 @@ def remove_recently_viewed_land(
     }
 
 
+
+# =========================================================
+# STEP 46 - SIMILAR FARMLAND
+# =========================================================
+
+@router.get("/{land_id}/similar")
+def get_similar_lands(
+    land_id: int,
+    limit: int = Query(6, ge=1, le=12),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Return similar approved and published farmland listings for buyers.
+    Similarity is ranked using location, crop, soil, water source,
+    price, and land area. The current listing is excluded.
+    """
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role != "buyer":
+        raise HTTPException(
+            status_code=403,
+            detail="Similar farmland is available only for buyers",
+        )
+
+    current_land = db.query(Land).filter(Land.id == land_id).first()
+
+    if not current_land:
+        raise HTTPException(status_code=404, detail="Land not found")
+
+    if (
+        current_land.status != "approved"
+        or not current_land.is_published
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found",
+        )
+
+    candidates = (
+        db.query(Land)
+        .filter(
+            Land.id != current_land.id,
+            Land.status == "approved",
+            Land.is_published == True,
+            Land.owner_id != current_user,
+        )
+        .all()
+    )
+
+    def normalize(value):
+        return str(value or "").strip().lower()
+
+    current_price = float(current_land.price or 0)
+    current_area = float(current_land.area or 0)
+
+    field_rules = [
+        ("district", "same district", 6),
+        ("mandal", "same mandal", 5),
+        ("village", "same village", 4),
+        ("crop_type", "same crop type", 4),
+        ("soil_type", "same soil type", 4),
+        ("water_source", "same water source", 3),
+    ]
+
+    scored = []
+
+    for candidate in candidates:
+        score = 0.0
+        reasons = []
+
+        for field, label, points in field_rules:
+            current_value = normalize(getattr(current_land, field, None))
+            candidate_value = normalize(getattr(candidate, field, None))
+
+            if (
+                current_value
+                and candidate_value
+                and current_value == candidate_value
+            ):
+                score += points
+                reasons.append(label)
+
+        candidate_price = float(candidate.price or 0)
+        if current_price > 0 and candidate_price > 0:
+            price_difference = (
+                abs(candidate_price - current_price) / current_price
+            )
+            if price_difference <= 0.10:
+                score += 6
+                reasons.append("very similar price")
+            elif price_difference <= 0.25:
+                score += 3
+                reasons.append("similar price range")
+
+        candidate_area = float(candidate.area or 0)
+        if current_area > 0 and candidate_area > 0:
+            area_difference = (
+                abs(candidate_area - current_area) / current_area
+            )
+            if area_difference <= 0.15:
+                score += 5
+                reasons.append("very similar land area")
+            elif area_difference <= 0.25:
+                score += 2
+                reasons.append("similar land area")
+
+        view_count = db.query(ListingView).filter(
+            ListingView.land_id == candidate.id
+        ).count()
+
+        # Small popularity tie-breaker; similarity remains the main signal.
+        score += min(view_count, 20) * 0.25
+
+        if score <= 0:
+            continue
+
+        availability = (
+            db.query(LandAvailability)
+            .filter(LandAvailability.land_id == candidate.id)
+            .first()
+        )
+
+        # Buyer recommendations should contain only farmland that is
+        # currently available. Sold/reserved listings are not useful
+        # as actionable Similar Farmland recommendations.
+        availability_status = (
+            availability.status
+            if availability
+            else "available"
+        )
+
+        if normalize(availability_status) != "available":
+            continue
+
+        scored.append({
+            "land": candidate,
+            "score": round(score, 2),
+            "reasons": list(dict.fromkeys(reasons))[:4],
+            "view_count": view_count,
+            "availability": availability_status,
+        })
+
+    scored.sort(
+        key=lambda item: (item["score"], item["land"].id),
+        reverse=True,
+    )
+
+    results = []
+
+    for item in scored[:limit]:
+        candidate = item["land"]
+
+        results.append({
+            "id": candidate.id,
+            "title": candidate.title,
+            "description": candidate.description,
+            "image_url": candidate.image_url,
+            "price": candidate.price,
+            "area": candidate.area,
+            "village": candidate.village,
+            "mandal": candidate.mandal,
+            "district": candidate.district,
+            "state": candidate.state,
+            "soil_type": candidate.soil_type,
+            "water_source": candidate.water_source,
+            "crop_type": candidate.crop_type,
+            "status": candidate.status,
+            "is_published": candidate.is_published,
+            "owner_id": candidate.owner_id,
+            "view_count": item["view_count"],
+            "availability": item["availability"],
+            "similarity_score": item["score"],
+            "similarity_reasons": item["reasons"]
+            or ["similar farmland characteristics"],
+        })
+
+    return {
+        "land_id": current_land.id,
+        "count": len(results),
+        "recommendations": results,
+    }
+
+
 # =========================================================
 # Get Land By ID
 # =========================================================
