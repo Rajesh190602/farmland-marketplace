@@ -256,7 +256,7 @@ function App() {
           />
 
           <Route
-            path="/land/:id"
+            path="/lands/:id"
             element={
               <ProtectedRoute>
                 <LandDetails />
