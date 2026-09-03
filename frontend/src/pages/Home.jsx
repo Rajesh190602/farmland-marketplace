@@ -79,6 +79,14 @@ function Home() {
   const [recentlyViewedLands, setRecentlyViewedLands] = useState([]);
 
   // =====================================================
+  // FARMER LISTING ANALYTICS
+  // =====================================================
+
+  const [listingAnalytics, setListingAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+
+  // =====================================================
   // FAVORITES
   // =====================================================
 
@@ -92,6 +100,10 @@ function Home() {
   useEffect(() => {
     fetchDashboard();
     fetchRecentlyViewedLands();
+
+    if (userRole === "farmer") {
+      fetchListingAnalytics();
+    }
 
     // Farmers must not load other farmers' public lands on Home.
     // Buyers and admins can load featured lands.
@@ -230,6 +242,25 @@ function Home() {
         ...prev,
         [landId]: false,
       }));
+    }
+  };
+
+  // =====================================================
+  // FARMER LISTING ANALYTICS
+  // =====================================================
+
+  const fetchListingAnalytics = async () => {
+    if (userRole !== "farmer") return;
+
+    try {
+      setAnalyticsLoading(true);
+      const response = await api.get("/lands/my/analytics");
+      setListingAnalytics(response.data || null);
+    } catch (error) {
+      console.log("Failed to load listing analytics:", error);
+      setListingAnalytics(null);
+    } finally {
+      setAnalyticsLoading(false);
     }
   };
 
@@ -1059,6 +1090,137 @@ function Home() {
             </div>
           </div>
         </div>
+
+        {/* =================================================
+            FARMER LISTING ANALYTICS - PHASE 7 STEP 44
+        ================================================= */}
+        {userRole === "farmer" && (
+          <section style={{ marginTop: "42px" }}>
+            <div className="home-section-title">
+              <div>
+                <h2>📊 My Listing Analytics</h2>
+                <span>Track views and buyer activity across your listings</span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchListingAnalytics}
+                disabled={analyticsLoading}
+                style={{
+                  border: "1px solid #C8DCCB",
+                  background: "#fff",
+                  color: "#2E7D32",
+                  borderRadius: "10px",
+                  padding: "9px 14px",
+                  cursor: analyticsLoading ? "wait" : "pointer",
+                  fontWeight: "700",
+                }}
+              >
+                {analyticsLoading ? "Refreshing..." : "↻ Refresh"}
+              </button>
+            </div>
+
+            {analyticsLoading && !listingAnalytics ? (
+              <div
+                style={{
+                  background: "#fff",
+                  border: "1px solid #DFE9E1",
+                  borderRadius: "16px",
+                  padding: "28px",
+                  textAlign: "center",
+                  color: "#66736A",
+                }}
+              >
+                Loading listing analytics...
+              </div>
+            ) : listingAnalytics ? (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))",
+                    gap: "16px",
+                  }}
+                >
+                  {[
+                    ["👁️", "Total Views", listingAnalytics.summary?.total_views || 0],
+                    ["🌾", "My Listings", listingAnalytics.summary?.total_lands || 0],
+                    ["🟢", "Available", listingAnalytics.summary?.available || 0],
+                    ["🟡", "Reserved", listingAnalytics.summary?.reserved || 0],
+                    ["🔴", "Sold", listingAnalytics.summary?.sold || 0],
+                    ["💬", "Inquiries", listingAnalytics.summary?.total_inquiries || 0],
+                    ["💰", "Offers", listingAnalytics.summary?.total_offers || 0],
+                    ["📅", "Site Visits", listingAnalytics.summary?.total_site_visits || 0],
+                  ].map(([icon, label, value]) => (
+                    <div
+                      key={label}
+                      style={{
+                        background: "#fff",
+                        border: "1px solid #DFE9E1",
+                        borderRadius: "16px",
+                        padding: "20px 16px",
+                        boxShadow: "0 8px 22px rgba(31,72,35,.07)",
+                      }}
+                    >
+                      <div style={{ fontSize: "25px", marginBottom: "7px" }}>{icon}</div>
+                      <div style={{ color: "#66736A", fontSize: "13px", fontWeight: "700" }}>{label}</div>
+                      <div style={{ color: "#142219", fontSize: "30px", fontWeight: "850", marginTop: "4px" }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "20px",
+                    background: "#fff",
+                    border: "1px solid #DFE9E1",
+                    borderRadius: "18px",
+                    overflow: "hidden",
+                    boxShadow: "0 10px 28px rgba(31,72,35,.08)",
+                  }}
+                >
+                  <div style={{ padding: "18px 20px", borderBottom: "1px solid #E7EEE8" }}>
+                    <h3 style={{ margin: 0, color: "#174D1C" }}>My Listings Performance</h3>
+                  </div>
+
+                  {listingAnalytics.records?.length ? (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
+                        <thead>
+                          <tr style={{ background: "#F5F9F5", textAlign: "left" }}>
+                            {['Land', 'Approval', 'Availability', 'Views', 'Inquiries', 'Offers', 'Site Visits'].map((heading) => (
+                              <th key={heading} style={{ padding: "13px 15px", fontSize: "12px", color: "#526057", whiteSpace: "nowrap" }}>{heading}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {listingAnalytics.records.map((record) => (
+                            <tr key={record.id} style={{ borderTop: "1px solid #E8EFE9" }}>
+                              <td style={{ padding: "14px 15px", fontWeight: "750", color: "#26352A" }}>{record.title || `Land #${record.id}`}</td>
+                              <td style={{ padding: "14px 15px", color: "#536057", textTransform: "capitalize" }}>{String(record.status || "-").replaceAll("_", " ")}</td>
+                              <td style={{ padding: "14px 15px", color: "#536057", textTransform: "capitalize" }}>{record.availability || "available"}</td>
+                              <td style={{ padding: "14px 15px", fontWeight: "750" }}>{record.views || 0}</td>
+                              <td style={{ padding: "14px 15px" }}>{record.inquiries?.total || 0}</td>
+                              <td style={{ padding: "14px 15px" }}>{record.offers?.total || 0}</td>
+                              <td style={{ padding: "14px 15px" }}>{record.site_visits?.total || 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ padding: "28px", textAlign: "center", color: "#66736A" }}>
+                      You have not added any land listings yet.
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div style={{ background: "#fff", border: "1px solid #DFE9E1", borderRadius: "16px", padding: "28px", textAlign: "center", color: "#66736A" }}>
+                Listing analytics are currently unavailable.
+              </div>
+            )}
+          </section>
+        )}
 
         {/* =================================================
             QUICK ACTIONS

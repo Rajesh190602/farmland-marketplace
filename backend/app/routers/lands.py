@@ -4,7 +4,16 @@ from app import models
 from sqlalchemy import or_
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Land, User, RecentlyViewedLand, ListingView
+from app.models import (
+    Land,
+    User,
+    RecentlyViewedLand,
+    ListingView,
+    LandAvailability,
+    LandInquiry,
+    LandOffer,
+    SiteVisit,
+)
 from app.schemas import LandCreate
 from app.utils.activity_log import create_activity_log
 from typing import Optional
@@ -310,6 +319,156 @@ def get_my_lands(
         }
         for land in lands
     ]
+
+
+# =========================================================
+# PHASE 7 - FARMER LISTING ANALYTICS
+# =========================================================
+
+@router.get("/my/analytics")
+def get_my_listing_analytics(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """Return listing performance analytics for the logged-in farmer."""
+
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    if user.role != "farmer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only farmers can access listing analytics"
+        )
+
+    lands = (
+        db.query(Land)
+        .filter(Land.owner_id == current_user)
+        .order_by(Land.id.desc())
+        .all()
+    )
+
+    records = []
+
+    summary = {
+        "total_lands": len(lands),
+        "total_views": 0,
+        "available": 0,
+        "reserved": 0,
+        "sold": 0,
+        "total_inquiries": 0,
+        "pending_inquiries": 0,
+        "accepted_inquiries": 0,
+        "rejected_inquiries": 0,
+        "total_offers": 0,
+        "pending_offers": 0,
+        "accepted_offers": 0,
+        "rejected_offers": 0,
+        "total_site_visits": 0,
+        "pending_site_visits": 0,
+        "accepted_site_visits": 0,
+        "rejected_site_visits": 0,
+        "completed_site_visits": 0,
+        "cancelled_site_visits": 0,
+    }
+
+    for land in lands:
+        availability = (
+            db.query(LandAvailability)
+            .filter(LandAvailability.land_id == land.id)
+            .first()
+        )
+        availability_status = (
+            availability.status.lower()
+            if availability and availability.status
+            else "available"
+        )
+
+        view_count = (
+            db.query(ListingView)
+            .filter(ListingView.land_id == land.id)
+            .count()
+        )
+
+        inquiries = (
+            db.query(LandInquiry)
+            .filter(LandInquiry.land_id == land.id)
+            .all()
+        )
+        offers = (
+            db.query(LandOffer)
+            .filter(LandOffer.land_id == land.id)
+            .all()
+        )
+        site_visits = (
+            db.query(SiteVisit)
+            .filter(SiteVisit.land_id == land.id)
+            .all()
+        )
+
+        inquiry_counts = {
+            "total": len(inquiries),
+            "pending": sum(1 for item in inquiries if item.status == "pending"),
+            "accepted": sum(1 for item in inquiries if item.status == "accepted"),
+            "rejected": sum(1 for item in inquiries if item.status == "rejected"),
+        }
+
+        offer_counts = {
+            "total": len(offers),
+            "pending": sum(1 for item in offers if item.status == "pending"),
+            "accepted": sum(1 for item in offers if item.status == "accepted"),
+            "rejected": sum(1 for item in offers if item.status == "rejected"),
+        }
+
+        visit_counts = {
+            "total": len(site_visits),
+            "pending": sum(1 for item in site_visits if item.status == "pending"),
+            "accepted": sum(1 for item in site_visits if item.status == "accepted"),
+            "rejected": sum(1 for item in site_visits if item.status == "rejected"),
+            "completed": sum(1 for item in site_visits if item.status == "completed"),
+            "cancelled": sum(1 for item in site_visits if item.status == "cancelled"),
+        }
+
+        if availability_status in ("available", "reserved", "sold"):
+            summary[availability_status] += 1
+
+        summary["total_views"] += view_count
+        summary["total_inquiries"] += inquiry_counts["total"]
+        summary["pending_inquiries"] += inquiry_counts["pending"]
+        summary["accepted_inquiries"] += inquiry_counts["accepted"]
+        summary["rejected_inquiries"] += inquiry_counts["rejected"]
+        summary["total_offers"] += offer_counts["total"]
+        summary["pending_offers"] += offer_counts["pending"]
+        summary["accepted_offers"] += offer_counts["accepted"]
+        summary["rejected_offers"] += offer_counts["rejected"]
+        summary["total_site_visits"] += visit_counts["total"]
+        summary["pending_site_visits"] += visit_counts["pending"]
+        summary["accepted_site_visits"] += visit_counts["accepted"]
+        summary["rejected_site_visits"] += visit_counts["rejected"]
+        summary["completed_site_visits"] += visit_counts["completed"]
+        summary["cancelled_site_visits"] += visit_counts["cancelled"]
+
+        records.append({
+            "id": land.id,
+            "title": land.title,
+            "status": land.status,
+            "is_published": bool(land.is_published),
+            "availability": availability_status,
+            "views": view_count,
+            "inquiries": inquiry_counts,
+            "offers": offer_counts,
+            "site_visits": visit_counts,
+        })
+
+    return {
+        "summary": summary,
+        "records": records,
+    }
 
 
 # ==========================
