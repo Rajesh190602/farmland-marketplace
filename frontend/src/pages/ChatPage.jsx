@@ -1901,7 +1901,7 @@ export default function ChatPage() {
 
                 <button
                   type="button"
-                  onClick={() => navigate(`/land/${conversationLandId}`)}
+                  onClick={() => navigate(`/lands/${conversationLandId}`)}
                   style={{
                     border: "none",
                     background: "#2E7D32",
