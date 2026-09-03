@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Text,
     UniqueConstraint,
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -118,6 +119,24 @@ class User(Base):
         "UserReport",
         foreign_keys="UserReport.reported_user_id",
         back_populates="reported_user",
+        cascade="all, delete-orphan"
+    )
+
+    # -----------------------------------------------------
+    # Phase 6 - Reviews & Ratings
+    # -----------------------------------------------------
+
+    reviews_written = relationship(
+        "UserReview",
+        foreign_keys="UserReview.reviewer_id",
+        back_populates="reviewer",
+        cascade="all, delete-orphan"
+    )
+
+    reviews_received = relationship(
+        "UserReview",
+        foreign_keys="UserReview.reviewed_user_id",
+        back_populates="reviewed_user",
         cascade="all, delete-orphan"
     )
         # -----------------------------------------------------
@@ -352,6 +371,16 @@ class Land(Base):
 
     site_visits = relationship(
         "SiteVisit",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+    # -----------------------------------------------------
+    # Phase 6 - Reviews & Ratings
+    # -----------------------------------------------------
+
+    reviews = relationship(
+        "UserReview",
         back_populates="land",
         cascade="all, delete-orphan"
     )
@@ -1379,4 +1408,104 @@ class SavedSearch(Base):
     user = relationship(
         "User",
         foreign_keys=[user_id]
+    )
+
+# =========================================================
+# PHASE 6
+# USER REVIEWS & RATINGS
+# =========================================================
+# A review is written by one marketplace user about another
+# marketplace user and is tied to a specific land listing.
+# This supports Buyer -> Farmer and Farmer -> Buyer ratings.
+# =========================================================
+
+class UserReview(Base):
+    __tablename__ = "user_reviews"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    reviewer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    reviewed_user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    rating = Column(
+        Integer,
+        nullable=False
+    )
+
+    comment = Column(
+        Text,
+        nullable=True
+    )
+
+    # published / hidden
+    status = Column(
+        String,
+        default="published",
+        nullable=False,
+        index=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
+
+    reviewer = relationship(
+        "User",
+        foreign_keys=[reviewer_id],
+        back_populates="reviews_written"
+    )
+
+    reviewed_user = relationship(
+        "User",
+        foreign_keys=[reviewed_user_id],
+        back_populates="reviews_received"
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="reviews"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "reviewer_id",
+            "reviewed_user_id",
+            "land_id",
+            name="uq_user_review_reviewer_reviewed_land"
+        ),
+        CheckConstraint(
+            "rating >= 1 AND rating <= 5",
+            name="ck_user_review_rating_1_5"
+        ),
     )

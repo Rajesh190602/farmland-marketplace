@@ -57,6 +57,21 @@ function LandDetails() {
   // =========================================================
   const [similarLands, setSimilarLands] = useState([]);
   const [similarLandsLoading, setSimilarLandsLoading] = useState(false);
+  // =========================================================
+  // PHASE 6 - REVIEWS & RATINGS
+  // =========================================================
+  const [reviewSummary, setReviewSummary] = useState({
+    average_rating: 0,
+    total_reviews: 0,
+  });
+  const [reviews, setReviews] = useState([]);
+  const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewError, setReviewError] = useState("");
 
   // Logged-in user's information
   const currentUserId = Number(
@@ -209,6 +224,10 @@ function LandDetails() {
     // Land Details page.
     await fetchAvailability(id);
     await fetchSimilarLands(response.data);
+    await fetchFarmerReviews(
+      Number(response.data?.owner_id),
+      Number(response.data?.id)
+    );
     } catch (error) {
       console.error(
         "Failed to load land:",
@@ -899,6 +918,198 @@ function LandDetails() {
     } finally {
       setReportLoading(false);
     }
+  };
+
+  // =========================================================
+  // PHASE 6 - REVIEWS & RATINGS
+  // =========================================================
+
+  const fetchFarmerReviews = async (ownerId, landId) => {
+    if (!ownerId) {
+      return;
+    }
+
+    try {
+      setReviewsLoading(true);
+      setReviewError("");
+
+      const [summaryResponse, reviewsResponse] =
+        await Promise.all([
+          api.get(`/reviews/user/${ownerId}/summary`),
+          api.get(`/reviews/user/${ownerId}`),
+        ]);
+
+      setReviewSummary({
+        average_rating:
+          Number(summaryResponse.data?.average_rating) || 0,
+        total_reviews:
+          Number(summaryResponse.data?.total_reviews) || 0,
+      });
+
+      setReviews(
+        Array.isArray(reviewsResponse.data)
+          ? reviewsResponse.data
+          : []
+      );
+    } catch (error) {
+      console.error(
+        "Failed to load farmer reviews:",
+        error
+      );
+      setReviewSummary({
+        average_rating: 0,
+        total_reviews: 0,
+      });
+      setReviews([]);
+      setReviewError(
+        error.response?.data?.detail ||
+          "Unable to load reviews."
+      );
+    } finally {
+      setReviewsLoading(false);
+    }
+
+    // Eligibility is only relevant to a logged-in buyer
+    // reviewing the farmer who owns this land.
+    if (
+      currentRole === "buyer" &&
+      Number(currentUserId) !== Number(ownerId)
+    ) {
+      try {
+        const eligibilityResponse = await api.get(
+          "/reviews/eligibility",
+          {
+            params: {
+              land_id: Number(landId),
+              reviewed_user_id: Number(ownerId),
+            },
+          }
+        );
+
+        setReviewEligibility(
+          eligibilityResponse.data || null
+        );
+      } catch (error) {
+        console.error(
+          "Failed to check review eligibility:",
+          error
+        );
+        setReviewEligibility({
+          eligible: false,
+          reason:
+            error.response?.data?.detail ||
+            "Unable to check review eligibility.",
+        });
+      }
+    } else {
+      setReviewEligibility(null);
+    }
+  };
+
+  const submitReview = async () => {
+    const comment = reviewComment.trim();
+
+    if (!Number.isInteger(Number(reviewRating))) {
+      alert("Please select a rating from 1 to 5.");
+      return;
+    }
+
+    if (
+      Number(reviewRating) < 1 ||
+      Number(reviewRating) > 5
+    ) {
+      alert("Please select a rating from 1 to 5.");
+      return;
+    }
+
+    if (comment.length > 2000) {
+      alert("Review comment must be 2000 characters or less.");
+      return;
+    }
+
+    if (
+      !reviewEligibility?.eligible
+    ) {
+      alert(
+        reviewEligibility?.reason ||
+          "You are not eligible to review this farmer yet."
+      );
+      return;
+    }
+
+    try {
+      setReviewLoading(true);
+
+      await api.post("/reviews", {
+        reviewed_user_id: Number(land.owner_id),
+        land_id: Number(land.id),
+        rating: Number(reviewRating),
+        comment: comment || null,
+      });
+
+      alert("Your review has been submitted successfully.");
+
+      setReviewComment("");
+      setReviewRating(5);
+      setShowReviewForm(false);
+
+      await fetchFarmerReviews(
+        Number(land.owner_id),
+        Number(land.id)
+      );
+    } catch (error) {
+      console.error(
+        "Failed to submit review:",
+        error
+      );
+
+      alert(
+        error.response?.data?.detail ||
+          "Unable to submit review."
+      );
+
+      // Refresh eligibility because a duplicate review or
+      // changed marketplace status may have made it ineligible.
+      try {
+        const eligibilityResponse = await api.get(
+          "/reviews/eligibility",
+          {
+            params: {
+              land_id: Number(land.id),
+              reviewed_user_id: Number(land.owner_id),
+            },
+          }
+        );
+        setReviewEligibility(
+          eligibilityResponse.data || null
+        );
+      } catch {
+        // The original error is already shown to the user.
+      }
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const renderStars = (rating, size = 20) => {
+    const roundedRating = Math.round(Number(rating) || 0);
+
+    return (
+      <span
+        aria-label={`${rating} out of 5 stars`}
+        style={{
+          whiteSpace: "nowrap",
+          letterSpacing: "2px",
+          fontSize: `${size}px`,
+        }}
+      >
+        {[1, 2, 3, 4, 5].map((star) => (
+          <span key={star}>
+            {star <= roundedRating ? "★" : "☆"}
+          </span>
+        ))}
+      </span>
+    );
   };
 
   // =========================================================
@@ -2014,6 +2225,386 @@ function LandDetails() {
               </button>
             </div>
           </div>
+
+          {/* =====================================================
+              PHASE 6 - REVIEWS & RATINGS
+          ====================================================== */}
+
+          {!isOwnLand && (
+            <div
+              style={{
+                marginTop: "30px",
+                background: "#FFFFFF",
+                padding: "25px",
+                borderRadius: "15px",
+                boxShadow:
+                  "0 5px 20px rgba(0,0,0,.08)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "15px",
+                  flexWrap: "wrap",
+                  marginBottom: "20px",
+                }}
+              >
+                <div>
+                  <h2
+                    style={{
+                      color: "#2E7D32",
+                      marginTop: 0,
+                      marginBottom: "8px",
+                    }}
+                  >
+                    ⭐ Farmer Ratings & Reviews
+                  </h2>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {renderStars(
+                      reviewSummary.average_rating,
+                      24
+                    )}
+
+                    <strong
+                      style={{
+                        fontSize: "22px",
+                        color: "#333",
+                      }}
+                    >
+                      {reviewSummary.average_rating > 0
+                        ? reviewSummary.average_rating.toFixed(1)
+                        : "No rating yet"}
+                    </strong>
+
+                    <span
+                      style={{
+                        color: "#666",
+                      }}
+                    >
+                      ({reviewSummary.total_reviews}{" "}
+                      {reviewSummary.total_reviews === 1
+                        ? "review"
+                        : "reviews"})
+                    </span>
+                  </div>
+                </div>
+
+                {currentRole === "buyer" &&
+                  Number(currentUserId) !==
+                    Number(land.owner_id) &&
+                  reviewEligibility?.eligible && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowReviewForm(
+                          (previous) => !previous
+                        )
+                      }
+                      style={{
+                        background: "#2E7D32",
+                        color: "#fff",
+                        padding: "11px 20px",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      ⭐{" "}
+                      {showReviewForm
+                        ? "Close Review"
+                        : "Write a Review"}
+                    </button>
+                  )}
+              </div>
+
+              {currentRole === "buyer" &&
+                Number(currentUserId) !==
+                  Number(land.owner_id) &&
+                reviewEligibility &&
+                !reviewEligibility.eligible && (
+                  <div
+                    style={{
+                      background: "#F5F5F5",
+                      color: "#666",
+                      padding: "12px 15px",
+                      borderRadius: "8px",
+                      marginBottom: "18px",
+                    }}
+                  >
+                    ℹ️{" "}
+                    {reviewEligibility.reason ||
+                      "You can review this farmer after completing a site visit."}
+                  </div>
+                )}
+
+              {showReviewForm &&
+                reviewEligibility?.eligible && (
+                  <div
+                    style={{
+                      background:
+                        "linear-gradient(135deg,#F1F8E9,#FFFFFF)",
+                      padding: "20px",
+                      borderRadius: "12px",
+                      border:
+                        "1px solid #C8E6C9",
+                      marginBottom: "22px",
+                    }}
+                  >
+                    <h3
+                      style={{
+                        color: "#2E7D32",
+                        marginTop: 0,
+                      }}
+                    >
+                      Write Your Review
+                    </h3>
+
+                    <p
+                      style={{
+                        marginBottom: "8px",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Your Rating
+                    </p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "5px",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      {[1, 2, 3, 4, 5].map(
+                        (star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() =>
+                              setReviewRating(star)
+                            }
+                            aria-label={`Rate ${star} out of 5`}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              cursor: "pointer",
+                              fontSize: "32px",
+                              lineHeight: 1,
+                              padding: "2px",
+                              color:
+                                star <= reviewRating
+                                  ? "#F9A825"
+                                  : "#BDBDBD",
+                            }}
+                          >
+                            {star <= reviewRating
+                              ? "★"
+                              : "☆"}
+                          </button>
+                        )
+                      )}
+                    </div>
+
+                    <textarea
+                      value={reviewComment}
+                      onChange={(event) =>
+                        setReviewComment(
+                          event.target.value
+                        )
+                      }
+                      maxLength={2000}
+                      rows={5}
+                      placeholder="Share your experience with this farmer..."
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "12px",
+                        border:
+                          "1px solid #ccc",
+                        borderRadius: "8px",
+                        resize: "vertical",
+                        fontFamily: "inherit",
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent:
+                          "space-between",
+                        alignItems: "center",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                        marginTop: "10px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "#777",
+                          fontSize: "13px",
+                        }}
+                      >
+                        {reviewComment.length}/2000
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={submitReview}
+                        disabled={reviewLoading}
+                        style={{
+                          background:
+                            reviewLoading
+                              ? "#999"
+                              : "#2E7D32",
+                          color: "#fff",
+                          padding:
+                            "11px 22px",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor:
+                            reviewLoading
+                              ? "not-allowed"
+                              : "pointer",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {reviewLoading
+                          ? "Submitting..."
+                          : "⭐ Submit Review"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              {reviewError && (
+                <div
+                  style={{
+                    background: "#FFF8F8",
+                    color: "#C62828",
+                    padding: "12px 15px",
+                    borderRadius: "8px",
+                    marginBottom: "18px",
+                  }}
+                >
+                  {reviewError}
+                </div>
+              )}
+
+              {reviewsLoading ? (
+                <p
+                  style={{
+                    color: "#666",
+                  }}
+                >
+                  Loading reviews...
+                </p>
+              ) : reviews.length === 0 ? (
+                <div
+                  style={{
+                    background: "#F8FBF8",
+                    padding: "18px",
+                    borderRadius: "10px",
+                    color: "#666",
+                  }}
+                >
+                  No published reviews yet. Be the first
+                  eligible buyer to review this farmer.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "15px",
+                  }}
+                >
+                  {reviews.map((review) => (
+                    <div
+                      key={review.id}
+                      style={{
+                        border:
+                          "1px solid #E0E0E0",
+                        borderRadius: "10px",
+                        padding: "18px",
+                        background: "#FAFAFA",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent:
+                            "space-between",
+                          alignItems: "flex-start",
+                          gap: "15px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div>
+                          <strong
+                            style={{
+                              color: "#333",
+                            }}
+                          >
+                            {review.reviewer_name ||
+                              "Marketplace User"}
+                          </strong>
+
+                          <div
+                            style={{
+                              marginTop: "5px",
+                            }}
+                          >
+                            {renderStars(
+                              review.rating,
+                              18
+                            )}
+                          </div>
+                        </div>
+
+                        {review.created_at && (
+                          <span
+                            style={{
+                              color: "#888",
+                              fontSize: "13px",
+                            }}
+                          >
+                            {new Date(
+                              review.created_at
+                            ).toLocaleDateString(
+                              "en-IN"
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      {review.comment && (
+                        <p
+                          style={{
+                            marginBottom: 0,
+                            marginTop: "12px",
+                            color: "#555",
+                            lineHeight: "24px",
+                          }}
+                        >
+                          {review.comment}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* =====================================================
               PHASE 2 - REPORT LAND
