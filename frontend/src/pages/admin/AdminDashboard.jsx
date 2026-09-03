@@ -63,6 +63,35 @@ function AdminDashboard() {
 
   const [activityLoading, setActivityLoading] = useState(true);
 
+  // Marketplace statistics
+  const [marketplaceStats, setMarketplaceStats] = useState({
+    listing_availability: {
+      available: 0,
+      reserved: 0,
+      sold: 0,
+    },
+    inquiries: {
+      total: 0,
+      pending: 0,
+      accepted: 0,
+      rejected: 0,
+    },
+    offers: {
+      total: 0,
+      pending: 0,
+      accepted: 0,
+      rejected: 0,
+    },
+    site_visits: {
+      total: 0,
+      pending: 0,
+      accepted: 0,
+      rejected: 0,
+      completed: 0,
+      cancelled: 0,
+    },
+  });
+
 
   // =========================================================
   // LOAD DASHBOARD
@@ -77,6 +106,8 @@ function AdminDashboard() {
     fetchMonthlyGrowth();
 
     fetchRecentActivity();
+
+    fetchMarketplaceStatistics();
 
   }, []);
 
@@ -300,6 +331,66 @@ function AdminDashboard() {
 
       alert(
         "Failed to download report."
+      );
+
+    }
+
+  };
+
+
+  // =========================================================
+  // FETCH MARKETPLACE STATISTICS
+  // =========================================================
+
+  const fetchMarketplaceStatistics = async () => {
+
+    try {
+
+      const response = await api.get(
+        "/admin/marketplace-statistics"
+      );
+
+      const data = response.data || {};
+
+      setMarketplaceStats({
+        listing_availability: {
+          available:
+            data.listing_availability?.available || 0,
+          reserved:
+            data.listing_availability?.reserved || 0,
+          sold:
+            data.listing_availability?.sold || 0,
+        },
+
+        inquiries: {
+          total: data.inquiries?.total || 0,
+          pending: data.inquiries?.pending || 0,
+          accepted: data.inquiries?.accepted || 0,
+          rejected: data.inquiries?.rejected || 0,
+        },
+
+        offers: {
+          total: data.offers?.total || 0,
+          pending: data.offers?.pending || 0,
+          accepted: data.offers?.accepted || 0,
+          rejected: data.offers?.rejected || 0,
+        },
+
+        site_visits: {
+          total: data.site_visits?.total || 0,
+          pending: data.site_visits?.pending || 0,
+          accepted: data.site_visits?.accepted || 0,
+          rejected: data.site_visits?.rejected || 0,
+          completed: data.site_visits?.completed || 0,
+          cancelled: data.site_visits?.cancelled || 0,
+        },
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Marketplace Statistics Error:",
+        error
       );
 
     }
@@ -1177,6 +1268,212 @@ function AdminDashboard() {
           </ResponsiveContainer>
 
         )}
+
+      </div>
+
+
+      {/* =====================================================
+          MARKETPLACE STATISTICS
+      ===================================================== */}
+
+      <div
+        style={{
+          marginTop: "40px",
+          background: "#fff",
+          padding: "30px",
+          borderRadius: "18px",
+          boxShadow:
+            "0 6px 18px rgba(0,0,0,0.10)",
+        }}
+      >
+
+        <h2
+          style={{
+            color: "#2E7D32",
+            textAlign: "center",
+            marginBottom: "30px",
+          }}
+        >
+          📊 Marketplace Statistics
+        </h2>
+
+        {/* LISTING AVAILABILITY */}
+        <h3
+          style={{
+            color: "#333",
+            marginBottom: "15px",
+          }}
+        >
+          🌾 Listing Availability
+        </h3>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit,minmax(180px,1fr))",
+            gap: "15px",
+            marginBottom: "30px",
+          }}
+        >
+
+          <div style={cardStyle("#43A047")}>
+            <h3>🟢 Available</h3>
+            <h1>
+              {marketplaceStats.listing_availability.available}
+            </h1>
+          </div>
+
+          <div style={cardStyle("#F9A825")}>
+            <h3>🟡 Reserved</h3>
+            <h1>
+              {marketplaceStats.listing_availability.reserved}
+            </h1>
+          </div>
+
+          <div style={cardStyle("#E53935")}>
+            <h3>🔴 Sold</h3>
+            <h1>
+              {marketplaceStats.listing_availability.sold}
+            </h1>
+          </div>
+
+        </div>
+
+        {/* INQUIRIES */}
+        <h3
+          style={{
+            color: "#333",
+            marginBottom: "15px",
+          }}
+        >
+          📩 Inquiry Statistics
+        </h3>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit,minmax(180px,1fr))",
+            gap: "15px",
+            marginBottom: "30px",
+          }}
+        >
+
+          <div style={cardStyle("#1565C0")}>
+            <h3>Total Inquiries</h3>
+            <h1>{marketplaceStats.inquiries.total}</h1>
+          </div>
+
+          <div style={cardStyle("#F9A825")}>
+            <h3>🟡 Pending</h3>
+            <h1>{marketplaceStats.inquiries.pending}</h1>
+          </div>
+
+          <div style={cardStyle("#43A047")}>
+            <h3>✅ Accepted</h3>
+            <h1>{marketplaceStats.inquiries.accepted}</h1>
+          </div>
+
+          <div style={cardStyle("#E53935")}>
+            <h3>❌ Rejected</h3>
+            <h1>{marketplaceStats.inquiries.rejected}</h1>
+          </div>
+
+        </div>
+
+        {/* OFFERS */}
+        <h3
+          style={{
+            color: "#333",
+            marginBottom: "15px",
+          }}
+        >
+          💰 Offer Statistics
+        </h3>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit,minmax(180px,1fr))",
+            gap: "15px",
+            marginBottom: "30px",
+          }}
+        >
+
+          <div style={cardStyle("#1565C0")}>
+            <h3>Total Offers</h3>
+            <h1>{marketplaceStats.offers.total}</h1>
+          </div>
+
+          <div style={cardStyle("#F9A825")}>
+            <h3>🟡 Pending</h3>
+            <h1>{marketplaceStats.offers.pending}</h1>
+          </div>
+
+          <div style={cardStyle("#43A047")}>
+            <h3>✅ Accepted</h3>
+            <h1>{marketplaceStats.offers.accepted}</h1>
+          </div>
+
+          <div style={cardStyle("#E53935")}>
+            <h3>❌ Rejected</h3>
+            <h1>{marketplaceStats.offers.rejected}</h1>
+          </div>
+
+        </div>
+
+        {/* SITE VISITS */}
+        <h3
+          style={{
+            color: "#333",
+            marginBottom: "15px",
+          }}
+        >
+          📅 Site-Visit Statistics
+        </h3>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit,minmax(180px,1fr))",
+            gap: "15px",
+          }}
+        >
+
+          <div style={cardStyle("#1565C0")}>
+            <h3>Total Visits</h3>
+            <h1>{marketplaceStats.site_visits.total}</h1>
+          </div>
+
+          <div style={cardStyle("#F9A825")}>
+            <h3>🟡 Pending</h3>
+            <h1>{marketplaceStats.site_visits.pending}</h1>
+          </div>
+
+          <div style={cardStyle("#1976D2")}>
+            <h3>🔵 Accepted</h3>
+            <h1>{marketplaceStats.site_visits.accepted}</h1>
+          </div>
+
+          <div style={cardStyle("#E53935")}>
+            <h3>❌ Rejected</h3>
+            <h1>{marketplaceStats.site_visits.rejected}</h1>
+          </div>
+
+          <div style={cardStyle("#43A047")}>
+            <h3>✅ Completed</h3>
+            <h1>{marketplaceStats.site_visits.completed}</h1>
+          </div>
+
+          <div style={cardStyle("#616161")}>
+            <h3>⚪ Cancelled</h3>
+            <h1>{marketplaceStats.site_visits.cancelled}</h1>
+          </div>
+
+        </div>
 
       </div>
 

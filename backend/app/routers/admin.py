@@ -5,6 +5,11 @@ from app.auth import get_current_admin
 from app.database import get_db
 from app.models import (
     User,
+    LandAvailability,
+    LandInquiry,
+    LandInquiry,
+    LandOffer,
+    SiteVisit,
     Land,
     Notification,
     LandImage,
@@ -400,6 +405,7 @@ def get_recent_activity(
 def get_all_users(
     search: str = Query(default=""),
     role: str = Query(default=""),
+    status: str = Query(default=""),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -410,11 +416,24 @@ def get_all_users(
     if search:
         query = query.filter(
             (User.full_name.ilike(f"%{search}%")) |
-            (User.email.ilike(f"%{search}%"))
+            (User.email.ilike(f"%{search}%")) |
+            (User.mobile.ilike(f"%{search}%"))
         )
 
     if role:
         query = query.filter(User.role == role)
+
+    if status:
+        status = status.strip().lower()
+        if status == "active":
+            query = query.filter(User.is_suspended == False)
+        elif status == "suspended":
+            query = query.filter(User.is_suspended == True)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid user status. Use active or suspended."
+            )
 
     total = query.count()
 
@@ -437,6 +456,7 @@ def get_all_users(
                 "email": user.email,
                 "mobile": user.mobile,
                 "role": user.role,
+                "is_suspended": user.is_suspended,
             }
             for user in users
         ],
@@ -2119,4 +2139,172 @@ def restore_user(
         "message": "User restored successfully.",
         "user_id": user.id,
         "is_suspended": user.is_suspended,
+    }
+# =========================================================
+# PHASE 5 - MARKETPLACE STATISTICS
+# #32 Listing Availability Statistics
+# #33 Inquiry Statistics
+# #34 Offer Statistics
+# #35 Site Visit Statistics
+# =========================================================
+
+@router.get("/marketplace-statistics")
+def marketplace_statistics(
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Return marketplace statistics for the Admin Dashboard.
+
+    Includes:
+    - Land availability
+    - Inquiry status
+    - Offer status
+    - Site visit status
+    """
+
+    # -----------------------------------------------------
+    # LAND AVAILABILITY
+    # -----------------------------------------------------
+
+    available_lands = (
+        db.query(Land)
+        .join(
+            LandAvailability,
+            LandAvailability.land_id == Land.id,
+        )
+        .filter(LandAvailability.status == "available")
+        .count()
+    )
+
+    reserved_lands = (
+        db.query(Land)
+        .join(
+            LandAvailability,
+            LandAvailability.land_id == Land.id,
+        )
+        .filter(LandAvailability.status == "reserved")
+        .count()
+    )
+
+    sold_lands = (
+        db.query(Land)
+        .join(
+            LandAvailability,
+            LandAvailability.land_id == Land.id,
+        )
+        .filter(LandAvailability.status == "sold")
+        .count()
+    )
+
+    # -----------------------------------------------------
+    # INQUIRIES
+    # -----------------------------------------------------
+
+    total_inquiries = db.query(LandInquiry).count()
+
+    pending_inquiries = (
+        db.query(LandInquiry)
+        .filter(LandInquiry.status == "pending")
+        .count()
+    )
+
+    accepted_inquiries = (
+        db.query(LandInquiry)
+        .filter(LandInquiry.status == "accepted")
+        .count()
+    )
+
+    rejected_inquiries = (
+        db.query(LandInquiry)
+        .filter(LandInquiry.status == "rejected")
+        .count()
+    )
+
+    # -----------------------------------------------------
+    # OFFERS
+    # -----------------------------------------------------
+
+    total_offers = db.query(LandOffer).count()
+
+    pending_offers = (
+        db.query(LandOffer)
+        .filter(LandOffer.status == "pending")
+        .count()
+    )
+
+    accepted_offers = (
+        db.query(LandOffer)
+        .filter(LandOffer.status == "accepted")
+        .count()
+    )
+
+    rejected_offers = (
+        db.query(LandOffer)
+        .filter(LandOffer.status == "rejected")
+        .count()
+    )
+
+    # -----------------------------------------------------
+    # SITE VISITS
+    # -----------------------------------------------------
+
+    total_site_visits = db.query(SiteVisit).count()
+
+    pending_site_visits = (
+        db.query(SiteVisit)
+        .filter(SiteVisit.status == "pending")
+        .count()
+    )
+
+    accepted_site_visits = (
+        db.query(SiteVisit)
+        .filter(SiteVisit.status == "accepted")
+        .count()
+    )
+
+    rejected_site_visits = (
+        db.query(SiteVisit)
+        .filter(SiteVisit.status == "rejected")
+        .count()
+    )
+
+    completed_site_visits = (
+        db.query(SiteVisit)
+        .filter(SiteVisit.status == "completed")
+        .count()
+    )
+
+    cancelled_site_visits = (
+        db.query(SiteVisit)
+        .filter(SiteVisit.status == "cancelled")
+        .count()
+    )
+
+    return {
+        "listing_availability": {
+            "available": available_lands,
+            "reserved": reserved_lands,
+            "sold": sold_lands,
+        },
+        "inquiries": {
+            "total": total_inquiries,
+            "pending": pending_inquiries,
+            "accepted": accepted_inquiries,
+            "rejected": rejected_inquiries,
+        },
+        "offers": {
+            "total": total_offers,
+            "pending": pending_offers,
+            "accepted": accepted_offers,
+            "rejected": rejected_offers,
+        },
+        "site_visits": {
+            "total": total_site_visits,
+            "pending": pending_site_visits,
+            "accepted": accepted_site_visits,
+            "rejected": rejected_site_visits,
+            "completed": completed_site_visits,
+            "cancelled": cancelled_site_visits,
+        },
     }

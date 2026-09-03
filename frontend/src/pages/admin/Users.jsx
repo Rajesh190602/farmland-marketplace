@@ -24,6 +24,7 @@ function Users() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
+  const [status, setStatus] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [suspendingId, setSuspendingId] = useState(null);
   const [page, setPage] = useState(1);
@@ -47,6 +48,7 @@ function Users() {
         params: {
           search: search.trim(),
           role,
+          status,
           page,
           limit: LIMIT,
         },
@@ -97,7 +99,7 @@ function Users() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [page, search, role]);
+  }, [page, search, role, status]);
 
   // =========================================================
   // TOTAL PAGES
@@ -164,6 +166,15 @@ function Users() {
   const handleRoleChange = (event) => {
     setPage(1);
     setRole(event.target.value);
+  };
+
+  // =========================================================
+  // ACCOUNT STATUS FILTER
+  // =========================================================
+
+  const handleStatusChange = (event) => {
+    setPage(1);
+    setStatus(event.target.value);
   };
 
   // =========================================================
@@ -477,7 +488,7 @@ function Users() {
 
             <input
               type="text"
-              placeholder="Search by name or email..."
+              placeholder="Search by name, email or mobile..."
               value={search}
               onChange={
                 handleSearchChange
@@ -526,6 +537,26 @@ function Users() {
             <option value="buyer">
               Buyer
             </option>
+          </select>
+
+          {/* Account Status Filter */}
+
+          <select
+            value={status}
+            onChange={handleStatusChange}
+            style={{
+              padding: "13px",
+              borderRadius: "10px",
+              border: "1px solid #ccc",
+              background: "#fff",
+              fontSize: "15px",
+              minWidth: "170px",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
           </select>
 
           {/* Refresh */}
