@@ -1617,6 +1617,17 @@ function Home() {
             <FaSearch /> Browse Lands
           </button>
 
+          {(userRole === "farmer" || userRole === "buyer") && (
+            <button
+              style={quickButton("#6A1B9A")}
+              onClick={() =>
+                navigate("/marketplace-activity")
+              }
+            >
+              🤝 Marketplace Activity
+            </button>
+          )}
+
           <button
             style={quickButton("#6A1B9A")}
             onClick={() =>
