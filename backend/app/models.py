@@ -1070,6 +1070,80 @@ class LandOffer(Base):
         foreign_keys=[buyer_id]
     )
 
+    negotiation_history = relationship(
+        "OfferNegotiationHistory",
+        back_populates="offer",
+        cascade="all, delete-orphan",
+        order_by="OfferNegotiationHistory.created_at.asc()",
+    )
+
+
+# =========================================================
+# STEP 50
+# OFFER NEGOTIATION HISTORY
+# =========================================================
+
+class OfferNegotiationHistory(Base):
+    __tablename__ = "offer_negotiation_history"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    offer_id = Column(
+        Integer,
+        ForeignKey("land_offers.id"),
+        nullable=False,
+        index=True
+    )
+
+    sender_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    sender_role = Column(
+        String,
+        nullable=False
+    )
+
+    # offer / counter / accepted / rejected
+    action = Column(
+        String,
+        nullable=False
+    )
+
+    amount = Column(
+        Float,
+        nullable=False
+    )
+
+    message = Column(
+        Text,
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
+
+    offer = relationship(
+        "LandOffer",
+        back_populates="negotiation_history"
+    )
+
+    sender = relationship(
+        "User",
+        foreign_keys=[sender_id]
+    )
+
 
 # =========================================================
 # PHASE 1

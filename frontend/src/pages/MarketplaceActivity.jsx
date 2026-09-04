@@ -47,6 +47,7 @@ function MarketplaceActivity() {
 
         setInquiries(inquiriesResponse.data || []);
         setOffers(offersResponse.data || []);
+        await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else if (userRole === "buyer") {
@@ -62,6 +63,7 @@ function MarketplaceActivity() {
 
         setInquiries(inquiriesResponse.data || []);
         setOffers(offersResponse.data || []);
+        await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else {
@@ -163,25 +165,93 @@ function MarketplaceActivity() {
   };
 
   // =====================================================
-  // UPDATE OFFER
+  // STEP 50 - OFFER NEGOTIATION
   // =====================================================
+
+  const [offerHistory, setOfferHistory] = useState({});
+  const [counterAmount, setCounterAmount] = useState({});
+  const [counterMessage, setCounterMessage] = useState({});
+
+  const loadOfferHistory = async (offerItems) => {
+    const historyEntries = await Promise.all(
+      (offerItems || []).map(async (item) => {
+        try {
+          const response = await api.get(
+            `/marketplace/offers/${item.id}/history`
+          );
+          return [item.id, response.data || []];
+        } catch (error) {
+          console.error(`Failed to load history for offer ${item.id}:`, error);
+          return [item.id, []];
+        }
+      })
+    );
+
+    setOfferHistory(Object.fromEntries(historyEntries));
+  };
+
+  const getOfferTurn = (item) => {
+    const history = offerHistory[item.id] || [];
+    const latest = history[history.length - 1];
+
+    if (!latest) {
+      return userRole === "farmer" ? "Your turn" : "Waiting for farmer";
+    }
+
+    if (latest.sender_id === Number(sessionStorage.getItem("user_id"))) {
+      return latest.sender_role === "farmer"
+        ? "Waiting for buyer"
+        : "Waiting for farmer";
+    }
+
+    return "Your turn";
+  };
+
+  const canActOnOffer = (item) => {
+    if (item.status !== "pending") return false;
+    const history = offerHistory[item.id] || [];
+    const latest = history[history.length - 1];
+    if (!latest) return userRole === "farmer";
+    return latest.sender_id !== Number(sessionStorage.getItem("user_id"));
+  };
 
   const updateOffer = async (id, status) => {
     try {
-      setActionLoading(
-        `offer-${id}-${status}`
-      );
-
-      await api.put(
-        `/marketplace/offers/${id}/status`,
-        { status }
-      );
-
+      setActionLoading(`offer-${id}-${status}`);
+      await api.put(`/marketplace/offers/${id}/status`, { status });
       await loadActivity();
     } catch (error) {
       alert(
         error.response?.data?.detail ||
           "Failed to update offer."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const submitCounterOffer = async (item) => {
+    const amount = Number(counterAmount[item.id]);
+    const message = String(counterMessage[item.id] || "").trim();
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Enter a counter-offer amount greater than zero.");
+      return;
+    }
+
+    try {
+      setActionLoading(`counter-${item.id}`);
+      await api.post(`/marketplace/offers/${item.id}/counter`, {
+        amount,
+        message: message || null,
+      });
+      setCounterAmount((prev) => ({ ...prev, [item.id]: "" }));
+      setCounterMessage((prev) => ({ ...prev, [item.id]: "" }));
+      await loadActivity();
+    } catch (error) {
+      alert(
+        error.response?.data?.detail ||
+          "Failed to send counter-offer."
       );
     } finally {
       setActionLoading(null);
@@ -948,31 +1018,17 @@ function MarketplaceActivity() {
               </section>
 
               {/* =================================================
-                  OFFERS
+                  OFFERS - STEP 50 NEGOTIATION
               ================================================= */}
 
-              <section
-                style={{
-                  marginBottom: "40px",
-                }}
-              >
-                <h2
-                  style={{
-                    color: "#1565C0",
-                    marginBottom: "18px",
-                  }}
-                >
-                  💰 Land Offers
+              <section style={{ marginBottom: "40px" }}>
+                <h2 style={{ color: "#1565C0", marginBottom: "18px" }}>
+                  💰 Land Offers & Negotiation
                 </h2>
 
                 {offers.length === 0 ? (
                   <Card>
-                    <p
-                      style={{
-                        margin: 0,
-                        color: "#777",
-                      }}
-                    >
+                    <p style={{ margin: 0, color: "#777" }}>
                       No land offers yet.
                     </p>
                   </Card>
@@ -980,175 +1036,259 @@ function MarketplaceActivity() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fit,minmax(280px,1fr))",
+                      gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
                       gap: "18px",
                     }}
                   >
-                    {offers.map((item) => (
-                      <Card key={item.id}>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent:
-                              "space-between",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                        >
-                          <strong>
-                            Offer #{item.id}
-                          </strong>
+                    {offers.map((item) => {
+                      const history = offerHistory[item.id] || [];
+                      const latest = history[history.length - 1];
+                      const isMyTurn = canActOnOffer(item);
 
-                          <StatusBadge
-                            status={item.status}
-                          />
-                        </div>
-
-                        <h3
-                          style={{
-                            margin:
-                              "18px 0 8px",
-                            color: "#1565C0",
-                          }}
-                        >
-                          ₹
-                          {Number(
-                            item.amount || 0
-                          ).toLocaleString(
-                            "en-IN"
-                          )}
-                        </h3>
-
-                        {item.message && (
-                          <p
+                      return (
+                        <Card key={item.id}>
+                          <div
                             style={{
-                              color: "#555",
-                              lineHeight: 1.5,
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "10px",
                             }}
                           >
-                            {item.message}
-                          </p>
-                        )}
+                            <strong>Offer #{item.id}</strong>
+                            <StatusBadge status={item.status} />
+                          </div>
 
-                        <p
-                          style={{
-                            fontSize: "13px",
-                            color: "#888",
-                          }}
-                        >
-                          Land ID: {item.land_id}
-                        </p>
+                          <h3
+                            style={{
+                              margin: "18px 0 8px",
+                              color: "#1565C0",
+                            }}
+                          >
+                            ₹{Number(item.amount || 0).toLocaleString("en-IN")}
+                          </h3>
 
-                        {/* CHAT */}
-
-                        <button
-                          onClick={() =>
-                            startChat(item)
-                            
-                            
-                          }
-                          disabled={
-                            actionLoading ===
-                            `chat-${item.land_id}`
-                          }
-                          style={{
-                            width: "100%",
-                            marginTop: "15px",
-                            border: "none",
-                            borderRadius: "9px",
-                            padding: "11px",
-                            background:
-                              "#1976D2",
-                            color: "#fff",
-                            cursor:
-                              actionLoading ===
-                              `chat-${item.land_id}`
-                                ? "not-allowed"
-                                : "pointer",
-                            fontWeight: "700",
-                          }}
-                        >
-                          💬{" "}
-                          {actionLoading ===
-                          `chat-${item.land_id}`
-                            ? "Opening Chat..."
-                            : userRole === "farmer"
-                            ? "Reply to Buyer"
-                            : "Chat with Farmer"}
-                        </button>
-
-                        {/* FARMER ACTIONS */}
-
-                        {userRole === "farmer" &&
-                          item.status ===
-                            "pending" && (
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: "10px",
-                                marginTop: "10px",
-                              }}
-                            >
-                              <button
-                                disabled={
-                                  actionLoading ===
-                                  `offer-${item.id}-accepted`
-                                }
-                                onClick={() =>
-                                  updateOffer(
-                                    item.id,
-                                    "accepted"
-                                  )
-                                }
-                                style={{
-                                  flex: 1,
-                                  border: "none",
-                                  borderRadius: "9px",
-                                  padding: "10px",
-                                  background:
-                                    "#2E7D32",
-                                  color: "#fff",
-                                  cursor:
-                                    "pointer",
-                                  fontWeight:
-                                    "700",
-                                }}
-                              >
-                                Accept
-                              </button>
-
-                              <button
-                                disabled={
-                                  actionLoading ===
-                                  `offer-${item.id}-rejected`
-                                }
-                                onClick={() =>
-                                  updateOffer(
-                                    item.id,
-                                    "rejected"
-                                  )
-                                }
-                                style={{
-                                  flex: 1,
-                                  border: "none",
-                                  borderRadius: "9px",
-                                  padding: "10px",
-                                  background:
-                                    "#C62828",
-                                  color: "#fff",
-                                  cursor:
-                                    "pointer",
-                                  fontWeight:
-                                    "700",
-                                }}
-                              >
-                                Reject
-                              </button>
-                            </div>
+                          {item.message && (
+                            <p style={{ color: "#555", lineHeight: 1.5 }}>
+                              {item.message}
+                            </p>
                           )}
-                      </Card>
-                    ))}
+
+                          <p style={{ fontSize: "13px", color: "#888" }}>
+                            Land ID: {item.land_id}
+                          </p>
+
+                          <div
+                            style={{
+                              marginTop: "12px",
+                              padding: "10px 12px",
+                              background: "#E3F2FD",
+                              borderRadius: "9px",
+                              color: "#1565C0",
+                              fontWeight: "700",
+                              fontSize: "13px",
+                            }}
+                          >
+                            {item.status === "pending"
+                              ? `🔔 ${getOfferTurn(item)}`
+                              : `Offer ${item.status}`}
+                          </div>
+
+                          {/* NEGOTIATION HISTORY */}
+                          <div
+                            style={{
+                              marginTop: "16px",
+                              borderTop: "1px solid #eee",
+                              paddingTop: "14px",
+                            }}
+                          >
+                            <strong style={{ color: "#444" }}>
+                              📜 Negotiation History
+                            </strong>
+
+                            {history.length === 0 ? (
+                              <p style={{ fontSize: "13px", color: "#888" }}>
+                                Loading negotiation history...
+                              </p>
+                            ) : (
+                              <div style={{ marginTop: "10px" }}>
+                                {history.map((entry, index) => (
+                                  <div
+                                    key={`${entry.id}-${index}`}
+                                    style={{
+                                      padding: "9px 10px",
+                                      marginBottom: "7px",
+                                      borderRadius: "8px",
+                                      background: entry.sender_role === userRole ? "#F1F8E9" : "#F5F5F5",
+                                      fontSize: "13px",
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: "700" }}>
+                                      {entry.action === "offer"
+                                        ? "💰 Offer"
+                                        : entry.action === "counter"
+                                        ? "🔄 Counter-offer"
+                                        : entry.action === "accepted"
+                                        ? "✅ Accepted"
+                                        : "❌ Rejected"}
+                                      {" · "}
+                                      {entry.sender_role === "farmer" ? "Farmer" : "Buyer"}
+                                    </div>
+                                    <div style={{ marginTop: "3px" }}>
+                                      ₹{Number(entry.amount || 0).toLocaleString("en-IN")}
+                                    </div>
+                                    {entry.message && (
+                                      <div style={{ color: "#666", marginTop: "3px" }}>
+                                        {entry.message}
+                                      </div>
+                                    )}
+                                    {entry.created_at && (
+                                      <div style={{ color: "#999", marginTop: "3px", fontSize: "11px" }}>
+                                        {new Date(entry.created_at).toLocaleString()}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => startChat(item)}
+                            disabled={actionLoading === `chat-${item.id}`}
+                            style={{
+                              width: "100%",
+                              marginTop: "15px",
+                              border: "none",
+                              borderRadius: "9px",
+                              padding: "11px",
+                              background: "#1976D2",
+                              color: "#fff",
+                              cursor: actionLoading === `chat-${item.id}` ? "not-allowed" : "pointer",
+                              fontWeight: "700",
+                            }}
+                          >
+                            💬 {actionLoading === `chat-${item.id}` ? "Opening Chat..." : userRole === "farmer" ? "Reply to Buyer" : "Chat with Farmer"}
+                          </button>
+
+                          {item.status === "pending" && isMyTurn && (
+                            <>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 1fr",
+                                  gap: "10px",
+                                  marginTop: "10px",
+                                }}
+                              >
+                                <button
+                                  disabled={actionLoading === `offer-${item.id}-accepted`}
+                                  onClick={() => updateOffer(item.id, "accepted")}
+                                  style={{
+                                    border: "none",
+                                    borderRadius: "9px",
+                                    padding: "10px",
+                                    background: "#2E7D32",
+                                    color: "#fff",
+                                    cursor: "pointer",
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  Accept ₹{Number(item.amount || 0).toLocaleString("en-IN")}
+                                </button>
+                                <button
+                                  disabled={actionLoading === `offer-${item.id}-rejected`}
+                                  onClick={() => updateOffer(item.id, "rejected")}
+                                  style={{
+                                    border: "none",
+                                    borderRadius: "9px",
+                                    padding: "10px",
+                                    background: "#C62828",
+                                    color: "#fff",
+                                    cursor: "pointer",
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  Reject
+                                </button>
+                              </div>
+
+                              <div
+                                style={{
+                                  marginTop: "12px",
+                                  padding: "12px",
+                                  background: "#F8F9FA",
+                                  borderRadius: "10px",
+                                  border: "1px solid #E0E0E0",
+                                }}
+                              >
+                                <strong style={{ fontSize: "13px", color: "#555" }}>
+                                  🔄 Send Counter-Offer
+                                </strong>
+                                <input
+                                  type="number"
+                                  min="0.01"
+                                  value={counterAmount[item.id] || ""}
+                                  onChange={(e) =>
+                                    setCounterAmount((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  placeholder="Counter amount"
+                                  style={{
+                                    width: "100%",
+                                    boxSizing: "border-box",
+                                    marginTop: "8px",
+                                    padding: "10px",
+                                    border: "1px solid #ccc",
+                                    borderRadius: "8px",
+                                  }}
+                                />
+                                <textarea
+                                  rows={3}
+                                  maxLength={2000}
+                                  value={counterMessage[item.id] || ""}
+                                  onChange={(e) =>
+                                    setCounterMessage((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  placeholder="Optional message"
+                                  style={{
+                                    width: "100%",
+                                    boxSizing: "border-box",
+                                    marginTop: "8px",
+                                    padding: "10px",
+                                    border: "1px solid #ccc",
+                                    borderRadius: "8px",
+                                    resize: "vertical",
+                                  }}
+                                />
+                                <button
+                                  onClick={() => submitCounterOffer(item)}
+                                  disabled={actionLoading === `counter-${item.id}`}
+                                  style={{
+                                    width: "100%",
+                                    marginTop: "8px",
+                                    border: "none",
+                                    borderRadius: "9px",
+                                    padding: "10px",
+                                    background: "#6A1B9A",
+                                    color: "#fff",
+                                    cursor: actionLoading === `counter-${item.id}` ? "not-allowed" : "pointer",
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  {actionLoading === `counter-${item.id}` ? "Sending..." : "Send Counter-Offer"}
+                                </button>
+                              </div>
+                            </>
+                          )}
+
+                          {item.status === "pending" && !isMyTurn && (
+                            <p style={{ marginTop: "12px", color: "#777", fontSize: "13px" }}>
+                              {latest?.sender_role === userRole ? "Waiting for the other party's response." : "The other party has responded. Refreshing the offer will show your available actions."}
+                            </p>
+                          )}
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </section>

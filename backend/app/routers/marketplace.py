@@ -12,6 +12,7 @@ from app.models import (
     LandAvailability,
     LandInquiry,
     LandOffer,
+    OfferNegotiationHistory,
     SiteVisit,
     Notification,
     LandReport,
@@ -25,6 +26,8 @@ from app.schemas import (
     LandOfferCreate,
     LandOfferResponse,
     LandOfferStatusUpdate,
+    LandOfferCounterCreate,
+    OfferNegotiationHistoryResponse,
     SiteVisitCreate,
     SiteVisitResponse,
     SiteVisitStatusUpdate,
@@ -743,8 +746,85 @@ def update_inquiry_status(
 
 
 # =========================================================
-# BUYER - MAKE OFFER
+# STEP 50 - OFFER NEGOTIATION / COUNTER-OFFER
 # =========================================================
+
+# The existing LandOffer row remains the active negotiation.
+# Every offer/counter/status action is also stored in
+# OfferNegotiationHistory so the complete negotiation is preserved.
+
+
+def get_offer_for_update(db: Session, offer_id: int):
+    offer = (
+        db.query(LandOffer)
+        .filter(LandOffer.id == offer_id)
+        .with_for_update()
+        .first()
+    )
+
+    if not offer:
+        raise HTTPException(
+            status_code=404,
+            detail="Offer not found.",
+        )
+
+    return offer
+
+
+def get_latest_offer_history(db: Session, offer: LandOffer):
+    return (
+        db.query(OfferNegotiationHistory)
+        .filter(OfferNegotiationHistory.offer_id == offer.id)
+        .order_by(OfferNegotiationHistory.id.desc())
+        .first()
+    )
+
+
+def validate_offer_turn(db: Session, offer: LandOffer, current_user: int, land: Land):
+    latest = get_latest_offer_history(db, offer)
+
+    # Legacy offers created before Step 50 have no history. Their first
+    # response is always the farmer's response because the original offer
+    # was submitted by the buyer.
+    if latest is None:
+        if current_user != land.owner_id:
+            raise HTTPException(
+                status_code=409,
+                detail="The offer is waiting for the farmer's response.",
+            )
+        return None
+
+    if latest.sender_id == current_user:
+        waiting_for = "buyer" if latest.sender_role == "farmer" else "farmer"
+        raise HTTPException(
+            status_code=409,
+            detail=f"The offer is waiting for the {waiting_for}'s response.",
+        )
+
+    return latest
+
+
+def add_offer_history(
+    db: Session,
+    offer: LandOffer,
+    sender_id: int,
+    sender_role: str,
+    action: str,
+    amount: float,
+    message: str | None = None,
+):
+    history = OfferNegotiationHistory(
+        offer_id=offer.id,
+        sender_id=sender_id,
+        sender_role=sender_role,
+        action=action,
+        amount=amount,
+        message=message,
+    )
+    db.add(history)
+    db.flush()
+    return history
+
 
 @router.post(
     "/offers",
@@ -755,15 +835,8 @@ def create_offer(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
-    buyer = require_buyer(
-        db,
-        current_user,
-    )
-
-    land = get_land(
-        db,
-        data.land_id,
-    )
+    buyer = require_buyer(db, current_user)
+    land = get_land(db, data.land_id)
 
     if land.status != "approved":
         raise HTTPException(
@@ -777,17 +850,13 @@ def create_offer(
             detail="You cannot make an offer on your own land.",
         )
 
-    availability = get_or_create_availability(
-        db,
-        land,
-    )
-
+    availability = get_or_create_availability(db, land)
     if availability.status != "available":
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Offers cannot be submitted because "
-                f"this land is {availability.status}."
+                f"Offers cannot be submitted because this land is "
+                f"{availability.status}."
             ),
         )
 
@@ -806,44 +875,49 @@ def create_offer(
         )
         .first()
     )
-
     if existing:
         raise HTTPException(
             status_code=409,
-            detail="You already have a pending offer for this land.",
+            detail="You already have an active offer for this land.",
         )
-        # ----------------------------------
-    # ANTI-SPAM COOLDOWN
-    # ----------------------------------
 
     recent_offer = (
         db.query(LandOffer)
         .filter(
             LandOffer.land_id == land.id,
             LandOffer.buyer_id == buyer.id,
-            LandOffer.created_at >= (
-                datetime.utcnow() - timedelta(minutes=5)
-            ),
+            LandOffer.created_at >= (datetime.utcnow() - timedelta(minutes=5)),
         )
         .first()
     )
-
     if recent_offer:
         raise HTTPException(
             status_code=429,
             detail="Please wait 5 minutes before submitting another offer for this land.",
         )
 
+    message = (data.message or "").strip() or None
+
     offer = LandOffer(
         land_id=land.id,
         buyer_id=buyer.id,
         amount=data.amount,
-        message=data.message,
+        message=message,
         status="pending",
     )
-
     db.add(offer)
     db.flush()
+
+    add_offer_history(
+        db=db,
+        offer=offer,
+        sender_id=buyer.id,
+        sender_role="buyer",
+        action="offer",
+        amount=data.amount,
+        message=message,
+    )
+
     notify(
         db,
         land.owner_id,
@@ -856,15 +930,21 @@ def create_offer(
         offer.id,
     )
 
+    create_activity_log(
+        db=db,
+        user_id=buyer.id,
+        action="CREATE_OFFER",
+        description=(
+            f'Submitted offer of ₹{data.amount:,.2f} for land "{land.title}".'
+        ),
+        target_type="OFFER",
+        target_id=offer.id,
+    )
+
     db.commit()
     db.refresh(offer)
-
     return offer
 
-
-# =========================================================
-# FARMER - RECEIVED OFFERS
-# =========================================================
 
 @router.get(
     "/offers/received",
@@ -874,30 +954,15 @@ def get_received_offers(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
-    farmer = require_farmer(
-        db,
-        current_user,
-    )
-
+    farmer = require_farmer(db, current_user)
     return (
         db.query(LandOffer)
-        .join(
-            Land,
-            Land.id == LandOffer.land_id,
-        )
-        .filter(
-            Land.owner_id == farmer.id
-        )
-        .order_by(
-            LandOffer.created_at.desc()
-        )
+        .join(Land, Land.id == LandOffer.land_id)
+        .filter(Land.owner_id == farmer.id)
+        .order_by(LandOffer.updated_at.desc(), LandOffer.created_at.desc())
         .all()
     )
 
-
-# =========================================================
-# BUYER - MY OFFERS
-# =========================================================
 
 @router.get(
     "/offers/my",
@@ -907,26 +972,172 @@ def get_my_offers(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
-    buyer = require_buyer(
-        db,
-        current_user,
-    )
-
+    buyer = require_buyer(db, current_user)
     return (
         db.query(LandOffer)
-        .filter(
-            LandOffer.buyer_id == buyer.id
-        )
-        .order_by(
-            LandOffer.created_at.desc()
-        )
+        .filter(LandOffer.buyer_id == buyer.id)
+        .order_by(LandOffer.updated_at.desc(), LandOffer.created_at.desc())
         .all()
     )
 
 
-# =========================================================
-# FARMER - UPDATE OFFER
-# =========================================================
+@router.get(
+    "/offers/{offer_id}/history",
+    response_model=list[OfferNegotiationHistoryResponse],
+)
+def get_offer_history(
+    offer_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    offer = db.query(LandOffer).filter(LandOffer.id == offer_id).first()
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found.")
+
+    land = get_land(db, offer.land_id)
+    if current_user not in {offer.buyer_id, land.owner_id}:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to view this offer negotiation.",
+        )
+
+    history = (
+        db.query(OfferNegotiationHistory)
+        .filter(OfferNegotiationHistory.offer_id == offer.id)
+        .order_by(OfferNegotiationHistory.created_at.asc(), OfferNegotiationHistory.id.asc())
+        .all()
+    )
+
+    # Legacy offer compatibility: expose its original offer as history even
+    # when the database predates Step 50 and has no history row.
+    if not history:
+        history = [
+            OfferNegotiationHistory(
+                id=0,
+                offer_id=offer.id,
+                sender_id=offer.buyer_id,
+                sender_role="buyer",
+                action="offer",
+                amount=offer.amount,
+                message=offer.message,
+                created_at=offer.created_at,
+            )
+        ]
+
+    return history
+
+
+def _update_offer_status(
+    offer_id: int,
+    data: LandOfferStatusUpdate,
+    db: Session,
+    current_user: int,
+):
+    offer = get_offer_for_update(db, offer_id)
+
+    if offer.status != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail=f"This offer is already {offer.status} and cannot be changed.",
+        )
+
+    land = get_land(db, offer.land_id)
+    if current_user not in {offer.buyer_id, land.owner_id}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the buyer or farmer involved in this offer can respond.",
+        )
+
+    actor = get_user(db, current_user)
+    validate_offer_turn(db, offer, current_user, land)
+
+    status = (data.status or "").strip().lower()
+    if status not in {"accepted", "rejected"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid offer status. Use accepted or rejected.",
+        )
+
+    if status == "accepted":
+        availability = get_or_create_availability(db, land)
+        if availability.status != "available":
+            raise HTTPException(
+                status_code=400,
+                detail=f"This land is currently {availability.status}.",
+            )
+
+        availability.status = "reserved"
+        availability.updated_at = datetime.utcnow()
+
+        other_offers = (
+            db.query(LandOffer)
+            .filter(
+                LandOffer.land_id == land.id,
+                LandOffer.id != offer.id,
+                LandOffer.status == "pending",
+            )
+            .all()
+        )
+        for other_offer in other_offers:
+            other_offer.status = "rejected"
+            other_offer.updated_at = datetime.utcnow()
+            notify(
+                db,
+                other_offer.buyer_id,
+                "❌ Offer Rejected",
+                f"Another offer was accepted for '{land.title}'.",
+                "offer",
+                other_offer.id,
+            )
+
+    offer.status = status
+    offer.updated_at = datetime.utcnow()
+    add_offer_history(
+        db=db,
+        offer=offer,
+        sender_id=current_user,
+        sender_role=actor.role,
+        action=status,
+        amount=offer.amount,
+        message=offer.message,
+    )
+
+    if status == "accepted":
+        notify(
+            db,
+            offer.buyer_id,
+            "✅ Offer Accepted",
+            f"Your offer of ₹{offer.amount:,.2f} for '{land.title}' was accepted.",
+            "offer",
+            offer.id,
+        )
+    else:
+        other_user_id = land.owner_id if current_user == offer.buyer_id else offer.buyer_id
+        notify(
+            db,
+            other_user_id,
+            "❌ Offer Rejected",
+            f"The offer for '{land.title}' was rejected by the {actor.role}.",
+            "offer",
+            offer.id,
+        )
+
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="ACCEPT_OFFER" if status == "accepted" else "REJECT_OFFER",
+        description=(
+            f'{actor.role.title()} {status} offer #{offer.id} for land "{land.title}" '
+            f'at ₹{offer.amount:,.2f}.'
+        ),
+        target_type="OFFER",
+        target_id=offer.id,
+    )
+
+    db.commit()
+    db.refresh(offer)
+    return offer
+
 
 @router.put(
     "/offers/{offer_id}/status",
@@ -938,131 +1149,91 @@ def update_offer_status(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
-    farmer = require_farmer(
-        db,
-        current_user,
-    )
+    return _update_offer_status(offer_id, data, db, current_user)
 
-    offer = (
-        db.query(LandOffer)
-        .filter(
-            LandOffer.id == offer_id
-        )
-        .first()
-    )
 
-    if not offer:
+@router.post(
+    "/offers/{offer_id}/counter",
+    response_model=LandOfferResponse,
+)
+def counter_offer(
+    offer_id: int,
+    data: LandOfferCounterCreate,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    offer = get_offer_for_update(db, offer_id)
+
+    if offer.status != "pending":
         raise HTTPException(
-            status_code=404,
-            detail="Offer not found.",
+            status_code=409,
+            detail=f"This offer is already {offer.status} and cannot be negotiated further.",
         )
 
-    land = get_land(
-        db,
-        offer.land_id,
-    )
+    if data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Counter-offer amount must be greater than zero.")
 
-    if land.owner_id != farmer.id:
+    land = get_land(db, offer.land_id)
+    if current_user not in {offer.buyer_id, land.owner_id}:
         raise HTTPException(
             status_code=403,
-            detail="You can update only offers for your own land.",
+            detail="Only the buyer or farmer involved in this offer can counter it.",
         )
 
-    status = (
-        data.status or ""
-    ).strip().lower()
+    actor = get_user(db, current_user)
+    validate_offer_turn(db, offer, current_user, land)
 
-    if status not in {
-        "pending",
-        "accepted",
-        "rejected",
-    }:
+    availability = get_or_create_availability(db, land)
+    if availability.status != "available":
         raise HTTPException(
             status_code=400,
-            detail="Invalid offer status.",
+            detail=f"Counter-offers cannot be made because this land is {availability.status}.",
         )
 
-    if (
-        status == "accepted"
-        and offer.status != "accepted"
-    ):
-        availability = get_or_create_availability(
-            db,
-            land,
-        )
-
-        if availability.status != "available":
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"This land is currently "
-                    f"{availability.status}."
-                ),
-            )
-
-        availability.status = "reserved"
-        availability.updated_at = datetime.utcnow()
-
-        # Reject other pending offers for the same land.
-        other_offers = (
-            db.query(LandOffer)
-            .filter(
-                LandOffer.land_id == land.id,
-                LandOffer.id != offer.id,
-                LandOffer.status == "pending",
-            )
-            .all()
-        )
-
-        for other_offer in other_offers:
-            other_offer.status = "rejected"
-            other_offer.updated_at = datetime.utcnow()
-
-            notify(
-                db,
-                other_offer.buyer_id,
-                "❌ Offer Rejected",
-                (
-                    f"Another offer was accepted for "
-                    f"'{land.title}'."
-                ),
-                "offer",
-                other_offer.id,
-            )
-
-    offer.status = status
+    message = (data.message or "").strip() or None
+    offer.amount = data.amount
+    offer.message = message
     offer.updated_at = datetime.utcnow()
 
-    if status == "accepted":
-        notify(
-            db,
-            offer.buyer_id,
-            "✅ Offer Accepted",
-            (
-                f"Your offer of ₹{offer.amount:,.2f} "
-                f"for '{land.title}' was accepted."
-            ),
-            "offer",
-            offer.id,
-        )
+    add_offer_history(
+        db=db,
+        offer=offer,
+        sender_id=current_user,
+        sender_role=actor.role,
+        action="counter",
+        amount=data.amount,
+        message=message,
+    )
 
-    elif status == "rejected":
-        notify(
-            db,
-            offer.buyer_id,
-            "❌ Offer Rejected",
-            (
-                f"Your offer for '{land.title}' "
-                f"was rejected."
-            ),
-            "offer",
-            offer.id,
-        )
+    recipient_id = land.owner_id if current_user == offer.buyer_id else offer.buyer_id
+    notify(
+        db,
+        recipient_id,
+        "🔄 New Counter-Offer",
+        (
+            f"{actor.full_name} countered the offer for '{land.title}' "
+            f"with ₹{data.amount:,.2f}."
+        ),
+        "offer",
+        offer.id,
+    )
+
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="COUNTER_OFFER",
+        description=(
+            f'{actor.role.title()} countered offer #{offer.id} for land "{land.title}" '
+            f'at ₹{data.amount:,.2f}.'
+        ),
+        target_type="OFFER",
+        target_id=offer.id,
+    )
 
     db.commit()
     db.refresh(offer)
-
     return offer
+
 
 
 # =========================================================

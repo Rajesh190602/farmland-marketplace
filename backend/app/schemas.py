@@ -279,6 +279,25 @@ class LandOfferStatusUpdate(BaseModel):
     status: str
 
 
+class LandOfferCounterCreate(BaseModel):
+    amount: float
+    message: Optional[str] = None
+
+
+class OfferNegotiationHistoryResponse(BaseModel):
+    id: int
+    offer_id: int
+    sender_id: int
+    sender_role: str
+    action: str
+    amount: float
+    message: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # =========================================================
 # SITE VISIT
 # =========================================================
@@ -328,6 +347,7 @@ class LandReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 # =========================================================
 # PHASE 2 - USER REPORT
 # =========================================================
