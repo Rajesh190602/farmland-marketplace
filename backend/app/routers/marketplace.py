@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
+from app.utils.activity_log import create_activity_log
 from app.models import (
     User,
     Land,
@@ -137,6 +138,91 @@ def get_or_create_availability(
     return availability
 
 
+# =========================================================
+# STEP 49 - LISTING LIFECYCLE RULES
+# =========================================================
+#
+# Approval/publication and marketplace availability are separate
+# concepts. A listing must be approved before its availability can
+# be changed. Once approved, marketplace availability follows the
+# controlled lifecycle below:
+#
+#   Available <-> Reserved -> Sold
+#
+# A listing cannot jump directly from Available to Sold, and a Sold
+# listing cannot be reopened directly by a farmer.
+#
+ALLOWED_AVAILABILITY_TRANSITIONS = {
+    "available": {"available", "reserved"},
+    "reserved": {"reserved", "available", "sold"},
+    "sold": {"sold"},
+}
+
+
+def get_or_create_availability_for_update(
+    db: Session,
+    land: Land,
+):
+    """Load a listing availability row with a row lock for lifecycle updates."""
+    availability = (
+        db.query(LandAvailability)
+        .filter(
+            LandAvailability.land_id == land.id
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if not availability:
+        availability = LandAvailability(
+            land_id=land.id,
+            status="available",
+        )
+        db.add(availability)
+        db.flush()
+
+    return availability
+
+
+def validate_availability_transition(
+    current_status: str,
+    requested_status: str,
+):
+    """Return a clear API error when a farmer attempts an invalid transition."""
+    current = (current_status or "available").strip().lower()
+    requested = (requested_status or "").strip().lower()
+
+    allowed = ALLOWED_AVAILABILITY_TRANSITIONS.get(
+        current,
+        set(),
+    )
+
+    if requested not in allowed:
+        if current == "available" and requested == "sold":
+            detail = (
+                "A land listing cannot be marked Sold directly from Available. "
+                "Mark it Reserved first, then mark it Sold after the deal is completed."
+            )
+        elif current == "sold" and requested != "sold":
+            detail = (
+                "Sold land cannot be reopened directly. "
+                "Contact an administrator if a correction is required."
+            )
+        else:
+            detail = (
+                f"Invalid availability transition: {current} -> {requested}. "
+                "Allowed lifecycle is Available -> Reserved -> Sold, "
+                "with Reserved -> Available allowed when a reservation is cancelled."
+            )
+
+        raise HTTPException(
+            status_code=400,
+            detail=detail,
+        )
+
+    return current, requested
+
+
 def notify(
     db: Session,
     user_id: int,
@@ -209,6 +295,20 @@ def update_land_availability(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    """
+    Step 49: enforce the complete farmer listing availability lifecycle.
+
+    Approval status and publication remain controlled by Admin.
+    Marketplace availability is controlled by the land owner only
+    through these transitions:
+
+        Available -> Reserved
+        Reserved  -> Available
+        Reserved  -> Sold
+
+    A direct Available -> Sold transition is rejected, and Sold
+    listings cannot be reopened directly.
+    """
     farmer = require_farmer(
         db,
         current_user,
@@ -228,43 +328,133 @@ def update_land_availability(
     if land.status != "approved":
         raise HTTPException(
             status_code=400,
-            detail="Only approved land can be marked available, reserved, or sold.",
+            detail=(
+                "Only approved land can be marked available, "
+                "reserved, or sold."
+            ),
         )
 
-    allowed_statuses = {
-        "available",
-        "reserved",
-        "sold",
-    }
-
-    status = (
+    requested_status = (
         data.status or ""
     ).strip().lower()
 
-    if status not in allowed_statuses:
+    if requested_status not in {
+        "available",
+        "reserved",
+        "sold",
+    }:
         raise HTTPException(
             status_code=400,
-            detail="Invalid availability status. Use available, reserved, or sold.",
+            detail=(
+                "Invalid availability status. "
+                "Use available, reserved, or sold."
+            ),
         )
 
-    availability = get_or_create_availability(
+    availability = get_or_create_availability_for_update(
         db,
         land,
     )
 
-    # Prevent a farmer from reopening a sold listing
-    # directly.
-    if (
-        availability.status == "sold"
-        and status != "sold"
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Sold land cannot be reopened directly.",
+    current_status, requested_status = validate_availability_transition(
+        availability.status,
+        requested_status,
+    )
+
+    # No-op updates are safe and do not create duplicate activity logs.
+    if current_status == requested_status:
+        db.refresh(availability)
+        return availability
+
+    availability.status = requested_status
+    availability.updated_at = datetime.utcnow()
+
+    # If a listing is marked Sold, close stale pending marketplace
+    # requests so buyers cannot continue acting on a completed listing.
+    if requested_status == "sold":
+        pending_inquiries = (
+            db.query(LandInquiry)
+            .filter(
+                LandInquiry.land_id == land.id,
+                LandInquiry.status == "pending",
+            )
+            .all()
         )
 
-    availability.status = status
-    availability.updated_at = datetime.utcnow()
+        for inquiry in pending_inquiries:
+            inquiry.status = "rejected"
+            inquiry.updated_at = datetime.utcnow()
+            notify(
+                db,
+                inquiry.buyer_id,
+                "🔴 Land Sold",
+                (
+                    f"Your inquiry for '{land.title}' was closed "
+                    "because the land has been marked sold."
+                ),
+                "inquiry",
+                inquiry.id,
+            )
+
+        pending_offers = (
+            db.query(LandOffer)
+            .filter(
+                LandOffer.land_id == land.id,
+                LandOffer.status == "pending",
+            )
+            .all()
+        )
+
+        for offer in pending_offers:
+            offer.status = "rejected"
+            offer.updated_at = datetime.utcnow()
+            notify(
+                db,
+                offer.buyer_id,
+                "🔴 Land Sold",
+                (
+                    f"Your offer for '{land.title}' was closed "
+                    "because the land has been marked sold."
+                ),
+                "offer",
+                offer.id,
+            )
+
+        pending_visits = (
+            db.query(SiteVisit)
+            .filter(
+                SiteVisit.land_id == land.id,
+                SiteVisit.status == "pending",
+            )
+            .all()
+        )
+
+        for visit in pending_visits:
+            visit.status = "cancelled"
+            visit.updated_at = datetime.utcnow()
+            notify(
+                db,
+                visit.buyer_id,
+                "🔴 Land Sold",
+                (
+                    f"Your site visit request for '{land.title}' "
+                    "was cancelled because the land has been marked sold."
+                ),
+                "site_visit",
+                visit.id,
+            )
+
+    create_activity_log(
+        db=db,
+        user_id=farmer.id,
+        action="UPDATE_LAND_AVAILABILITY",
+        description=(
+            f'Changed land "{land.title}" availability '
+            f"from {current_status} to {requested_status}."
+        ),
+        target_type="LAND",
+        target_id=land.id,
+    )
 
     db.commit()
     db.refresh(availability)

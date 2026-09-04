@@ -931,6 +931,35 @@ def approve_land(
     land.status = "approved"
     land.rejection_reason = None
 
+    # =====================================================
+    # STEP 49 - INITIALIZE MARKETPLACE LIFECYCLE
+    #
+    # Approval is separate from marketplace availability.
+    # When a listing is approved for the first time, ensure it
+    # has an explicit Available availability record so the
+    # farmer can continue the controlled lifecycle:
+    #
+    #   Available -> Reserved -> Sold
+    #
+    # Existing availability is preserved so an approved listing
+    # that was temporarily pending for re-approval does not lose
+    # its current marketplace state.
+    # =====================================================
+    availability = (
+        db.query(LandAvailability)
+        .filter(
+            LandAvailability.land_id == land.id
+        )
+        .first()
+    )
+
+    if not availability:
+        availability = LandAvailability(
+            land_id=land.id,
+            status="available",
+        )
+        db.add(availability)
+
     # Notify land owner
     notification = Notification(
         user_id=land.owner_id,

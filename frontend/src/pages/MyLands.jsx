@@ -153,7 +153,21 @@ function MyLands() {
     const currentStatus =
       availabilityStatuses[landId] || "available";
 
-    // Reserved -> Available needs confirmation
+    // Available -> Reserved needs confirmation.
+    if (
+      currentStatus === "available" &&
+      newStatus === "reserved"
+    ) {
+      const confirmed = window.confirm(
+        "Are you sure you want to reserve this land? Buyers will no longer be able to submit new inquiries, offers, or site-visit requests."
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // Reserved -> Available needs confirmation.
     if (
       currentStatus === "reserved" &&
       newStatus === "available"
@@ -167,13 +181,35 @@ function MyLands() {
       }
     }
 
-    // Sold land cannot be reopened directly
+    // Available -> Sold is not a valid lifecycle transition.
+    if (
+      currentStatus === "available" &&
+      newStatus === "sold"
+    ) {
+      alert(
+        "A land listing must be Reserved before it can be marked Sold."
+      );
+      return;
+    }
+
+    // Sold land cannot be reopened directly.
     if (
       currentStatus === "sold" &&
       newStatus !== "sold"
     ) {
       alert(
         "Sold land cannot be reopened directly."
+      );
+      return;
+    }
+
+    // Sold is reached only from Reserved.
+    if (
+      currentStatus !== "reserved" &&
+      newStatus === "sold"
+    ) {
+      alert(
+        "A land listing must be Reserved before it can be marked Sold."
       );
       return;
     }
@@ -917,9 +953,10 @@ function MyLands() {
                           marginBottom: "15px",
                         }}
                       >
-                        Update whether this land is currently
-                        available, reserved, or sold in the
-                        marketplace.
+                        Follow the listing lifecycle:
+                        Available → Reserved → Sold.
+                        A reserved listing can return to Available
+                        if the reservation is cancelled.
                       </p>
 
                       <div
@@ -981,7 +1018,7 @@ function MyLands() {
                             availabilityLoadingId ===
                               land.id ||
                             (availabilityStatuses[land.id] ||
-                              "available") === "reserved"
+                              "available") !== "available"
                           }
                           style={{
                             background: "#EF6C00",
@@ -1000,8 +1037,8 @@ function MyLands() {
                                 land.id ||
                               (availabilityStatuses[
                                 land.id
-                              ] || "available") ===
-                                "reserved"
+                              ] || "available") !==
+                                "available"
                                 ? 0.6
                                 : 1,
                           }}
@@ -1021,7 +1058,7 @@ function MyLands() {
                             availabilityLoadingId ===
                               land.id ||
                             (availabilityStatuses[land.id] ||
-                              "available") === "sold"
+                              "available") !== "reserved"
                           }
                           style={{
                             background: "#C62828",
@@ -1040,8 +1077,8 @@ function MyLands() {
                                 land.id ||
                               (availabilityStatuses[
                                 land.id
-                              ] || "available") ===
-                                "sold"
+                              ] || "available") !==
+                                "reserved"
                                 ? 0.6
                                 : 1,
                           }}

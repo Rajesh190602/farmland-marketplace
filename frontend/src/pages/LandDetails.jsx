@@ -3046,6 +3046,19 @@ function FarmerAvailability({
     newStatus
   ) => {
     if (
+      availabilityStatus === "available" &&
+      newStatus === "reserved"
+    ) {
+      const confirmed = window.confirm(
+        "Are you sure you want to reserve this land? Buyers will no longer be able to submit new inquiries, offers, or site-visit requests."
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    if (
       availabilityStatus === "reserved" &&
       newStatus === "available"
     ) {
@@ -3059,11 +3072,31 @@ function FarmerAvailability({
     }
 
     if (
+      availabilityStatus === "available" &&
+      newStatus === "sold"
+    ) {
+      alert(
+        "A land listing must be Reserved before it can be marked Sold."
+      );
+      return;
+    }
+
+    if (
       availabilityStatus === "sold" &&
       newStatus !== "sold"
     ) {
       alert(
         "Sold land cannot be reopened directly."
+      );
+      return;
+    }
+
+    if (
+      availabilityStatus !== "reserved" &&
+      newStatus === "sold"
+    ) {
+      alert(
+        "A land listing must be Reserved before it can be marked Sold."
       );
       return;
     }
@@ -3175,8 +3208,8 @@ function FarmerAvailability({
         <button
           disabled={
             marketplaceLoading ||
-            availabilityStatus ===
-              "reserved"
+            availabilityStatus !==
+              "available"
           }
           onClick={() =>
             updateAvailability(
@@ -3197,8 +3230,8 @@ function FarmerAvailability({
             fontWeight: "bold",
             opacity:
               marketplaceLoading ||
-              availabilityStatus ===
-                "reserved"
+              availabilityStatus !==
+                "available"
                 ? 0.6
                 : 1,
           }}
@@ -3209,8 +3242,8 @@ function FarmerAvailability({
         <button
           disabled={
             marketplaceLoading ||
-            availabilityStatus ===
-              "sold"
+            availabilityStatus !==
+              "reserved"
           }
           onClick={() =>
             updateAvailability(
@@ -3231,8 +3264,8 @@ function FarmerAvailability({
             fontWeight: "bold",
             opacity:
               marketplaceLoading ||
-              availabilityStatus ===
-                "sold"
+              availabilityStatus !==
+                "reserved"
                 ? 0.6
                 : 1,
           }}
@@ -3251,8 +3284,35 @@ function FarmerAvailability({
             fontWeight: "600",
           }}
         >
-          A sold listing cannot be
-          reopened directly.
+          A sold listing cannot be reopened directly.
+        </p>
+      )}
+
+      {availabilityStatus ===
+        "available" && (
+        <p
+          style={{
+            marginBottom: 0,
+            marginTop: "15px",
+            color: "#666",
+            fontWeight: "600",
+          }}
+        >
+          Lifecycle: Available → Reserved → Sold.
+        </p>
+      )}
+
+      {availabilityStatus ===
+        "reserved" && (
+        <p
+          style={{
+            marginBottom: 0,
+            marginTop: "15px",
+            color: "#666",
+            fontWeight: "600",
+          }}
+        >
+          From Reserved, you can return to Available or mark the land Sold.
         </p>
       )}
     </div>
