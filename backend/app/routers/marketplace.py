@@ -13,6 +13,7 @@ from app.models import (
     LandInquiry,
     LandOffer,
     OfferNegotiationHistory,
+    Reservation,
     SiteVisit,
     Notification,
     LandReport,
@@ -28,6 +29,9 @@ from app.schemas import (
     LandOfferStatusUpdate,
     LandOfferCounterCreate,
     OfferNegotiationHistoryResponse,
+    ReservationCreate,
+    ReservationResponse,
+    ReservationStatusUpdate,
     SiteVisitCreate,
     SiteVisitResponse,
     SiteVisitStatusUpdate,
@@ -1027,6 +1031,403 @@ def get_offer_history(
     return history
 
 
+def get_active_reservation_for_land(
+    db: Session,
+    land_id: int,
+    lock: bool = False,
+):
+    query = (
+        db.query(Reservation)
+        .filter(
+            Reservation.land_id == land_id,
+            Reservation.status.in_(["pending", "confirmed"]),
+        )
+    )
+    if lock:
+        query = query.with_for_update()
+    return query.order_by(Reservation.id.desc()).first()
+
+
+def create_confirmed_reservation_for_offer(
+    db: Session,
+    offer: LandOffer,
+    land: Land,
+):
+    """Create the Step 51 reservation that represents an accepted offer."""
+    existing = (
+        db.query(Reservation)
+        .filter(Reservation.offer_id == offer.id)
+        .first()
+    )
+    if existing:
+        if existing.status == "confirmed":
+            return existing
+        raise HTTPException(
+            status_code=409,
+            detail="A reservation already exists for this accepted offer.",
+        )
+
+    confirmed = (
+        db.query(Reservation)
+        .filter(
+            Reservation.land_id == land.id,
+            Reservation.status == "confirmed",
+        )
+        .with_for_update()
+        .first()
+    )
+    if confirmed and confirmed.buyer_id != offer.buyer_id:
+        raise HTTPException(
+            status_code=409,
+            detail="This land already has a confirmed reservation.",
+        )
+
+    pending_reservations = (
+        db.query(Reservation)
+        .filter(
+            Reservation.land_id == land.id,
+            Reservation.status == "pending",
+            Reservation.buyer_id != offer.buyer_id,
+        )
+        .with_for_update()
+        .all()
+    )
+    for other_reservation in pending_reservations:
+        other_reservation.status = "rejected"
+        other_reservation.updated_at = datetime.utcnow()
+        notify(
+            db,
+            other_reservation.buyer_id,
+            "❌ Reservation Rejected",
+            f"Another negotiated offer was accepted for '{land.title}'.",
+            "reservation",
+            other_reservation.id,
+        )
+
+    active = (
+        db.query(Reservation)
+        .filter(
+            Reservation.land_id == land.id,
+            Reservation.buyer_id == offer.buyer_id,
+            Reservation.status.in_(["pending", "confirmed"]),
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if active:
+        reservation = active
+        reservation.offer_id = offer.id
+        reservation.amount = offer.amount
+        reservation.message = offer.message
+        reservation.status = "confirmed"
+    else:
+        reservation = Reservation(
+            land_id=land.id,
+            buyer_id=offer.buyer_id,
+            farmer_id=land.owner_id,
+            offer_id=offer.id,
+            amount=offer.amount,
+            status="confirmed",
+            message=offer.message,
+        )
+        db.add(reservation)
+        db.flush()
+
+    now = datetime.utcnow()
+    reservation.updated_at = now
+    reservation.confirmed_at = reservation.confirmed_at or now
+    reservation.cancelled_at = None
+    db.flush()
+    return reservation
+
+
+@router.post(
+    "/reservations",
+    response_model=ReservationResponse,
+)
+def create_reservation(
+    data: ReservationCreate,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    buyer = require_buyer(db, current_user)
+    land = get_land(db, data.land_id)
+
+    if land.status != "approved":
+        raise HTTPException(status_code=404, detail="Approved land not found.")
+    if land.owner_id == buyer.id:
+        raise HTTPException(status_code=400, detail="You cannot reserve your own land.")
+
+    availability = get_or_create_availability_for_update(db, land)
+    if availability.status != "available":
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"This land is currently {availability.status} and cannot be reserved.",
+        )
+
+    if data.offer_id is not None:
+        offer = (
+            db.query(LandOffer)
+            .filter(LandOffer.id == data.offer_id)
+            .with_for_update()
+            .first()
+        )
+        if not offer:
+            db.rollback()
+            raise HTTPException(status_code=404, detail="Offer not found.")
+        if offer.land_id != land.id or offer.buyer_id != buyer.id:
+            db.rollback()
+            raise HTTPException(status_code=403, detail="This offer does not belong to you for this land.")
+        if offer.status != "accepted":
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Only an accepted offer can be attached to a reservation.")
+        amount = offer.amount
+        message = offer.message
+    else:
+        offer = None
+        # A direct reservation uses the current published listing price.
+        # Negotiated pricing is represented by an accepted offer instead.
+        amount = land.price
+        if amount <= 0:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="The land listing price must be greater than zero.")
+        message = (data.message or "").strip() or None
+
+    existing_buyer = (
+        db.query(Reservation)
+        .filter(
+            Reservation.land_id == land.id,
+            Reservation.buyer_id == buyer.id,
+            Reservation.status.in_(["pending", "confirmed"]),
+        )
+        .first()
+    )
+    if existing_buyer:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="You already have an active reservation for this land.")
+
+    reservation = Reservation(
+        land_id=land.id,
+        buyer_id=buyer.id,
+        farmer_id=land.owner_id,
+        offer_id=offer.id if offer else None,
+        amount=amount,
+        status="pending",
+        message=message,
+    )
+    db.add(reservation)
+    db.flush()
+
+    notify(
+        db,
+        land.owner_id,
+        "📌 Reservation Request",
+        f"{buyer.full_name} requested a reservation for '{land.title}'.",
+        "reservation",
+        reservation.id,
+    )
+    create_activity_log(
+        db=db,
+        user_id=buyer.id,
+        action="CREATE_RESERVATION",
+        description=f'Requested reservation for land "{land.title}".',
+        target_type="RESERVATION",
+        target_id=reservation.id,
+    )
+
+    db.commit()
+    db.refresh(reservation)
+    return reservation
+
+
+@router.get(
+    "/reservations/my",
+    response_model=list[ReservationResponse],
+)
+def get_my_reservations(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    buyer = require_buyer(db, current_user)
+    return (
+        db.query(Reservation)
+        .filter(Reservation.buyer_id == buyer.id)
+        .order_by(Reservation.updated_at.desc(), Reservation.created_at.desc())
+        .all()
+    )
+
+
+@router.get(
+    "/reservations/received",
+    response_model=list[ReservationResponse],
+)
+def get_received_reservations(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    farmer = require_farmer(db, current_user)
+    return (
+        db.query(Reservation)
+        .filter(Reservation.farmer_id == farmer.id)
+        .order_by(Reservation.updated_at.desc(), Reservation.created_at.desc())
+        .all()
+    )
+
+
+def _update_reservation_status(
+    reservation_id: int,
+    data: ReservationStatusUpdate,
+    db: Session,
+    current_user: int,
+):
+    reservation = (
+        db.query(Reservation)
+        .filter(Reservation.id == reservation_id)
+        .with_for_update()
+        .first()
+    )
+    if not reservation:
+        raise HTTPException(status_code=404, detail="Reservation not found.")
+
+    land = get_land(db, reservation.land_id)
+    actor = get_user(db, current_user)
+    if current_user not in {reservation.buyer_id, reservation.farmer_id}:
+        raise HTTPException(status_code=403, detail="You are not part of this reservation.")
+
+    status = (data.status or "").strip().lower()
+    allowed = {"confirmed", "rejected", "cancelled"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail="Invalid reservation status. Use confirmed, rejected, or cancelled.")
+
+    if reservation.status in {"rejected", "cancelled"}:
+        raise HTTPException(status_code=409, detail=f"This reservation is already {reservation.status} and cannot be changed.")
+
+    if status == "confirmed":
+        if actor.role != "farmer" or reservation.farmer_id != current_user:
+            raise HTTPException(status_code=403, detail="Only the farmer can confirm a reservation.")
+        if reservation.status != "pending":
+            raise HTTPException(status_code=409, detail="Only a pending reservation can be confirmed.")
+
+        availability = get_or_create_availability_for_update(db, land)
+        if availability.status != "available":
+            raise HTTPException(status_code=409, detail=f"This land is currently {availability.status}.")
+
+        competing = (
+            db.query(Reservation)
+            .filter(
+                Reservation.land_id == land.id,
+                Reservation.id != reservation.id,
+                Reservation.status == "pending",
+            )
+            .with_for_update()
+            .all()
+        )
+        for other in competing:
+            other.status = "rejected"
+            other.updated_at = datetime.utcnow()
+            notify(
+                db,
+                other.buyer_id,
+                "❌ Reservation Rejected",
+                f"Another reservation was confirmed for '{land.title}'.",
+                "reservation",
+                other.id,
+            )
+
+        availability.status = "reserved"
+        availability.updated_at = datetime.utcnow()
+        reservation.status = "confirmed"
+        reservation.confirmed_at = datetime.utcnow()
+        reservation.updated_at = datetime.utcnow()
+
+        notify(
+            db,
+            reservation.buyer_id,
+            "✅ Reservation Confirmed",
+            f"Your reservation for '{land.title}' has been confirmed by the farmer.",
+            "reservation",
+            reservation.id,
+        )
+        action = "CONFIRM_RESERVATION"
+
+    elif status == "rejected":
+        if actor.role != "farmer" or reservation.farmer_id != current_user:
+            raise HTTPException(status_code=403, detail="Only the farmer can reject a reservation.")
+        if reservation.status != "pending":
+            raise HTTPException(status_code=409, detail="Only a pending reservation can be rejected.")
+        reservation.status = "rejected"
+        reservation.updated_at = datetime.utcnow()
+        notify(
+            db,
+            reservation.buyer_id,
+            "❌ Reservation Rejected",
+            f"Your reservation request for '{land.title}' was rejected by the farmer.",
+            "reservation",
+            reservation.id,
+        )
+        action = "REJECT_RESERVATION"
+
+    else:  # cancelled
+        if actor.role == "buyer":
+            if reservation.buyer_id != current_user:
+                raise HTTPException(status_code=403, detail="You can cancel only your own reservation.")
+        elif actor.role == "farmer":
+            if reservation.farmer_id != current_user:
+                raise HTTPException(status_code=403, detail="You can cancel only reservations for your own land.")
+        else:
+            raise HTTPException(status_code=403, detail="Only the buyer or farmer can cancel a reservation.")
+
+        if reservation.status == "confirmed":
+            availability = get_or_create_availability_for_update(db, land)
+            if availability.status != "reserved":
+                raise HTTPException(status_code=409, detail=f"This land is currently {availability.status}.")
+            availability.status = "available"
+            availability.updated_at = datetime.utcnow()
+
+        reservation.status = "cancelled"
+        reservation.cancelled_at = datetime.utcnow()
+        reservation.updated_at = datetime.utcnow()
+
+        other_user_id = reservation.farmer_id if actor.role == "buyer" else reservation.buyer_id
+        notify(
+            db,
+            other_user_id,
+            "⚠️ Reservation Cancelled",
+            f"The reservation for '{land.title}' was cancelled by the {actor.role}.",
+            "reservation",
+            reservation.id,
+        )
+        action = "CANCEL_RESERVATION"
+
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action=action,
+        description=f'{actor.role.title()} {status} reservation #{reservation.id} for land "{land.title}".',
+        target_type="RESERVATION",
+        target_id=reservation.id,
+    )
+
+    db.commit()
+    db.refresh(reservation)
+    return reservation
+
+
+@router.put(
+    "/reservations/{reservation_id}/status",
+    response_model=ReservationResponse,
+)
+def update_reservation_status(
+    reservation_id: int,
+    data: ReservationStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    return _update_reservation_status(reservation_id, data, db, current_user)
+
+
 def _update_offer_status(
     offer_id: int,
     data: LandOfferStatusUpdate,
@@ -1059,7 +1460,7 @@ def _update_offer_status(
         )
 
     if status == "accepted":
-        availability = get_or_create_availability(db, land)
+        availability = get_or_create_availability_for_update(db, land)
         if availability.status != "available":
             raise HTTPException(
                 status_code=400,
@@ -1068,6 +1469,9 @@ def _update_offer_status(
 
         availability.status = "reserved"
         availability.updated_at = datetime.utcnow()
+
+        # Step 51: an accepted negotiated offer is represented by a confirmed reservation.
+        create_confirmed_reservation_for_offer(db, offer, land)
 
         other_offers = (
             db.query(LandOffer)

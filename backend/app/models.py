@@ -156,6 +156,24 @@ class User(Base):
         back_populates="blocked",
         cascade="all, delete-orphan"
     )
+
+    # -----------------------------------------------------
+    # Phase 8 - Reservations
+    # -----------------------------------------------------
+
+    reservations_as_buyer = relationship(
+        "Reservation",
+        foreign_keys="Reservation.buyer_id",
+        back_populates="buyer",
+        cascade="all, delete-orphan"
+    )
+
+    reservations_as_farmer = relationship(
+        "Reservation",
+        foreign_keys="Reservation.farmer_id",
+        back_populates="farmer",
+        cascade="all, delete-orphan"
+    )
 # =========================================================
 # PHASE 2
 # USER BLOCK
@@ -371,6 +389,16 @@ class Land(Base):
 
     site_visits = relationship(
         "SiteVisit",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+    # -----------------------------------------------------
+    # Phase 8 - Reservations
+    # -----------------------------------------------------
+
+    reservations = relationship(
+        "Reservation",
         back_populates="land",
         cascade="all, delete-orphan"
     )
@@ -1078,6 +1106,13 @@ class LandOffer(Base):
     )
 
 
+    reservation = relationship(
+        "Reservation",
+        back_populates="offer",
+        uselist=False,
+    )
+
+
 # =========================================================
 # STEP 50
 # OFFER NEGOTIATION HISTORY
@@ -1142,6 +1177,114 @@ class OfferNegotiationHistory(Base):
     sender = relationship(
         "User",
         foreign_keys=[sender_id]
+    )
+
+
+# =========================================================
+# PHASE 8
+# RESERVATION
+# =========================================================
+
+class Reservation(Base):
+    __tablename__ = "reservations"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    buyer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    farmer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    offer_id = Column(
+        Integer,
+        ForeignKey("land_offers.id"),
+        nullable=True,
+        unique=True,
+        index=True
+    )
+
+    amount = Column(
+        Float,
+        nullable=False
+    )
+
+    # pending / confirmed / rejected / cancelled
+    status = Column(
+        String,
+        default="pending",
+        nullable=False,
+        index=True
+    )
+
+    message = Column(
+        Text,
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
+
+    confirmed_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    cancelled_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="reservations"
+    )
+
+    buyer = relationship(
+        "User",
+        foreign_keys=[buyer_id],
+        back_populates="reservations_as_buyer"
+    )
+
+    farmer = relationship(
+        "User",
+        foreign_keys=[farmer_id],
+        back_populates="reservations_as_farmer"
+    )
+
+    offer = relationship(
+        "LandOffer",
+        back_populates="reservation"
     )
 
 

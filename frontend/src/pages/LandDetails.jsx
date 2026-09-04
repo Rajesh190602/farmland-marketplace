@@ -30,6 +30,13 @@ function LandDetails() {
   const [visitMessage, setVisitMessage] = useState("");
 
   // =========================================================
+  // PHASE 8 - STEP 51 RESERVATION
+  // =========================================================
+
+  const [reservationMessage, setReservationMessage] = useState("");
+  const [reservationLoading, setReservationLoading] = useState(false);
+
+  // =========================================================
   // FRONTEND ANTI-SPAM PROTECTION
   // =========================================================
   // Frontend protection improves UX, but the backend remains
@@ -765,6 +772,41 @@ function LandDetails() {
       }
     } finally {
       setMarketplaceLoading(false);
+    }
+  };
+
+  // =========================================================
+  // PHASE 8 - REQUEST RESERVATION
+  // =========================================================
+
+  const requestReservation = async () => {
+    const message = reservationMessage.trim();
+
+    if (message.length > 1000) {
+      alert("Reservation message must be 1000 characters or less.");
+      return;
+    }
+
+    try {
+      setReservationLoading(true);
+
+      await api.post("/marketplace/reservations", {
+        land_id: land.id,
+        message: message || null,
+      });
+
+      alert("Your reservation request has been sent to the farmer.");
+      setReservationAmount("");
+      setReservationMessage("");
+      await fetchAvailability(land.id);
+    } catch (error) {
+      console.error("Failed to request reservation:", error);
+      alert(
+        error.response?.data?.detail ||
+          "Unable to request reservation."
+      );
+    } finally {
+      setReservationLoading(false);
     }
   };
 
@@ -1613,6 +1655,81 @@ function LandDetails() {
                           spamCooldowns.offer
                         )}`
                       : "Submit Offer"}
+                  </button>
+                </div>
+
+                {/* RESERVATION - STEP 51 */}
+
+                <div
+                  style={{
+                    background: "#fff",
+                    padding: "20px",
+                    borderRadius: "12px",
+                    marginBottom: "18px",
+                    border: "1px solid #E1BEE7",
+                  }}
+                >
+                  <h3
+                    style={{
+                      color: "#6A1B9A",
+                      marginTop: 0,
+                    }}
+                  >
+                    📌 Request Reservation
+                  </h3>
+
+                  <p style={{ color: "#666", lineHeight: 1.5 }}>
+                    Request the farmer to reserve this available land for you. The farmer must confirm the request before the land becomes Reserved.
+                  </p>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={reservationAmount}
+                    onChange={(event) => setReservationAmount(event.target.value)}
+                    placeholder={`Reservation amount (₹), default ₹${Number(land.price || 0).toLocaleString("en-IN")}`}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px",
+                      border: "1px solid #ccc",
+                      borderRadius: "8px",
+                      marginBottom: "10px",
+                    }}
+                  />
+
+                  <textarea
+                    value={reservationMessage}
+                    onChange={(event) => setReservationMessage(event.target.value)}
+                    placeholder="Optional reservation message..."
+                    maxLength={1000}
+                    rows={3}
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      padding: "12px",
+                      border: "1px solid #ccc",
+                      borderRadius: "8px",
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                    }}
+                  />
+
+                  <button
+                    onClick={requestReservation}
+                    disabled={reservationLoading}
+                    style={{
+                      marginTop: "12px",
+                      background: reservationLoading ? "#999" : "#6A1B9A",
+                      color: "#fff",
+                      padding: "11px 22px",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: reservationLoading ? "not-allowed" : "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {reservationLoading ? "Sending..." : "Request Reservation"}
                   </button>
                 </div>
 
@@ -3046,19 +3163,6 @@ function FarmerAvailability({
     newStatus
   ) => {
     if (
-      availabilityStatus === "available" &&
-      newStatus === "reserved"
-    ) {
-      const confirmed = window.confirm(
-        "Are you sure you want to reserve this land? Buyers will no longer be able to submit new inquiries, offers, or site-visit requests."
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    if (
       availabilityStatus === "reserved" &&
       newStatus === "available"
     ) {
@@ -3072,31 +3176,11 @@ function FarmerAvailability({
     }
 
     if (
-      availabilityStatus === "available" &&
-      newStatus === "sold"
-    ) {
-      alert(
-        "A land listing must be Reserved before it can be marked Sold."
-      );
-      return;
-    }
-
-    if (
       availabilityStatus === "sold" &&
       newStatus !== "sold"
     ) {
       alert(
         "Sold land cannot be reopened directly."
-      );
-      return;
-    }
-
-    if (
-      availabilityStatus !== "reserved" &&
-      newStatus === "sold"
-    ) {
-      alert(
-        "A land listing must be Reserved before it can be marked Sold."
       );
       return;
     }
@@ -3208,8 +3292,8 @@ function FarmerAvailability({
         <button
           disabled={
             marketplaceLoading ||
-            availabilityStatus !==
-              "available"
+            availabilityStatus ===
+              "reserved"
           }
           onClick={() =>
             updateAvailability(
@@ -3230,8 +3314,8 @@ function FarmerAvailability({
             fontWeight: "bold",
             opacity:
               marketplaceLoading ||
-              availabilityStatus !==
-                "available"
+              availabilityStatus ===
+                "reserved"
                 ? 0.6
                 : 1,
           }}
@@ -3242,8 +3326,8 @@ function FarmerAvailability({
         <button
           disabled={
             marketplaceLoading ||
-            availabilityStatus !==
-              "reserved"
+            availabilityStatus ===
+              "sold"
           }
           onClick={() =>
             updateAvailability(
@@ -3264,8 +3348,8 @@ function FarmerAvailability({
             fontWeight: "bold",
             opacity:
               marketplaceLoading ||
-              availabilityStatus !==
-                "reserved"
+              availabilityStatus ===
+                "sold"
                 ? 0.6
                 : 1,
           }}
@@ -3284,35 +3368,8 @@ function FarmerAvailability({
             fontWeight: "600",
           }}
         >
-          A sold listing cannot be reopened directly.
-        </p>
-      )}
-
-      {availabilityStatus ===
-        "available" && (
-        <p
-          style={{
-            marginBottom: 0,
-            marginTop: "15px",
-            color: "#666",
-            fontWeight: "600",
-          }}
-        >
-          Lifecycle: Available → Reserved → Sold.
-        </p>
-      )}
-
-      {availabilityStatus ===
-        "reserved" && (
-        <p
-          style={{
-            marginBottom: 0,
-            marginTop: "15px",
-            color: "#666",
-            fontWeight: "600",
-          }}
-        >
-          From Reserved, you can return to Available or mark the land Sold.
+          A sold listing cannot be
+          reopened directly.
         </p>
       )}
     </div>

@@ -299,6 +299,38 @@ class OfferNegotiationHistoryResponse(BaseModel):
 
 
 # =========================================================
+# RESERVATION - PHASE 8 STEP 51
+# =========================================================
+
+class ReservationCreate(BaseModel):
+    land_id: int
+    offer_id: Optional[int] = None
+    message: Optional[str] = None
+
+
+class ReservationResponse(BaseModel):
+    id: int
+    land_id: int
+    buyer_id: int
+    farmer_id: int
+    offer_id: Optional[int] = None
+    amount: float
+    status: str
+    message: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    confirmed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ReservationStatusUpdate(BaseModel):
+    status: str
+
+
+# =========================================================
 # SITE VISIT
 # =========================================================
 

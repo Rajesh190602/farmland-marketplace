@@ -11,6 +11,7 @@ function MarketplaceActivity() {
   const [inquiries, setInquiries] = useState([]);
   const [offers, setOffers] = useState([]);
   const [siteVisits, setSiteVisits] = useState([]);
+  const [reservations, setReservations] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
@@ -43,12 +44,14 @@ function MarketplaceActivity() {
           api.get("/marketplace/inquiries/received"),
           api.get("/marketplace/offers/received"),
           api.get("/marketplace/site-visits/received"),
+          api.get("/marketplace/reservations/received"),
         ]);
 
         setInquiries(inquiriesResponse.data || []);
         setOffers(offersResponse.data || []);
         await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
+        setReservations(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else if (userRole === "buyer") {
         const [
@@ -59,17 +62,20 @@ function MarketplaceActivity() {
           api.get("/marketplace/inquiries/my"),
           api.get("/marketplace/offers/my"),
           api.get("/marketplace/site-visits/my"),
+          api.get("/marketplace/reservations/my"),
         ]);
 
         setInquiries(inquiriesResponse.data || []);
         setOffers(offersResponse.data || []);
         await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
+        setReservations(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else {
         setInquiries([]);
         setOffers([]);
         setSiteVisits([]);
+        setReservations([]);
       }
     } catch (error) {
       console.error(
@@ -252,6 +258,25 @@ function MarketplaceActivity() {
       alert(
         error.response?.data?.detail ||
           "Failed to send counter-offer."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // =====================================================
+  // STEP 51 - RESERVATIONS
+  // =====================================================
+
+  const updateReservation = async (id, status) => {
+    try {
+      setActionLoading(`reservation-${id}-${status}`);
+      await api.put(`/marketplace/reservations/${id}/status`, { status });
+      await loadActivity();
+    } catch (error) {
+      alert(
+        error.response?.data?.detail ||
+          "Failed to update reservation."
       );
     } finally {
       setActionLoading(null);
@@ -1289,6 +1314,172 @@ function MarketplaceActivity() {
                         </Card>
                       );
                     })}
+                  </div>
+                )}
+              </section>
+
+              {/* =================================================
+                  STEP 51 - RESERVATIONS
+              ================================================= */}
+
+              <section>
+                <h2
+                  style={{
+                    color: "#6A1B9A",
+                    marginBottom: "18px",
+                  }}
+                >
+                  📌 Reservations
+                </h2>
+
+                {reservations.length === 0 ? (
+                  <Card>
+                    <p style={{ margin: 0, color: "#777" }}>
+                      No reservation requests yet.
+                    </p>
+                  </Card>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+                      gap: "18px",
+                    }}
+                  >
+                    {reservations.map((item) => (
+                      <Card key={item.id}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <strong>Reservation #{item.id}</strong>
+                          <StatusBadge status={item.status} />
+                        </div>
+
+                        <p style={{ marginTop: "16px" }}>
+                          <strong>Land ID:</strong> {item.land_id}
+                        </p>
+                        <p>
+                          <strong>Amount:</strong> ₹{Number(item.amount || 0).toLocaleString("en-IN")}
+                        </p>
+                        {item.offer_id && (
+                          <p>
+                            <strong>Linked Offer:</strong> #{item.offer_id}
+                          </p>
+                        )}
+                        {item.message && (
+                          <p style={{ color: "#555", lineHeight: 1.5 }}>
+                            {item.message}
+                          </p>
+                        )}
+                        <p style={{ fontSize: "13px", color: "#888" }}>
+                          Requested: {item.created_at ? new Date(item.created_at).toLocaleString() : "-"}
+                        </p>
+
+                        <button
+                          onClick={() => navigate(`/lands/${item.land_id}`)}
+                          style={{
+                            width: "100%",
+                            marginTop: "8px",
+                            border: "1px solid #6A1B9A",
+                            borderRadius: "9px",
+                            padding: "10px",
+                            background: "#fff",
+                            color: "#6A1B9A",
+                            cursor: "pointer",
+                            fontWeight: "700",
+                          }}
+                        >
+                          View Land
+                        </button>
+
+                        {userRole === "farmer" && item.status === "pending" && (
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: "10px",
+                              marginTop: "10px",
+                            }}
+                          >
+                            <button
+                              onClick={() => updateReservation(item.id, "confirmed")}
+                              disabled={actionLoading === `reservation-${item.id}-confirmed`}
+                              style={{
+                                border: "none",
+                                borderRadius: "9px",
+                                padding: "10px",
+                                background: "#2E7D32",
+                                color: "#fff",
+                                cursor: "pointer",
+                                fontWeight: "700",
+                              }}
+                            >
+                              {actionLoading === `reservation-${item.id}-confirmed` ? "Confirming..." : "Confirm"}
+                            </button>
+                            <button
+                              onClick={() => updateReservation(item.id, "rejected")}
+                              disabled={actionLoading === `reservation-${item.id}-rejected`}
+                              style={{
+                                border: "none",
+                                borderRadius: "9px",
+                                padding: "10px",
+                                background: "#C62828",
+                                color: "#fff",
+                                cursor: "pointer",
+                                fontWeight: "700",
+                              }}
+                            >
+                              {actionLoading === `reservation-${item.id}-rejected` ? "Rejecting..." : "Reject"}
+                            </button>
+                          </div>
+                        )}
+
+                        {item.status === "pending" && userRole === "buyer" && (
+                          <button
+                            onClick={() => updateReservation(item.id, "cancelled")}
+                            disabled={actionLoading === `reservation-${item.id}-cancelled`}
+                            style={{
+                              width: "100%",
+                              marginTop: "10px",
+                              border: "none",
+                              borderRadius: "9px",
+                              padding: "10px",
+                              background: "#757575",
+                              color: "#fff",
+                              cursor: "pointer",
+                              fontWeight: "700",
+                            }}
+                          >
+                            Cancel Request
+                          </button>
+                        )}
+
+                        {item.status === "confirmed" && (
+                          <button
+                            onClick={() => updateReservation(item.id, "cancelled")}
+                            disabled={actionLoading === `reservation-${item.id}-cancelled`}
+                            style={{
+                              width: "100%",
+                              marginTop: "10px",
+                              border: "none",
+                              borderRadius: "9px",
+                              padding: "10px",
+                              background: "#EF6C00",
+                              color: "#fff",
+                              cursor: "pointer",
+                              fontWeight: "700",
+                            }}
+                          >
+                            {actionLoading === `reservation-${item.id}-cancelled` ? "Cancelling..." : "Cancel Reservation"}
+                          </button>
+                        )}
+                      </Card>
+                    ))}
                   </div>
                 )}
               </section>
