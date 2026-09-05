@@ -796,7 +796,6 @@ function LandDetails() {
       });
 
       alert("Your reservation request has been sent to the farmer.");
-      setReservationAmount("");
       setReservationMessage("");
       await fetchAvailability(land.id);
     } catch (error) {
@@ -1681,22 +1680,6 @@ function LandDetails() {
                   <p style={{ color: "#666", lineHeight: 1.5 }}>
                     Request the farmer to reserve this available land for you. The farmer must confirm the request before the land becomes Reserved.
                   </p>
-
-                  <input
-                    type="number"
-                    min="1"
-                    value={reservationAmount}
-                    onChange={(event) => setReservationAmount(event.target.value)}
-                    placeholder={`Reservation amount (₹), default ₹${Number(land.price || 0).toLocaleString("en-IN")}`}
-                    style={{
-                      width: "100%",
-                      boxSizing: "border-box",
-                      padding: "12px",
-                      border: "1px solid #ccc",
-                      borderRadius: "8px",
-                      marginBottom: "10px",
-                    }}
-                  />
 
                   <textarea
                     value={reservationMessage}
