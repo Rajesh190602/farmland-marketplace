@@ -1665,7 +1665,4 @@ function MyLands() {
     </>
   );
 }
-
-
-
 export default MyLands;
