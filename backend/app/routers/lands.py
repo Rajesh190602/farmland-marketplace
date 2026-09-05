@@ -13,11 +13,18 @@ from app.models import (
     LandInquiry,
     LandOffer,
     SiteVisit,
+    ListingExpiry,
 )
 from app.schemas import LandCreate
 from app.utils.activity_log import create_activity_log
+from app.utils.listing_expiry import (
+    ensure_listing_expiry,
+    get_expiry_status,
+    sync_all_published_listings,
+    start_or_renew_listing_expiry,
+)
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 router = APIRouter(
@@ -111,6 +118,9 @@ def get_buyer_recommendations(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    # Step 57: expire stale marketplace listings before public reads.
+    sync_all_published_listings(db)
+
     """
     Return personalized farmland recommendations for buyers.
 
@@ -407,6 +417,9 @@ def get_all_lands(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    # Step 57: expire stale marketplace listings before public reads.
+    sync_all_published_listings(db)
+
     user = db.query(User).filter(User.id == current_user).first()
 
     if not user:
@@ -481,6 +494,9 @@ def search_lands(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    # Step 57: expire stale marketplace listings before public reads.
+    sync_all_published_listings(db)
+
     user = db.query(User).filter(User.id == current_user).first()
 
     if not user:
@@ -567,6 +583,9 @@ def get_my_lands(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # Step 57: synchronize expiry before returning farmer inventory.
+    sync_all_published_listings(db)
+
     lands = (
         db.query(Land)
         .filter(
@@ -576,8 +595,24 @@ def get_my_lands(
         .all()
     )
 
-    return [
-        {
+    result = []
+
+    for land in lands:
+        expiry = (
+            db.query(ListingExpiry)
+            .filter(ListingExpiry.land_id == land.id)
+            .first()
+        )
+
+        if land.is_published and not expiry:
+            expiry = ensure_listing_expiry(db, land)
+
+        expiry_status = get_expiry_status(
+            expiry,
+            bool(land.is_published),
+        )
+
+        result.append({
             "id": land.id,
             "title": land.title,
             "description": land.description,
@@ -609,9 +644,17 @@ def get_my_lands(
             "status": land.status,
             "rejection_reason": land.rejection_reason,
             "owner_id": land.owner_id,
-        }
-        for land in lands
-    ]
+            "is_published": bool(land.is_published),
+            "expiry_status": expiry_status,
+            "published_at": expiry.published_at if expiry else None,
+            "expires_at": expiry.expires_at if expiry else None,
+            "renewed_at": expiry.renewed_at if expiry else None,
+            "renewal_count": int(expiry.renewal_count or 0) if expiry else 0,
+            "expired_at": expiry.expired_at if expiry else None,
+        })
+
+    db.commit()
+    return result
 
 
 # =========================================================
@@ -623,6 +666,9 @@ def get_my_listing_analytics(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    # Step 57: keep analytics publication state synchronized with expiry.
+    sync_all_published_listings(db)
+
     """Return listing performance analytics for the logged-in farmer."""
 
     user = db.query(User).filter(User.id == current_user).first()
@@ -1211,6 +1257,9 @@ def get_recently_viewed_lands(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    # Step 57: expire stale listings before buyer-facing reads.
+    sync_all_published_listings(db)
+
     views = (
         db.query(RecentlyViewedLand)
         .filter(
@@ -1310,6 +1359,9 @@ def get_similar_lands(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    # Step 57: expire stale listings before buyer-facing reads.
+    sync_all_published_listings(db)
+
     """
     Return similar approved and published farmland listings for buyers.
     Similarity is ranked using location, crop, soil, water source,
@@ -1424,24 +1476,16 @@ def get_similar_lands(
             .first()
         )
 
-        # Buyer recommendations should contain only farmland that is
-        # currently available. Sold/reserved listings are not useful
-        # as actionable Similar Farmland recommendations.
-        availability_status = (
-            availability.status
-            if availability
-            else "available"
-        )
-
-        if normalize(availability_status) != "available":
-            continue
-
         scored.append({
             "land": candidate,
             "score": round(score, 2),
             "reasons": list(dict.fromkeys(reasons))[:4],
             "view_count": view_count,
-            "availability": availability_status,
+            "availability": (
+                availability.status
+                if availability
+                else "available"
+            ),
         })
 
     scored.sort(
@@ -1495,6 +1539,9 @@ def get_land(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    # Step 57: expire stale listings before buyer-facing reads.
+    sync_all_published_listings(db)
+
     user = db.query(User).filter(User.id == current_user).first()
 
     if not user:
@@ -1579,6 +1626,138 @@ def get_land(
 
         "owner_name": owner.full_name if owner else "",
         "owner_mobile": owner.mobile if owner else "",
+    }
+
+
+# =========================================================
+# STEP 57 - LISTING EXPIRY / RENEWAL
+# =========================================================
+
+@router.post("/{land_id}/renew")
+def renew_land_listing(
+    land_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """Renew an approved farmer listing for another 30 days."""
+    farmer = db.query(User).filter(User.id == current_user).first()
+
+    if not farmer:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if farmer.role != "farmer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only farmers can renew land listings.",
+        )
+
+    land = db.query(Land).filter(Land.id == land_id).first()
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found",
+        )
+
+    if land.owner_id != current_user:
+        raise HTTPException(
+            status_code=403,
+            detail="You can renew only your own land listing.",
+        )
+
+    if land.status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="Only approved land listings can be renewed.",
+        )
+
+    availability = (
+        db.query(LandAvailability)
+        .filter(LandAvailability.land_id == land.id)
+        .first()
+    )
+    availability_status = (
+        availability.status.lower()
+        if availability and availability.status
+        else "available"
+    )
+
+    if availability_status in {"reserved", "sold"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Reserved or sold land listings cannot be renewed. "
+                "Complete or cancel the current marketplace transaction first."
+            ),
+        )
+
+    now = datetime.utcnow()
+    expiry = (
+        db.query(ListingExpiry)
+        .filter(ListingExpiry.land_id == land.id)
+        .first()
+    )
+
+    if (
+        not land.is_published
+        and expiry
+        and not expiry.expired_at
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This listing was unpublished by an administrator and cannot "
+                "be renewed by the farmer. Ask an administrator to publish it again."
+            ),
+        )
+
+    expiry = start_or_renew_listing_expiry(
+        db,
+        land,
+        now,
+    )
+
+    land.is_published = True
+
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="RENEW_LAND_LISTING",
+        description=(
+            f'Renewed land listing "{land.title}" for another '
+            f"{30} days."
+        ),
+        target_type="LAND",
+        target_id=land.id,
+    )
+
+    notification = models.Notification(
+        user_id=current_user,
+        title="Listing Renewed",
+        message=(
+            f'Your land listing "{land.title}" has been renewed and is '
+            "visible to buyers again for another 30 days."
+        ),
+        target_type="land",
+        target_id=land.id,
+    )
+    db.add(notification)
+
+    db.commit()
+    db.refresh(expiry)
+    db.refresh(land)
+
+    return {
+        "message": "Land listing renewed successfully.",
+        "land_id": land.id,
+        "is_published": bool(land.is_published),
+        "expiry_status": get_expiry_status(expiry, bool(land.is_published)),
+        "published_at": expiry.published_at,
+        "expires_at": expiry.expires_at,
+        "renewal_count": int(expiry.renewal_count or 0),
     }
 
 

@@ -9,6 +9,7 @@ function MyLands() {
   const [deletingImageId, setDeletingImageId] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
   const [availabilityLoadingId, setAvailabilityLoadingId] = useState(null);
+  const [renewingId, setRenewingId] = useState(null);
 
   const [lands, setLands] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState({});
@@ -201,7 +202,54 @@ function MyLands() {
     return true;
   };
 
-  const filteredLands = lands.filter(getStatusFilter);
+  const getExpiryDaysRemaining = (land) => {
+    if (!land.expires_at) return null;
+
+    const diff = new Date(land.expires_at).getTime() - Date.now();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const getExpiryLabel = (land) => {
+    const status = String(land.expiry_status || "").toLowerCase();
+    const days = getExpiryDaysRemaining(land);
+
+    if (status === "expired") return "⏰ Expired";
+    if (status === "expiring_soon") {
+      if (days !== null && days <= 0) return "⏰ Expires today";
+      return `⏰ Expires in ${days} day${days === 1 ? "" : "s"}`;
+    }
+    if (status === "active" && days !== null) {
+      return `⏳ Expires in ${days} day${days === 1 ? "" : "s"}`;
+    }
+    if (status === "unpublished") return "⚪ Not Published";
+    return "⏳ Expiry not set";
+  };
+
+  const getExpiryBadgeStyle = (land) => {
+    const status = String(land.expiry_status || "").toLowerCase();
+
+    if (status === "expired") {
+      return { background: "#FFEBEE", color: "#C62828" };
+    }
+
+    if (status === "expiring_soon") {
+      return { background: "#FFF3E0", color: "#EF6C00" };
+    }
+
+    if (status === "active") {
+      return { background: "#E8F5E9", color: "#2E7D32" };
+    }
+
+    return { background: "#F3F4F5", color: "#68736C" };
+  };
+
+  const filteredLands = lands.filter((land) => {
+    if (statusFilter === "expired") {
+      return String(land.expiry_status || "").toLowerCase() === "expired";
+    }
+
+    return getStatusFilter(land);
+  });
 
   const filterDefinitions = [
     { key: "all", label: "All" },
@@ -213,6 +261,7 @@ function MyLands() {
     { key: "rejected", label: "Rejected" },
     { key: "changes_requested", label: "Change Requested" },
     { key: "unpublished", label: "Unpublished" },
+    { key: "expired", label: "Expired" },
   ];
 
   // =========================================================
@@ -223,16 +272,18 @@ function MyLands() {
     const currentStatus =
       availabilityStatuses[landId] || "available";
 
-    // Available -> Reserved is controlled by reservation confirmation.
+    // Available -> Reserved needs confirmation.
     if (
       currentStatus === "available" &&
       newStatus === "reserved"
     ) {
-      alert(
-        "Reserved status is set only after you confirm a buyer reservation request from Marketplace Activity."
+      const confirmed = window.confirm(
+        "Are you sure you want to reserve this land? Buyers will no longer be able to submit new inquiries, offers, or site-visit requests."
       );
 
-      return;
+      if (!confirmed) {
+        return;
+      }
     }
 
     // Reserved -> Available needs confirmation.
@@ -318,6 +369,41 @@ function MyLands() {
       );
     } finally {
       setAvailabilityLoadingId(null);
+    }
+  };
+
+  // =========================================================
+  // Step 57 - Renew Listing
+  // =========================================================
+
+  const renewListing = async (landId) => {
+    try {
+      setRenewingId(landId);
+
+      const response = await api.post(
+        `/lands/${landId}/renew`
+      );
+
+      alert(
+        response.data?.message ||
+          "Land listing renewed successfully."
+      );
+
+      await fetchMyLands();
+    } catch (error) {
+      console.error(
+        "Failed to renew land listing:",
+        error
+      );
+
+      alert(
+        getErrorMessage(
+          error,
+          "Unable to renew this land listing."
+        )
+      );
+    } finally {
+      setRenewingId(null);
     }
   };
 
@@ -925,6 +1011,9 @@ function MyLands() {
                           {getAnalyticsRecord(land.id).is_published ? "🌐 Published" : "⚪ Unpublished"}
                         </span>
                       )}
+                      <span style={{ ...getExpiryBadgeStyle(land), borderRadius: "18px", padding: "6px 10px", fontSize: "12px", fontWeight: "800" }}>
+                        {getExpiryLabel(land)}
+                      </span>
                     </div>
 
                     {land.rejection_reason && (
@@ -933,10 +1022,35 @@ function MyLands() {
                       </div>
                     )}
 
+                    {land.expires_at && (
+                      <div style={{ marginTop: "10px", padding: "9px 11px", background: "#F8FBF8", border: "1px solid #DDE7DF", borderRadius: "8px", color: "#59665D", fontSize: "13px" }}>
+                        <strong>Listing expiry:</strong>{" "}
+                        {new Date(land.expires_at).toLocaleString("en-IN", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                        {land.renewal_count > 0 && (
+                          <span> · Renewed {land.renewal_count} time{land.renewal_count === 1 ? "" : "s"}</span>
+                        )}
+                      </div>
+                    )}
+
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "14px" }}>
                       <button type="button" onClick={() => navigate(`/lands/${land.id}`)} style={{ background: "#1976D2", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>👁️ View</button>
                       <button type="button" onClick={() => editLand(land.id)} style={{ background: "#2E7D32", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>✏️ Edit</button>
                       <button type="button" onClick={() => setExpandedAnalyticsId((current) => current === land.id ? null : land.id)} style={{ background: "#6A1B9A", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>📊 Analytics</button>
+                      {land.status === "approved" &&
+                        (availabilityStatuses[land.id] || "available") === "available" &&
+                        ["expired", "expiring_soon"].includes(String(land.expiry_status || "").toLowerCase()) && (
+                          <button
+                            type="button"
+                            onClick={() => renewListing(land.id)}
+                            disabled={renewingId === land.id}
+                            style={{ background: renewingId === land.id ? "#999" : "#00897B", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: renewingId === land.id ? "not-allowed" : "pointer", fontWeight: "700" }}
+                          >
+                            {renewingId === land.id ? "Renewing..." : "🔄 Renew Listing"}
+                          </button>
+                        )}
                       <button type="button" onClick={() => setExpandedManagementId((current) => current === land.id ? null : land.id)} style={{ background: "#EF6C00", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>⚙️ Manage / Availability</button>
                     </div>
 
@@ -1665,4 +1779,5 @@ function MyLands() {
     </>
   );
 }
+
 export default MyLands;

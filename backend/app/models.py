@@ -432,6 +432,17 @@ class Land(Base):
     )
 
     # -----------------------------------------------------
+    # Phase 8 - Listing Expiry / Renewal
+    # -----------------------------------------------------
+
+    listing_expiry = relationship(
+        "ListingExpiry",
+        back_populates="land",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    # -----------------------------------------------------
     # Phase 6 - Reviews & Ratings
     # -----------------------------------------------------
 
@@ -459,6 +470,73 @@ class Land(Base):
         "LandReport",
         back_populates="land",
         cascade="all, delete-orphan"
+    )
+
+
+# =========================================================
+# PHASE 8 - LISTING EXPIRY / RENEWAL - STEP 57
+# =========================================================
+
+class ListingExpiry(Base):
+    __tablename__ = "listing_expiries"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    published_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    expires_at = Column(
+        DateTime,
+        nullable=False,
+        index=True
+    )
+
+    renewed_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    renewal_count = Column(
+        Integer,
+        default=0,
+        nullable=False
+    )
+
+    expired_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="listing_expiry"
     )
 
 

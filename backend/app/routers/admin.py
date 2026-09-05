@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
+from app.utils.listing_expiry import start_or_renew_listing_expiry
 from sqlalchemy import func,extract
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
@@ -1152,6 +1153,9 @@ def publish_land(
     # ---------------------------------------------------------
 
     land.is_published = True
+
+    # Step 57: every Admin publication starts a fresh 30-day listing period.
+    start_or_renew_listing_expiry(db, land)
 
     # ---------------------------------------------------------
     # Existing activity log
