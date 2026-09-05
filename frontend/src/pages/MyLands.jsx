@@ -1307,12 +1307,12 @@ function MyLands() {
                         <button
                           type="button"
                           onClick={() =>
-                            alert(
-                              "Reserved status is set only after you confirm a buyer reservation request from Marketplace Activity."
+                            updateAvailability(
+                              land.id,
+                              "reserved"
                             )
                           }
                           disabled={
-                            true ||
                             availabilityLoadingId ===
                               land.id ||
                             (availabilityStatuses[land.id] ||
