@@ -223,18 +223,16 @@ function MyLands() {
     const currentStatus =
       availabilityStatuses[landId] || "available";
 
-    // Available -> Reserved needs confirmation.
+    // Available -> Reserved is controlled by reservation confirmation.
     if (
       currentStatus === "available" &&
       newStatus === "reserved"
     ) {
-      const confirmed = window.confirm(
-        "Are you sure you want to reserve this land? Buyers will no longer be able to submit new inquiries, offers, or site-visit requests."
+      alert(
+        "Reserved status is set only after you confirm a buyer reservation request from Marketplace Activity."
       );
 
-      if (!confirmed) {
-        return;
-      }
+      return;
     }
 
     // Reserved -> Available needs confirmation.
@@ -1309,12 +1307,12 @@ function MyLands() {
                         <button
                           type="button"
                           onClick={() =>
-                            updateAvailability(
-                              land.id,
-                              "reserved"
+                            alert(
+                              "Reserved status is set only after you confirm a buyer reservation request from Marketplace Activity."
                             )
                           }
                           disabled={
+                            true ||
                             availabilityLoadingId ===
                               land.id ||
                             (availabilityStatuses[land.id] ||
@@ -1667,5 +1665,7 @@ function MyLands() {
     </>
   );
 }
+
+
 
 export default MyLands;
