@@ -13,6 +13,115 @@ import {
 import Navbar from "../components/Navbar";
 import api from "../services/api";
 
+const getNotificationCategory = (notification, role) => {
+  const targetType = String(notification?.target_type || "").toLowerCase();
+  const title = String(notification?.title || "").toLowerCase();
+  const message = String(notification?.message || "").toLowerCase();
+  const text = `${title} ${message}`;
+
+  if (role === "admin") {
+    if (text.includes("report")) return "admin_reports";
+    if (
+      text.includes("user") ||
+      text.includes("account") ||
+      text.includes("registration")
+    ) {
+      return "admin_users";
+    }
+    if (
+      text.includes("listing") ||
+      text.includes("land") ||
+      text.includes("approval") ||
+      targetType === "land"
+    ) {
+      return "admin_listings";
+    }
+    if (
+      text.includes("transaction") ||
+      text.includes("sale") ||
+      targetType === "transaction" ||
+      targetType === "sale"
+    ) {
+      return "admin_transactions";
+    }
+    if (
+      targetType === "conversation" ||
+      targetType === "message" ||
+      text.includes("message") ||
+      text.includes("conversation")
+    ) {
+      return "messages";
+    }
+    if (targetType === "file" || text.includes("file")) return "files";
+    return "admin_system";
+  }
+
+  if (
+    targetType === "conversation" ||
+    targetType === "message" ||
+    text.includes("new message") ||
+    text.includes("conversation")
+  ) {
+    return "messages";
+  }
+
+  if (targetType === "file" || text.includes("new file") || text.includes("sent you a file")) {
+    return "files";
+  }
+
+  if (targetType === "offer" || text.includes("offer")) return "offers";
+  if (targetType === "reservation" || text.includes("reservation")) {
+    return "reservations";
+  }
+  if (
+    targetType === "site_visit" ||
+    text.includes("site visit") ||
+    text.includes("visit request")
+  ) {
+    return "site_visits";
+  }
+  if (
+    targetType === "sale" ||
+    targetType === "transaction" ||
+    text.includes("sale completed") ||
+    text.includes("land sold") ||
+    text.includes("transaction")
+  ) {
+    return "sales";
+  }
+  if (targetType === "inquiry" || text.includes("inquiry")) return "inquiries";
+  return "land";
+};
+
+const notificationCategoryLabels = {
+  all: "🔔 All",
+  unread: "🔵 Unread",
+  land: "🌾 Land",
+  inquiries: "📩 Inquiries",
+  offers: "💰 Offers",
+  reservations: "📌 Reservations",
+  site_visits: "🏠 Site Visits",
+  sales: "🎉 Sales",
+  messages: "💬 Messages",
+  files: "📎 Files",
+  admin_users: "👥 Users",
+  admin_listings: "🌾 Listings",
+  admin_reports: "🚩 Reports",
+  admin_transactions: "💳 Transactions",
+  admin_system: "⚙️ System",
+};
+
+const notificationCategoryOrder = [
+  "land",
+  "inquiries",
+  "offers",
+  "reservations",
+  "site_visits",
+  "sales",
+  "messages",
+  "files",
+];
+
 function Notifications() {
   const navigate = useNavigate();
 
@@ -20,6 +129,11 @@ function Notifications() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
   const [markingAll, setMarkingAll] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  const userRole = String(
+    sessionStorage.getItem("role") || ""
+  ).toLowerCase();
 
   // =====================================================
   // FETCH NOTIFICATIONS
@@ -295,7 +409,7 @@ function Notifications() {
   };
 
   // =====================================================
-  // COUNTS
+  // COUNTS + CATEGORY FILTERING
   // =====================================================
 
   const unreadCount =
@@ -303,6 +417,62 @@ function Notifications() {
       (notification) =>
         !notification.is_read
     ).length;
+
+  const getCategoryCount = (category) => {
+    if (category === "all") return notifications.length;
+    if (category === "unread") return unreadCount;
+
+    return notifications.filter(
+      (notification) =>
+        getNotificationCategory(
+          notification,
+          userRole
+        ) === category
+    ).length;
+  };
+
+  const visibleCategoryKeys =
+    userRole === "admin"
+      ? [
+          "admin_users",
+          "admin_listings",
+          "admin_reports",
+          "admin_transactions",
+          "messages",
+          "files",
+          "admin_system",
+        ]
+      : notificationCategoryOrder;
+
+  const categoryKeys = [
+    "all",
+    "unread",
+    ...visibleCategoryKeys.filter(
+      (category) =>
+        getCategoryCount(category) > 0
+    ),
+  ];
+
+  const effectiveFilter =
+    categoryKeys.includes(activeFilter)
+      ? activeFilter
+      : "all";
+
+  const filteredNotifications =
+    effectiveFilter === "all"
+      ? notifications
+      : effectiveFilter === "unread"
+        ? notifications.filter(
+            (notification) =>
+              !notification.is_read
+          )
+        : notifications.filter(
+            (notification) =>
+              getNotificationCategory(
+                notification,
+                userRole
+              ) === effectiveFilter
+          );
 
   // =====================================================
   // LOADING
@@ -471,6 +641,135 @@ function Notifications() {
           </div>
 
           {/* =================================================
+              NOTIFICATION CATEGORY FILTERS
+          ================================================= */}
+
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "15px",
+              padding: "14px",
+              marginBottom: "20px",
+              boxShadow:
+                "0 4px 14px rgba(0,0,0,0.08)",
+              overflowX: "auto",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                minWidth: "max-content",
+              }}
+            >
+              {categoryKeys.map((category) => {
+                const count =
+                  getCategoryCount(category);
+                const selected =
+                  activeFilter === category;
+
+                return (
+                  <button
+                    key={category}
+                    onClick={() =>
+                      setActiveFilter(category)
+                    }
+                    style={{
+                      border: selected
+                        ? "2px solid #2E7D32"
+                        : "1px solid #D6DADF",
+                      background: selected
+                        ? "#E8F5E9"
+                        : "#F8F9FA",
+                      color: selected
+                        ? "#1B5E20"
+                        : "#555",
+                      borderRadius: "22px",
+                      padding: "9px 13px",
+                      cursor: "pointer",
+                      fontWeight: selected
+                        ? "bold"
+                        : "600",
+                      whiteSpace: "nowrap",
+                      fontSize: "13px",
+                    }}
+                  >
+                    {notificationCategoryLabels[
+                      category
+                    ] || category}
+                    <span
+                      style={{
+                        marginLeft: "6px",
+                        fontSize: "12px",
+                        opacity: 0.8,
+                      }}
+                    >
+                      ({count})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* =================================================
+              FILTERED EMPTY STATE
+          ================================================= */}
+
+          {notifications.length > 0 &&
+            filteredNotifications.length === 0 && (
+              <div
+                style={{
+                  background: "#fff",
+                  borderRadius: "18px",
+                  padding: "50px 30px",
+                  textAlign: "center",
+                  boxShadow:
+                    "0 6px 18px rgba(0,0,0,0.10)",
+                  marginBottom: "20px",
+                }}
+              >
+                <FaBell
+                  size={55}
+                  color="#9E9E9E"
+                />
+                <h2
+                  style={{
+                    marginTop: "18px",
+                    color: "#444",
+                  }}
+                >
+                  No {String(
+                    notificationCategoryLabels[
+                      activeFilter
+                    ] || activeFilter
+                  ).replace(
+                    /^[^A-Za-z]+/,
+                    ""
+                  )} Notifications
+                </h2>
+                <p style={{ color: "#777" }}>
+                  There are no notifications in this
+                  category right now.
+                </p>
+                <button
+                  onClick={() => setActiveFilter("all")}
+                  style={{
+                    padding: "9px 15px",
+                    background: "#2E7D32",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  View All
+                </button>
+              </div>
+            )}
+
+          {/* =================================================
               EMPTY STATE
           ================================================= */}
 
@@ -508,7 +807,7 @@ function Notifications() {
                 notifications yet.
               </p>
             </div>
-          ) : (
+          ) : filteredNotifications.length > 0 ? (
             /* =================================================
                NOTIFICATION LIST
             ================================================= */
@@ -520,7 +819,7 @@ function Notifications() {
                 gap: "15px",
               }}
             >
-              {notifications.map(
+              {filteredNotifications.map(
                 (notification) => {
                   const isUnread =
                     !notification.is_read;
@@ -835,7 +1134,7 @@ function Notifications() {
                 }
               )}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </>
