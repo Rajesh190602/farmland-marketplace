@@ -12,6 +12,7 @@ function MarketplaceActivity() {
   const [offers, setOffers] = useState([]);
   const [siteVisits, setSiteVisits] = useState([]);
   const [reservations, setReservations] = useState([]);
+  const [salesByReservation, setSalesByReservation] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
@@ -52,6 +53,7 @@ function MarketplaceActivity() {
         await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
         setReservations(reservationsResponse.data || []);
+        await loadReservationSales(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else if (userRole === "buyer") {
         const [
@@ -70,12 +72,14 @@ function MarketplaceActivity() {
         await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
         setReservations(reservationsResponse.data || []);
+        await loadReservationSales(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else {
         setInquiries([]);
         setOffers([]);
         setSiteVisits([]);
         setReservations([]);
+        setSalesByReservation({});
       }
     } catch (error) {
       console.error(
@@ -268,6 +272,30 @@ function MarketplaceActivity() {
   // STEP 51 - RESERVATIONS
   // =====================================================
 
+  // STEP 52 - LOAD COMPLETED SALE STATUS
+  const loadReservationSales = async (reservationItems) => {
+    const entries = await Promise.all(
+      (reservationItems || []).map(async (item) => {
+        try {
+          const response = await api.get(
+            `/marketplace/sales/reservation/${item.id}`
+          );
+          return [item.id, response.data || null];
+        } catch (error) {
+          if (error.response?.status !== 404) {
+            console.error(
+              `Failed to load sale for reservation ${item.id}:`,
+              error
+            );
+          }
+          return [item.id, null];
+        }
+      })
+    );
+
+    setSalesByReservation(Object.fromEntries(entries));
+  };
+
   const updateReservation = async (id, status) => {
     try {
       setActionLoading(`reservation-${id}-${status}`);
@@ -277,6 +305,43 @@ function MarketplaceActivity() {
       alert(
         error.response?.data?.detail ||
           "Failed to update reservation."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // =====================================================
+  // STEP 52 - COMPLETE SALE
+  // =====================================================
+
+  const completeSale = async (reservation) => {
+    const confirmed = window.confirm(
+      `Complete the sale for this land for ₹${Number(
+        reservation.amount || 0
+      ).toLocaleString("en-IN")}? This will permanently mark the land as Sold.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(`sale-${reservation.id}`);
+
+      await api.post("/marketplace/sales/complete", {
+        reservation_id: reservation.id,
+      });
+
+      alert(
+        "Sale completed successfully. The land is now marked Sold."
+      );
+
+      await loadActivity();
+    } catch (error) {
+      alert(
+        error.response?.data?.detail ||
+          "Failed to complete sale."
       );
     } finally {
       setActionLoading(null);
@@ -1459,24 +1524,85 @@ function MarketplaceActivity() {
                           </button>
                         )}
 
-                        {item.status === "confirmed" && (
-                          <button
-                            onClick={() => updateReservation(item.id, "cancelled")}
-                            disabled={actionLoading === `reservation-${item.id}-cancelled`}
+                        {item.status === "confirmed" && !salesByReservation[item.id] && (
+                          <>
+                            {userRole === "farmer" && (
+                              <button
+                                onClick={() => completeSale(item)}
+                                disabled={actionLoading === `sale-${item.id}`}
+                                style={{
+                                  width: "100%",
+                                  marginTop: "10px",
+                                  border: "none",
+                                  borderRadius: "9px",
+                                  padding: "10px",
+                                  background: "#C62828",
+                                  color: "#fff",
+                                  cursor:
+                                    actionLoading === `sale-${item.id}`
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  fontWeight: "700",
+                                }}
+                              >
+                                {actionLoading === `sale-${item.id}`
+                                  ? "Completing Sale..."
+                                  : "🔴 Complete Sale"}
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => updateReservation(item.id, "cancelled")}
+                              disabled={actionLoading === `reservation-${item.id}-cancelled`}
+                              style={{
+                                width: "100%",
+                                marginTop: "10px",
+                                border: "none",
+                                borderRadius: "9px",
+                                padding: "10px",
+                                background: "#EF6C00",
+                                color: "#fff",
+                                cursor: "pointer",
+                                fontWeight: "700",
+                              }}
+                            >
+                              {actionLoading === `reservation-${item.id}-cancelled`
+                                ? "Cancelling..."
+                                : "Cancel Reservation"}
+                            </button>
+                          </>
+                        )}
+
+                        {item.status === "confirmed" && salesByReservation[item.id] && (
+                          <div
                             style={{
-                              width: "100%",
                               marginTop: "10px",
-                              border: "none",
+                              padding: "11px 12px",
+                              background: "#FFEBEE",
                               borderRadius: "9px",
-                              padding: "10px",
-                              background: "#EF6C00",
-                              color: "#fff",
-                              cursor: "pointer",
+                              color: "#C62828",
                               fontWeight: "700",
+                              fontSize: "13px",
                             }}
                           >
-                            {actionLoading === `reservation-${item.id}-cancelled` ? "Cancelling..." : "Cancel Reservation"}
-                          </button>
+                            🎉 Sale Completed · Sold for ₹
+                            {Number(
+                              salesByReservation[item.id]?.amount || item.amount || 0
+                            ).toLocaleString("en-IN")}
+                            {salesByReservation[item.id]?.completed_at && (
+                              <div
+                                style={{
+                                  marginTop: "4px",
+                                  fontWeight: "400",
+                                }}
+                              >
+                                Completed:{" "}
+                                {new Date(
+                                  salesByReservation[item.id].completed_at
+                                ).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </Card>
                     ))}

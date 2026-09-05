@@ -331,6 +331,32 @@ class ReservationStatusUpdate(BaseModel):
 
 
 # =========================================================
+# SALE - PHASE 8 STEP 52
+# =========================================================
+
+class SaleCompleteCreate(BaseModel):
+    reservation_id: int
+    message: Optional[str] = None
+
+
+class SaleResponse(BaseModel):
+    id: int
+    reservation_id: int
+    land_id: int
+    buyer_id: int
+    farmer_id: int
+    offer_id: Optional[int] = None
+    amount: float
+    status: str
+    message: Optional[str] = None
+    completed_at: datetime
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# =========================================================
 # SITE VISIT
 # =========================================================
 

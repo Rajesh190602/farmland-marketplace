@@ -14,6 +14,7 @@ from app.models import (
     LandOffer,
     OfferNegotiationHistory,
     Reservation,
+    LandSale,
     SiteVisit,
     Notification,
     LandReport,
@@ -32,6 +33,8 @@ from app.schemas import (
     ReservationCreate,
     ReservationResponse,
     ReservationStatusUpdate,
+    SaleCompleteCreate,
+    SaleResponse,
     SiteVisitCreate,
     SiteVisitResponse,
     SiteVisitStatusUpdate,
@@ -367,6 +370,41 @@ def update_land_availability(
         availability.status,
         requested_status,
     )
+
+    # Step 52: reservation workflow is now the authoritative path to
+    # Reserved. This prevents a manual availability change from creating
+    # a Reserved listing that has no buyer transaction behind it.
+    if requested_status == "reserved" and current_status == "available":
+        confirmed_reservation = (
+            db.query(Reservation)
+            .filter(
+                Reservation.land_id == land.id,
+                Reservation.status == "confirmed",
+            )
+            .first()
+        )
+        if not confirmed_reservation:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Land can be marked Reserved only after a farmer confirms "
+                    "a reservation request."
+                ),
+            )
+
+    # Step 52: a Reserved -> Sold transition must go through the
+    # completed-sale workflow so every sold listing has a transaction
+    # record tied to a confirmed reservation.
+    if requested_status == "sold":
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Land cannot be marked Sold directly. "
+                "Complete a confirmed reservation through the sale workflow."
+            ),
+        )
 
     # No-op updates are safe and do not create duplicate activity logs.
     if current_status == requested_status:
@@ -1370,6 +1408,17 @@ def _update_reservation_status(
         action = "REJECT_RESERVATION"
 
     else:  # cancelled
+        existing_sale = (
+            db.query(LandSale)
+            .filter(LandSale.reservation_id == reservation.id)
+            .first()
+        )
+        if existing_sale:
+            raise HTTPException(
+                status_code=409,
+                detail="This reservation has a completed sale and cannot be cancelled.",
+            )
+
         if actor.role == "buyer":
             if reservation.buyer_id != current_user:
                 raise HTTPException(status_code=403, detail="You can cancel only your own reservation.")
@@ -1638,6 +1687,278 @@ def counter_offer(
     db.refresh(offer)
     return offer
 
+
+
+
+
+# =========================================================
+# PHASE 8 - STEP 52
+# COMPLETE SALE
+# =========================================================
+
+@router.post(
+    "/sales/complete",
+    response_model=SaleResponse,
+)
+def complete_sale(
+    data: SaleCompleteCreate,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Complete a marketplace sale from a confirmed reservation.
+
+    Only the farmer who owns the land can complete the sale.
+    The reservation must be confirmed and the land must currently
+    be Reserved. Completion creates one permanent LandSale record
+    and moves marketplace availability to Sold.
+    """
+    farmer = require_farmer(db, current_user)
+
+    reservation = (
+        db.query(Reservation)
+        .filter(Reservation.id == data.reservation_id)
+        .with_for_update()
+        .first()
+    )
+
+    if not reservation:
+        raise HTTPException(
+            status_code=404,
+            detail="Reservation not found.",
+        )
+
+    if reservation.farmer_id != farmer.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can complete sales only for your own land.",
+        )
+
+    if reservation.status != "confirmed":
+        raise HTTPException(
+            status_code=409,
+            detail="Only a confirmed reservation can be completed as a sale.",
+        )
+
+    existing_sale = (
+        db.query(LandSale)
+        .filter(LandSale.reservation_id == reservation.id)
+        .with_for_update()
+        .first()
+    )
+
+    if existing_sale:
+        return existing_sale
+
+    land = get_land(db, reservation.land_id)
+    availability = get_or_create_availability_for_update(db, land)
+
+    if availability.status != "reserved":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This land is currently {availability.status}. "
+                "A completed sale requires the land to be Reserved."
+            ),
+        )
+
+    message = (data.message or "").strip() or None
+
+    sale = LandSale(
+        reservation_id=reservation.id,
+        land_id=land.id,
+        buyer_id=reservation.buyer_id,
+        farmer_id=reservation.farmer_id,
+        offer_id=reservation.offer_id,
+        amount=reservation.amount,
+        status="completed",
+        message=message,
+        completed_at=datetime.utcnow(),
+        created_at=datetime.utcnow(),
+    )
+
+    db.add(sale)
+    db.flush()
+
+    availability.status = "sold"
+    availability.updated_at = datetime.utcnow()
+
+    # Close any stale pending marketplace activity so no buyer can
+    # continue acting on a listing after the sale is completed.
+    pending_inquiries = (
+        db.query(LandInquiry)
+        .filter(
+            LandInquiry.land_id == land.id,
+            LandInquiry.status == "pending",
+        )
+        .all()
+    )
+
+    for inquiry in pending_inquiries:
+        inquiry.status = "rejected"
+        inquiry.updated_at = datetime.utcnow()
+        notify(
+            db,
+            inquiry.buyer_id,
+            "🔴 Land Sold",
+            (
+                f"Your inquiry for '{land.title}' was closed "
+                "because the land has been sold."
+            ),
+            "inquiry",
+            inquiry.id,
+        )
+
+    pending_offers = (
+        db.query(LandOffer)
+        .filter(
+            LandOffer.land_id == land.id,
+            LandOffer.status == "pending",
+        )
+        .all()
+    )
+
+    for offer in pending_offers:
+        offer.status = "rejected"
+        offer.updated_at = datetime.utcnow()
+        notify(
+            db,
+            offer.buyer_id,
+            "🔴 Land Sold",
+            (
+                f"Your offer for '{land.title}' was closed "
+                "because the land has been sold."
+            ),
+            "offer",
+            offer.id,
+        )
+
+    pending_visits = (
+        db.query(SiteVisit)
+        .filter(
+            SiteVisit.land_id == land.id,
+            SiteVisit.status == "pending",
+        )
+        .all()
+    )
+
+    for visit in pending_visits:
+        visit.status = "cancelled"
+        visit.updated_at = datetime.utcnow()
+        notify(
+            db,
+            visit.buyer_id,
+            "🔴 Land Sold",
+            (
+                f"Your site visit request for '{land.title}' "
+                "was cancelled because the land has been sold."
+            ),
+            "site_visit",
+            visit.id,
+        )
+
+    notify(
+        db,
+        sale.buyer_id,
+        "🎉 Sale Completed",
+        (
+            f"The sale of '{land.title}' has been completed "
+            f"for ₹{sale.amount:,.2f}."
+        ),
+        "sale",
+        sale.id,
+    )
+
+    create_activity_log(
+        db=db,
+        user_id=farmer.id,
+        action="COMPLETE_SALE",
+        description=(
+            f'Completed sale #{sale.id} for land "{land.title}" '
+            f"with buyer #{sale.buyer_id} at ₹{sale.amount:,.2f}."
+        ),
+        target_type="SALE",
+        target_id=sale.id,
+    )
+
+    db.commit()
+    db.refresh(sale)
+
+    return sale
+
+
+@router.get(
+    "/sales/reservation/{reservation_id}",
+    response_model=SaleResponse,
+)
+def get_sale_for_reservation(
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """Return the completed sale linked to a reservation, if one exists."""
+    reservation = (
+        db.query(Reservation)
+        .filter(Reservation.id == reservation_id)
+        .first()
+    )
+
+    if not reservation:
+        raise HTTPException(
+            status_code=404,
+            detail="Reservation not found.",
+        )
+
+    if current_user not in {reservation.buyer_id, reservation.farmer_id}:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to view this reservation sale.",
+        )
+
+    sale = (
+        db.query(LandSale)
+        .filter(LandSale.reservation_id == reservation.id)
+        .first()
+    )
+
+    if not sale:
+        raise HTTPException(
+            status_code=404,
+            detail="No completed sale exists for this reservation.",
+        )
+
+    return sale
+
+
+@router.get(
+    "/sales/{sale_id}",
+    response_model=SaleResponse,
+)
+def get_sale(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """Allow only the buyer or farmer involved in the sale to view it."""
+    sale = (
+        db.query(LandSale)
+        .filter(LandSale.id == sale_id)
+        .first()
+    )
+
+    if not sale:
+        raise HTTPException(
+            status_code=404,
+            detail="Sale not found.",
+        )
+
+    if current_user not in {sale.buyer_id, sale.farmer_id}:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to view this sale.",
+        )
+
+    return sale
 
 
 # =========================================================

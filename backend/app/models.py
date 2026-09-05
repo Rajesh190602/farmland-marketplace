@@ -174,6 +174,24 @@ class User(Base):
         back_populates="farmer",
         cascade="all, delete-orphan"
     )
+
+    # -----------------------------------------------------
+    # Phase 8 - Sales
+    # -----------------------------------------------------
+
+    sales_as_buyer = relationship(
+        "LandSale",
+        foreign_keys="LandSale.buyer_id",
+        back_populates="buyer",
+        cascade="all, delete-orphan"
+    )
+
+    sales_as_farmer = relationship(
+        "LandSale",
+        foreign_keys="LandSale.farmer_id",
+        back_populates="farmer",
+        cascade="all, delete-orphan"
+    )
 # =========================================================
 # PHASE 2
 # USER BLOCK
@@ -399,6 +417,16 @@ class Land(Base):
 
     reservations = relationship(
         "Reservation",
+        back_populates="land",
+        cascade="all, delete-orphan"
+    )
+
+    # -----------------------------------------------------
+    # Phase 8 - Sales
+    # -----------------------------------------------------
+
+    sales = relationship(
+        "LandSale",
         back_populates="land",
         cascade="all, delete-orphan"
     )
@@ -1285,6 +1313,131 @@ class Reservation(Base):
     offer = relationship(
         "LandOffer",
         back_populates="reservation"
+    )
+
+    sale = relationship(
+        "LandSale",
+        back_populates="reservation",
+        uselist=False,
+    )
+
+
+# =========================================================
+# PHASE 8
+# COMPLETED LAND SALE
+# =========================================================
+
+class LandSale(Base):
+    """
+    Permanent record of a completed marketplace sale.
+
+    A sale can only be created from one confirmed reservation.
+    The reservation remains as the reservation history, while this
+    row records the completed transaction that moved the listing
+    from Reserved to Sold.
+    """
+
+    __tablename__ = "land_sales"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    reservation_id = Column(
+        Integer,
+        ForeignKey("reservations.id"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        index=True
+    )
+
+    buyer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    farmer_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    offer_id = Column(
+        Integer,
+        ForeignKey("land_offers.id"),
+        nullable=True,
+        index=True
+    )
+
+    amount = Column(
+        Float,
+        nullable=False
+    )
+
+    # Step 52 currently records only completed sales.
+    status = Column(
+        String,
+        default="completed",
+        nullable=False,
+        index=True
+    )
+
+    message = Column(
+        Text,
+        nullable=True
+    )
+
+    completed_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
+
+    reservation = relationship(
+        "Reservation",
+        back_populates="sale"
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="sales"
+    )
+
+    buyer = relationship(
+        "User",
+        foreign_keys=[buyer_id],
+        back_populates="sales_as_buyer"
+    )
+
+    farmer = relationship(
+        "User",
+        foreign_keys=[farmer_id],
+        back_populates="sales_as_farmer"
+    )
+
+    offer = relationship(
+        "LandOffer",
+        foreign_keys=[offer_id]
     )
 
 

@@ -3326,14 +3326,13 @@ function FarmerAvailability({
         <button
           disabled={
             marketplaceLoading ||
-            availabilityStatus ===
-              "sold"
+            availabilityStatus !== "reserved"
           }
-          onClick={() =>
-            updateAvailability(
-              "sold"
-            )
-          }
+          onClick={() => {
+            if (availabilityStatus === "reserved") {
+              window.location.href = "/marketplace-activity";
+            }
+          }}
           style={{
             background: "#C62828",
             color: "#fff",
@@ -3342,24 +3341,23 @@ function FarmerAvailability({
             border: "none",
             borderRadius: "8px",
             cursor:
-              marketplaceLoading
+              marketplaceLoading ||
+              availabilityStatus !== "reserved"
                 ? "not-allowed"
                 : "pointer",
             fontWeight: "bold",
             opacity:
               marketplaceLoading ||
-              availabilityStatus ===
-                "sold"
+              availabilityStatus !== "reserved"
                 ? 0.6
                 : 1,
           }}
         >
-          🔴 Sold
+          🔴 Complete Sale
         </button>
       </div>
 
-      {availabilityStatus ===
-        "sold" && (
+      {availabilityStatus === "reserved" && (
         <p
           style={{
             marginBottom: 0,
@@ -3368,8 +3366,20 @@ function FarmerAvailability({
             fontWeight: "600",
           }}
         >
-          A sold listing cannot be
-          reopened directly.
+          Complete the confirmed reservation from Marketplace Activity to mark the land Sold.
+        </p>
+      )}
+
+      {availabilityStatus === "sold" && (
+        <p
+          style={{
+            marginBottom: 0,
+            marginTop: "15px",
+            color: "#C62828",
+            fontWeight: "600",
+          }}
+        >
+          A sold listing cannot be reopened directly.
         </p>
       )}
     </div>
