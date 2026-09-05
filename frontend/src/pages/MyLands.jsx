@@ -14,6 +14,11 @@ function MyLands() {
   const [selectedFiles, setSelectedFiles] = useState({});
   const [galleryImages, setGalleryImages] = useState({});
   const [availabilityStatuses, setAvailabilityStatuses] = useState({});
+  const [listingAnalytics, setListingAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [expandedAnalyticsId, setExpandedAnalyticsId] = useState(null);
+  const [expandedManagementId, setExpandedManagementId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const navigate = useNavigate();
 
@@ -40,6 +45,9 @@ function MyLands() {
 
       // Load marketplace availability for every land
       await loadAvailabilityStatuses(myLands);
+
+      // Load existing farmer listing analytics
+      await loadListingAnalytics();
     } catch (error) {
       console.error("Failed to load lands:", error);
 
@@ -144,6 +152,68 @@ function MyLands() {
       );
     }
   };
+
+  // =========================================================
+  // Load Farmer Listing Analytics
+  // =========================================================
+
+  const loadListingAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+
+      const response = await api.get("/lands/my/analytics");
+
+      setListingAnalytics(response.data || null);
+    } catch (error) {
+      console.error("Failed to load listing analytics:", error);
+      setListingAnalytics(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const getAnalyticsRecord = (landId) => {
+    return (listingAnalytics?.records || []).find(
+      (record) => Number(record.id) === Number(landId)
+    );
+  };
+
+  const getStatusFilter = (land) => {
+    const approvalStatus = String(land.status || "").toLowerCase();
+    const availabilityStatus = String(
+      availabilityStatuses[land.id] || "available"
+    ).toLowerCase();
+
+    if (statusFilter === "pending") return approvalStatus === "pending";
+    if (statusFilter === "approved") return approvalStatus === "approved";
+    if (statusFilter === "rejected") return approvalStatus === "rejected";
+    if (statusFilter === "changes_requested") {
+      return approvalStatus === "changes_requested";
+    }
+    if (statusFilter === "available") return availabilityStatus === "available";
+    if (statusFilter === "reserved") return availabilityStatus === "reserved";
+    if (statusFilter === "sold") return availabilityStatus === "sold";
+    if (statusFilter === "unpublished") {
+      const record = getAnalyticsRecord(land.id);
+      return record ? !record.is_published : false;
+    }
+
+    return true;
+  };
+
+  const filteredLands = lands.filter(getStatusFilter);
+
+  const filterDefinitions = [
+    { key: "all", label: "All" },
+    { key: "pending", label: "Pending" },
+    { key: "approved", label: "Approved" },
+    { key: "available", label: "Available" },
+    { key: "reserved", label: "Reserved" },
+    { key: "sold", label: "Sold" },
+    { key: "rejected", label: "Rejected" },
+    { key: "changes_requested", label: "Change Requested" },
+    { key: "unpublished", label: "Unpublished" },
+  ];
 
   // =========================================================
   // Update Marketplace Availability
@@ -622,33 +692,164 @@ function MyLands() {
           minHeight: "100vh",
         }}
       >
-        <h1
+        <div
           style={{
-            color: "#2E7D32",
+            maxWidth: "1250px",
+            margin: "0 auto",
           }}
         >
-          🌾 My Lands
-        </h1>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "15px",
+              flexWrap: "wrap",
+              marginBottom: "18px",
+            }}
+          >
+            <div>
+              <h1
+                style={{
+                  color: "#2E7D32",
+                  margin: 0,
+                }}
+              >
+                🌾 My Lands
+              </h1>
+              <p style={{ color: "#666", margin: "6px 0 0" }}>
+                Manage your listings, approval status, marketplace availability and buyer activity.
+              </p>
+            </div>
 
-        <button
-          onClick={() => navigate("/home")}
-          style={{
-            backgroundColor: "#1565C0",
-            color: "white",
-            padding: "10px 20px",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-            marginBottom: "20px",
-          }}
-        >
-          ← Back to Home
-        </button>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={fetchMyLands}
+                disabled={loading}
+                style={{
+                  backgroundColor: "#2E7D32",
+                  color: "white",
+                  padding: "10px 16px",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: loading ? "wait" : "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                ↻ Refresh
+              </button>
 
-        {lands.length === 0 ? (
-          <h2>No lands found.</h2>
-        ) : (
-          lands.map((land) => {
+              <button
+                type="button"
+                onClick={() => navigate("/home")}
+                style={{
+                  backgroundColor: "#1565C0",
+                  color: "white",
+                  padding: "10px 16px",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                ← Home
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              gap: "12px",
+              marginBottom: "18px",
+            }}
+          >
+            {[
+              ["Total Listings", listingAnalytics?.summary?.total_lands ?? lands.length, "🌾"],
+              ["Available", listingAnalytics?.summary?.available ?? lands.filter((land) => (availabilityStatuses[land.id] || "available") === "available").length, "🟢"],
+              ["Reserved", listingAnalytics?.summary?.reserved ?? lands.filter((land) => availabilityStatuses[land.id] === "reserved").length, "🟡"],
+              ["Sold", listingAnalytics?.summary?.sold ?? lands.filter((land) => availabilityStatuses[land.id] === "sold").length, "🔴"],
+              ["Views", listingAnalytics?.summary?.total_views ?? 0, "👁️"],
+              ["Inquiries", listingAnalytics?.summary?.total_inquiries ?? 0, "💬"],
+              ["Offers", listingAnalytics?.summary?.total_offers ?? 0, "💰"],
+              ["Site Visits", listingAnalytics?.summary?.total_site_visits ?? 0, "📅"],
+            ].map(([label, value, icon]) => (
+              <div
+                key={label}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #DDE7DF",
+                  borderRadius: "12px",
+                  padding: "14px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                }}
+              >
+                <div style={{ fontSize: "20px" }}>{icon}</div>
+                <div style={{ fontSize: "22px", fontWeight: "800", color: "#2E7D32", marginTop: "4px" }}>{value}</div>
+                <div style={{ fontSize: "12px", color: "#66736A", fontWeight: "700" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #DDE7DF",
+              borderRadius: "12px",
+              padding: "14px",
+              marginBottom: "20px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+            }}
+          >
+            <div style={{ fontWeight: "800", color: "#405247", marginBottom: "10px" }}>Filter Listings</div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {filterDefinitions.map((filter) => {
+                const active = statusFilter === filter.key;
+                return (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setStatusFilter(filter.key)}
+                    style={{
+                      border: active ? "2px solid #2E7D32" : "1px solid #D0D8D2",
+                      background: active ? "#E8F5E9" : "#fff",
+                      color: active ? "#2E7D32" : "#536057",
+                      borderRadius: "20px",
+                      padding: "8px 13px",
+                      cursor: "pointer",
+                      fontWeight: active ? "800" : "600",
+                    }}
+                  >
+                    {filter.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: "10px", color: "#66736A", fontSize: "13px" }}>
+              Showing <strong>{filteredLands.length}</strong> of <strong>{lands.length}</strong> listings
+            </div>
+          </div>
+
+          {lands.length === 0 ? (
+            <div style={{ background: "#fff", padding: "40px", borderRadius: "12px", textAlign: "center" }}>
+              <h2>No lands found.</h2>
+              <p style={{ color: "#777" }}>Add a land listing to start managing your marketplace inventory.</p>
+            </div>
+          ) : filteredLands.length === 0 ? (
+            <div style={{ background: "#fff", padding: "40px", borderRadius: "12px", textAlign: "center" }}>
+              <h2>No listings match this filter.</h2>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                style={{ background: "#2E7D32", color: "#fff", border: "none", borderRadius: "8px", padding: "10px 16px", cursor: "pointer", fontWeight: "700" }}
+              >
+                Show All Listings
+              </button>
+            </div>
+          ) : (
+          filteredLands.map((land) => {
             const filesForLand =
               selectedFiles[land.id] || [];
 
@@ -667,11 +868,110 @@ function MyLands() {
                     "0 2px 8px rgba(0,0,0,0.2)",
                 }}
               >
-                <h2>{land.title}</h2>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(180px, 260px) 1fr",
+                    gap: "20px",
+                    alignItems: "start",
+                  }}
+                >
+                  <div>
+                    {land.image_url ? (
+                      <img
+                        src={land.image_url}
+                        alt={land.title}
+                        style={{
+                          width: "100%",
+                          height: "165px",
+                          objectFit: "cover",
+                          borderRadius: "10px",
+                          border: "1px solid #DDE7DF",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          height: "165px",
+                          borderRadius: "10px",
+                          background: "#F1F4F2",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#77847B",
+                          fontWeight: "700",
+                        }}
+                      >
+                        🌾 No Image
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h2 style={{ margin: "0 0 8px", color: "#2E7D32" }}>{land.title}</h2>
+                    <div style={{ color: "#59665D", fontSize: "14px", lineHeight: 1.6 }}>
+                      <div><strong>Price:</strong> ₹{Number(land.price || 0).toLocaleString("en-IN")}</div>
+                      <div><strong>Area:</strong> {land.area} Acres</div>
+                      <div><strong>Location:</strong> {land.village}, {land.mandal}, {land.district}</div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+                      <span style={{ background: land.status === "approved" ? "#E8F5E9" : land.status === "rejected" ? "#FFEBEE" : land.status === "changes_requested" ? "#FFF3E0" : "#EEF3F7", color: land.status === "approved" ? "#2E7D32" : land.status === "rejected" ? "#C62828" : land.status === "changes_requested" ? "#EF6C00" : "#546E7A", borderRadius: "18px", padding: "6px 10px", fontSize: "12px", fontWeight: "800" }}>
+                        {land.status === "changes_requested" ? "⚠️ Change Requested" : `Approval: ${String(land.status || "unknown").replace("_", " ")}`}
+                      </span>
+                      <span style={{ ...getAvailabilityBadgeStyle(availabilityStatuses[land.id] || "available"), borderRadius: "18px", padding: "6px 10px", fontSize: "12px", fontWeight: "800" }}>
+                        {getAvailabilityLabel(availabilityStatuses[land.id] || "available")}
+                      </span>
+                      {getAnalyticsRecord(land.id) && (
+                        <span style={{ background: getAnalyticsRecord(land.id).is_published ? "#E8F5E9" : "#F3F4F5", color: getAnalyticsRecord(land.id).is_published ? "#2E7D32" : "#68736C", borderRadius: "18px", padding: "6px 10px", fontSize: "12px", fontWeight: "800" }}>
+                          {getAnalyticsRecord(land.id).is_published ? "🌐 Published" : "⚪ Unpublished"}
+                        </span>
+                      )}
+                    </div>
+
+                    {land.rejection_reason && (
+                      <div style={{ marginTop: "10px", padding: "9px 11px", background: "#FFF8E1", border: "1px solid #FFE082", borderRadius: "8px", color: "#795548", fontSize: "13px" }}>
+                        <strong>Admin feedback:</strong> {land.rejection_reason}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "14px" }}>
+                      <button type="button" onClick={() => navigate(`/lands/${land.id}`)} style={{ background: "#1976D2", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>👁️ View</button>
+                      <button type="button" onClick={() => editLand(land.id)} style={{ background: "#2E7D32", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>✏️ Edit</button>
+                      <button type="button" onClick={() => setExpandedAnalyticsId((current) => current === land.id ? null : land.id)} style={{ background: "#6A1B9A", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>📊 Analytics</button>
+                      <button type="button" onClick={() => setExpandedManagementId((current) => current === land.id ? null : land.id)} style={{ background: "#EF6C00", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>⚙️ Manage / Availability</button>
+                    </div>
+
+                    {expandedAnalyticsId === land.id && (
+                      <div style={{ marginTop: "12px", padding: "12px", background: "#F8FBF8", border: "1px solid #DDE7DF", borderRadius: "9px" }}>
+                        {analyticsLoading && !listingAnalytics ? (
+                          <div style={{ color: "#66736A" }}>Loading analytics...</div>
+                        ) : (
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: "8px" }}>
+                            {[
+                              ["Views", getAnalyticsRecord(land.id)?.views ?? 0, "👁️"],
+                              ["Inquiries", getAnalyticsRecord(land.id)?.inquiries?.total ?? 0, "💬"],
+                              ["Offers", getAnalyticsRecord(land.id)?.offers?.total ?? 0, "💰"],
+                              ["Site Visits", getAnalyticsRecord(land.id)?.site_visits?.total ?? 0, "📅"],
+                            ].map(([label, value, icon]) => (
+                              <div key={label} style={{ background: "#fff", borderRadius: "7px", padding: "8px", textAlign: "center" }}>
+                                <div>{icon}</div>
+                                <strong style={{ color: "#2E7D32", fontSize: "18px" }}>{value}</strong>
+                                <div style={{ fontSize: "11px", color: "#66736A" }}>{label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* =================================================
-                    Existing Main Image
+                    Existing Main Image / Detailed Management
                 ================================================= */}
+                {expandedManagementId === land.id && (
+                  <div style={{ marginTop: "18px" }}>
 
                 {land.image_url && (
                   <div
@@ -1293,6 +1593,9 @@ function MyLands() {
                   )}
                 </div>
 
+                  </div>
+                )}
+
                 {/* =================================================
                     Edit / Delete Entire Land
                 ================================================= */}
@@ -1359,6 +1662,7 @@ function MyLands() {
             );
           })
         )}
+        </div>
       </div>
     </>
   );
