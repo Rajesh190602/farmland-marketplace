@@ -237,7 +237,7 @@ function Notifications() {
       // -------------------------------------------------
 
       if (
-        notification.target_type ===
+        targetType ===
         "conversation"
       ) {
         navigate(
@@ -252,12 +252,12 @@ function Notifications() {
       // -------------------------------------------------
 
       if (
-        notification.target_type ===
-          "inquiry" ||
-        notification.target_type ===
-          "offer" ||
-        notification.target_type ===
-          "site_visit"
+        targetType === "inquiry" ||
+        targetType === "offer" ||
+        targetType === "site_visit" ||
+        targetType === "reservation" ||
+        targetType === "sale" ||
+        targetType === "transaction"
       ) {
         navigate(
           "/marketplace-activity"

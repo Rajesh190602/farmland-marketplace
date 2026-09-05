@@ -21,13 +21,19 @@ def get_notifications(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    """
+    Return only notifications belonging to the authenticated user.
+
+    Newest notifications are returned first.
+    """
     notifications = (
         db.query(Notification)
         .filter(
             Notification.user_id == current_user
         )
         .order_by(
-            Notification.created_at.desc()
+            Notification.created_at.desc(),
+            Notification.id.desc()
         )
         .all()
     )
@@ -44,6 +50,9 @@ def unread_count(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    """
+    Return the unread notification count for the authenticated user.
+    """
     count = (
         db.query(Notification)
         .filter(
@@ -67,20 +76,25 @@ def mark_all_as_read(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    notifications = (
+    """
+    Mark every unread notification belonging to the authenticated
+    user as read.
+
+    No notification belonging to another user can be modified.
+    """
+    updated_count = (
         db.query(Notification)
         .filter(
             Notification.user_id == current_user,
             Notification.is_read == False
         )
-        .all()
+        .update(
+            {
+                Notification.is_read: True
+            },
+            synchronize_session=False
+        )
     )
-
-    updated_count = 0
-
-    for notification in notifications:
-        notification.is_read = True
-        updated_count += 1
 
     db.commit()
 
@@ -100,6 +114,11 @@ def mark_as_read(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    """
+    Mark one notification as read.
+
+    The notification must belong to the authenticated user.
+    """
     notification = (
         db.query(Notification)
         .filter(
@@ -136,6 +155,11 @@ def delete_notification(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+    """
+    Delete one notification.
+
+    The notification must belong to the authenticated user.
+    """
     notification = (
         db.query(Notification)
         .filter(
