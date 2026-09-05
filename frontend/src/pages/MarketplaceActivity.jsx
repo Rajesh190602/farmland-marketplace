@@ -13,6 +13,7 @@ function MarketplaceActivity() {
   const [siteVisits, setSiteVisits] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [salesByReservation, setSalesByReservation] = useState({});
+  const [transactions, setTransactions] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
@@ -41,11 +42,14 @@ function MarketplaceActivity() {
           inquiriesResponse,
           offersResponse,
           visitsResponse,
+          reservationsResponse,
+          transactionsResponse,
         ] = await Promise.all([
           api.get("/marketplace/inquiries/received"),
           api.get("/marketplace/offers/received"),
           api.get("/marketplace/site-visits/received"),
           api.get("/marketplace/reservations/received"),
+          api.get("/marketplace/transactions/my"),
         ]);
 
         setInquiries(inquiriesResponse.data || []);
@@ -53,6 +57,7 @@ function MarketplaceActivity() {
         await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
         setReservations(reservationsResponse.data || []);
+        setTransactions(transactionsResponse.data || []);
         await loadReservationSales(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else if (userRole === "buyer") {
@@ -60,11 +65,14 @@ function MarketplaceActivity() {
           inquiriesResponse,
           offersResponse,
           visitsResponse,
+          reservationsResponse,
+          transactionsResponse,
         ] = await Promise.all([
           api.get("/marketplace/inquiries/my"),
           api.get("/marketplace/offers/my"),
           api.get("/marketplace/site-visits/my"),
           api.get("/marketplace/reservations/my"),
+          api.get("/marketplace/transactions/my"),
         ]);
 
         setInquiries(inquiriesResponse.data || []);
@@ -72,6 +80,7 @@ function MarketplaceActivity() {
         await loadOfferHistory(offersResponse.data || []);
         setSiteVisits(visitsResponse.data || []);
         setReservations(reservationsResponse.data || []);
+        setTransactions(transactionsResponse.data || []);
         await loadReservationSales(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else {
@@ -80,6 +89,7 @@ function MarketplaceActivity() {
         setSiteVisits([]);
         setReservations([]);
         setSalesByReservation({});
+        setTransactions([]);
       }
     } catch (error) {
       console.error(
@@ -1604,6 +1614,102 @@ function MarketplaceActivity() {
                             )}
                           </div>
                         )}
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* =================================================
+                  STEP 53 - TRANSACTION HISTORY
+              ================================================= */}
+
+              <section style={{ marginBottom: "40px" }}>
+                <h2
+                  style={{
+                    color: "#6A1B9A",
+                    marginBottom: "18px",
+                  }}
+                >
+                  🧾 Transaction History
+                </h2>
+
+                {transactions.length === 0 ? (
+                  <Card>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: "#777",
+                      }}
+                    >
+                      No completed transactions yet.
+                    </p>
+                  </Card>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit,minmax(320px,1fr))",
+                      gap: "18px",
+                    }}
+                  >
+                    {transactions.map((item) => (
+                      <Card key={item.sale_id}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <strong>
+                            Sale #{item.sale_id}
+                          </strong>
+                          <StatusBadge status={item.status} />
+                        </div>
+
+                        <h3
+                          style={{
+                            marginTop: "16px",
+                            marginBottom: "10px",
+                            color: "#333",
+                          }}
+                        >
+                          🌾 {item.land_title || `Land #${item.land_id}`}
+                        </h3>
+
+                        <p>
+                          <strong>Sale Amount:</strong> ₹
+                          {Number(item.amount || 0).toLocaleString("en-IN")}
+                        </p>
+
+                        <p>
+                          <strong>Reservation:</strong> #{item.reservation_id}
+                        </p>
+
+                        <p>
+                          <strong>Land ID:</strong> {item.land_id}
+                        </p>
+
+                        <p>
+                          <strong>Buyer:</strong> {item.buyer_name || `User #${item.buyer_id}`}
+                        </p>
+
+                        <p>
+                          <strong>Farmer:</strong> {item.farmer_name || `User #${item.farmer_id}`}
+                        </p>
+
+                        <p
+                          style={{
+                            fontSize: "13px",
+                            color: "#666",
+                            marginBottom: 0,
+                          }}
+                        >
+                          Completed: {new Date(item.completed_at).toLocaleString()}
+                        </p>
                       </Card>
                     ))}
                   </div>

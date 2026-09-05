@@ -356,6 +356,23 @@ class SaleResponse(BaseModel):
         from_attributes = True
 
 
+class TransactionHistoryResponse(BaseModel):
+    sale_id: int
+    reservation_id: int
+    land_id: int
+    land_title: Optional[str] = None
+    buyer_id: int
+    buyer_name: Optional[str] = None
+    farmer_id: int
+    farmer_name: Optional[str] = None
+    amount: float
+    status: str
+    message: Optional[str] = None
+    completed_at: datetime
+    created_at: datetime
+
+
+
 # =========================================================
 # SITE VISIT
 # =========================================================

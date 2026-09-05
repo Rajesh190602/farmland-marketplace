@@ -35,6 +35,7 @@ from app.schemas import (
     ReservationStatusUpdate,
     SaleCompleteCreate,
     SaleResponse,
+    TransactionHistoryResponse,
     SiteVisitCreate,
     SiteVisitResponse,
     SiteVisitStatusUpdate,
@@ -1959,6 +1960,67 @@ def get_sale(
         )
 
     return sale
+
+
+@router.get(
+    "/transactions/my",
+    response_model=list[TransactionHistoryResponse],
+)
+def get_my_transaction_history(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    """
+    Return the authenticated buyer or farmer's completed land-sale history.
+
+    Buyers receive sales where they are the buyer. Farmers receive sales for
+    lands they own / sales where they are the farmer. Only completed sales
+    are returned because LandSale is the permanent completed-transaction
+    record created by Step 52.
+    """
+    user = get_user(db, current_user)
+
+    sales_query = db.query(LandSale).filter(LandSale.status == "completed")
+
+    if user.role == "buyer":
+        sales_query = sales_query.filter(LandSale.buyer_id == user.id)
+    elif user.role == "farmer":
+        sales_query = sales_query.filter(LandSale.farmer_id == user.id)
+    else:
+        raise HTTPException(
+            status_code=403,
+            detail="Only buyers and farmers have transaction history.",
+        )
+
+    sales = (
+        sales_query
+        .order_by(LandSale.completed_at.desc(), LandSale.id.desc())
+        .all()
+    )
+
+    result = []
+    for sale in sales:
+        land = db.query(Land).filter(Land.id == sale.land_id).first()
+        buyer = db.query(User).filter(User.id == sale.buyer_id).first()
+        farmer = db.query(User).filter(User.id == sale.farmer_id).first()
+
+        result.append({
+            "sale_id": sale.id,
+            "reservation_id": sale.reservation_id,
+            "land_id": sale.land_id,
+            "land_title": land.title if land else None,
+            "buyer_id": sale.buyer_id,
+            "buyer_name": buyer.full_name if buyer else None,
+            "farmer_id": sale.farmer_id,
+            "farmer_name": farmer.full_name if farmer else None,
+            "amount": sale.amount,
+            "status": sale.status,
+            "message": sale.message,
+            "completed_at": sale.completed_at,
+            "created_at": sale.created_at,
+        })
+
+    return result
 
 
 # =========================================================
