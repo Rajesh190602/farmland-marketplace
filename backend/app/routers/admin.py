@@ -21,6 +21,7 @@ from app.models import (
     LandReport,
     UserReport,
     SavedSearch,
+    UserAccountStatus,
 )
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
@@ -726,13 +727,37 @@ def get_user_by_id(
         .count()
     )
 
+    account_status = (
+        db.query(UserAccountStatus)
+        .filter(UserAccountStatus.user_id == user.id)
+        .first()
+    )
+
     return {
         "id": user.id,
         "full_name": user.full_name,
         "email": user.email,
         "mobile": user.mobile,
         "role": user.role,
-        "total_lands": total_lands
+        "is_suspended": bool(user.is_suspended),
+        "account_status": (
+            account_status.status
+            if account_status
+            else "active"
+        ),
+        "deactivated_at": (
+            account_status.deactivated_at
+            if account_status
+            else None
+        ),
+        "reactivated_at": (
+            account_status.reactivated_at
+            if account_status
+            else None
+        ),
+        "total_lands": total_lands,
+        "created_at": user.created_at,
+        "last_seen": user.last_seen,
     }
 @router.get("/lands")
 def get_all_lands(
@@ -2639,6 +2664,84 @@ def suspend_user(
         "message": "User suspended successfully.",
         "user_id": user.id,
         "is_suspended": user.is_suspended,
+    }
+
+
+# =========================================================
+# STEP 59 - ADMIN REACTIVATE DEACTIVATED USER
+# =========================================================
+
+@router.put("/users/{user_id}/reactivate")
+def reactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Reactivate a user who voluntarily deactivated their account.
+
+    This is intentionally separate from the existing suspension restore
+    endpoint. Reactivation changes only UserAccountStatus and does not
+    automatically republish the user's land listings.
+    """
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    # Admin accounts cannot use the voluntary deactivation workflow.
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be reactivated through this action."
+        )
+
+    account_status = (
+        db.query(UserAccountStatus)
+        .filter(UserAccountStatus.user_id == user.id)
+        .first()
+    )
+
+    # Existing users without a status row are already active.
+    if not account_status or account_status.status != "deactivated":
+        return {
+            "message": "User account is already active.",
+            "user_id": user.id,
+            "account_status": "active",
+        }
+
+    account_status.status = "active"
+    account_status.reactivated_at = datetime.utcnow()
+    account_status.updated_at = datetime.utcnow()
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="REACTIVATE_USER",
+        description=(
+            f'Reactivated user "{user.full_name}" '
+            f'({user.email}).'
+        ),
+        target_type="USER",
+        target_id=user.id,
+    )
+
+    db.commit()
+    db.refresh(account_status)
+
+    return {
+        "message": "User account reactivated successfully.",
+        "user_id": user.id,
+        "account_status": account_status.status,
+        "reactivated_at": account_status.reactivated_at,
     }
 
 

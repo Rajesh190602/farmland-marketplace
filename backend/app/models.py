@@ -192,6 +192,78 @@ class User(Base):
         back_populates="farmer",
         cascade="all, delete-orphan"
     )
+
+    # -----------------------------------------------------
+    # Step 58 - User Account Status
+    # Voluntary deactivation is kept separate from the
+    # administrator-controlled is_suspended flag.
+    # -----------------------------------------------------
+
+    account_status = relationship(
+        "UserAccountStatus",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+
+# =========================================================
+# STEP 58 - USER ACCOUNT STATUS
+# =========================================================
+
+class UserAccountStatus(Base):
+    __tablename__ = "user_account_statuses"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    status = Column(
+        String,
+        default="active",
+        nullable=False,
+        index=True
+    )
+
+    deactivated_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    reactivated_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
+
+    user = relationship(
+        "User",
+        back_populates="account_status"
+    )
+
+
 # =========================================================
 # PHASE 2
 # USER BLOCK

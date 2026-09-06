@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.models import User, EmailVerification,UserBlock
+from app.models import User, EmailVerification, UserBlock, UserAccountStatus
 import cloudinary.uploader
 from app.database import get_db
 from app.auth import get_current_user
@@ -156,6 +156,26 @@ def login(
         raise HTTPException(
             status_code=400,
             detail="Invalid email or password"
+        )
+
+    # --------------------------------------------------
+    # Step 58 - Block login for voluntarily deactivated
+    # accounts before issuing a new JWT.
+    # --------------------------------------------------
+
+    account_status = (
+        db.query(UserAccountStatus)
+        .filter(UserAccountStatus.user_id == db_user.id)
+        .first()
+    )
+
+    if account_status and account_status.status == "deactivated":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Your account has been deactivated. "
+                "Please contact support if you want to reactivate it."
+            )
         )
 
     # Verify password
@@ -326,6 +346,23 @@ def forgot_password(
             detail="Email not registered"
         )
 
+    # Deactivated accounts cannot use password recovery to bypass
+    # the account deactivation state.
+    account_status = (
+        db.query(UserAccountStatus)
+        .filter(UserAccountStatus.user_id == user.id)
+        .first()
+    )
+
+    if account_status and account_status.status == "deactivated":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Your account has been deactivated. "
+                "Please contact support if you want to reactivate it."
+            )
+        )
+
     otp = generate_otp()
     expiry = datetime.utcnow() + timedelta(minutes=10)
 
@@ -417,6 +454,21 @@ def reset_password(
         raise HTTPException(
             status_code=404,
             detail="User not found"
+        )
+
+    account_status = (
+        db.query(UserAccountStatus)
+        .filter(UserAccountStatus.user_id == user.id)
+        .first()
+    )
+
+    if account_status and account_status.status == "deactivated":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Your account has been deactivated. "
+                "Please contact support if you want to reactivate it."
+            )
         )
 
     user.password = hash_password(data.new_password)
@@ -741,6 +793,102 @@ def change_password(
     return {
         "message": "Password changed successfully"
     }
+# =========================================================
+# STEP 58 - ACCOUNT DEACTIVATION
+# =========================================================
+
+class DeactivateAccountRequest(BaseModel):
+    current_password: str
+
+
+@router.post("/deactivate")
+def deactivate_account(
+    data: DeactivateAccountRequest,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    # Admin accounts are protected from self-deactivation so that
+    # the marketplace cannot accidentally lose its administrator.
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot be deactivated from this page."
+        )
+
+    if not verify_password(data.current_password, user.password):
+        raise HTTPException(
+            status_code=400,
+            detail="Current password is incorrect"
+        )
+
+    account_status = (
+        db.query(UserAccountStatus)
+        .filter(UserAccountStatus.user_id == current_user)
+        .first()
+    )
+
+    if account_status and account_status.status == "deactivated":
+        raise HTTPException(
+            status_code=400,
+            detail="Account is already deactivated."
+        )
+
+    now = datetime.utcnow()
+
+    if account_status is None:
+        account_status = UserAccountStatus(
+            user_id=current_user,
+            status="deactivated",
+            deactivated_at=now,
+            reactivated_at=None,
+        )
+        db.add(account_status)
+    else:
+        account_status.status = "deactivated"
+        account_status.deactivated_at = now
+        account_status.reactivated_at = None
+
+    # Stop normal marketplace exposure while preserving all land,
+    # offer, reservation, sale, transaction and audit history.
+    # Reserved/Sold listings are intentionally left untouched.
+    for land in user.lands:
+        availability_status = (
+            land.availability.status
+            if land.availability is not None
+            else "available"
+        )
+
+        if availability_status not in ("reserved", "sold"):
+            land.is_published = False
+
+    create_activity_log(
+        db=db,
+        user_id=current_user,
+        action="ACCOUNT_DEACTIVATED",
+        description="User voluntarily deactivated their account.",
+        target_type="USER",
+        target_id=current_user
+    )
+
+    db.commit()
+
+    return {
+        "message": "Account deactivated successfully"
+    }
+
+
 # =========================================================
 # PHASE 2 - USER BLOCK
 # =========================================================

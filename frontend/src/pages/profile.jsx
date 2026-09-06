@@ -15,6 +15,14 @@ function Profile() {
   const [errorMessage, setErrorMessage] = useState("");
 
   // =========================================================
+  // ACCOUNT DEACTIVATION
+  // =========================================================
+
+  const [showDeactivate, setShowDeactivate] = useState(false);
+  const [deactivatePassword, setDeactivatePassword] = useState("");
+  const [deactivating, setDeactivating] = useState(false);
+
+  // =========================================================
   // FARMER RATING & REVIEWS
   // =========================================================
 
@@ -254,6 +262,51 @@ function Profile() {
 
       // Allow selecting the same file again
       event.target.value = "";
+    }
+  };
+
+  // =========================================================
+  // DEACTIVATE ACCOUNT
+  // =========================================================
+
+  const deactivateAccount = async () => {
+    setMessage("");
+    setErrorMessage("");
+
+    if (!deactivatePassword) {
+      setErrorMessage("Enter your current password to deactivate your account.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to deactivate your account? You will be logged out and will not be able to sign in until the account is reactivated. Your marketplace and transaction history will be preserved."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeactivating(true);
+
+    try {
+      await api.post("/users/deactivate", {
+        current_password: deactivatePassword,
+      });
+
+      // Clear the common authentication/local profile keys used by the app.
+      localStorage.removeItem("token");
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("user");
+
+      navigate("/login", { replace: true });
+    } catch (error) {
+      console.error("Account Deactivation Error:", error);
+      setErrorMessage(
+        error.response?.data?.detail ||
+          "Failed to deactivate account."
+      );
+    } finally {
+      setDeactivating(false);
     }
   };
 
@@ -740,6 +793,94 @@ function Profile() {
           </section>
 
           {/* =================================================
+              ACCOUNT MANAGEMENT
+          ================================================= */}
+
+          {user.role !== "admin" && (
+            <section style={styles.dangerCard}>
+              <div style={styles.cardHeader}>
+                <div>
+                  <h2 style={styles.dangerTitle}>Account Management</h2>
+                  <p style={styles.cardSubtitle}>
+                    Deactivate your account if you no longer want to use the
+                    marketplace. Your marketplace and transaction history will
+                    be preserved.
+                  </p>
+                </div>
+              </div>
+
+              {!showDeactivate ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeactivate(true);
+                    setDeactivatePassword("");
+                    setErrorMessage("");
+                  }}
+                  style={styles.dangerButton}
+                >
+                  Deactivate Account
+                </button>
+              ) : (
+                <div style={styles.deactivatePanel}>
+                  <div style={styles.warningBox}>
+                    <strong>Before you continue</strong>
+                    <p style={styles.warningText}>
+                      You will be logged out immediately. Your account will no
+                      longer be available for login, and your published
+                      marketplace listings will be hidden. Existing records
+                      and transaction history will not be deleted.
+                    </p>
+                  </div>
+
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>
+                      Current Password
+                    </label>
+                    <input
+                      type="password"
+                      value={deactivatePassword}
+                      onChange={(e) => setDeactivatePassword(e.target.value)}
+                      style={styles.input}
+                      placeholder="Enter your current password"
+                      autoComplete="current-password"
+                      disabled={deactivating}
+                    />
+                  </div>
+
+                  <div style={styles.actionRow}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDeactivate(false);
+                        setDeactivatePassword("");
+                        setErrorMessage("");
+                      }}
+                      disabled={deactivating}
+                      style={styles.secondaryButton}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deactivateAccount}
+                      disabled={deactivating}
+                      style={{
+                        ...styles.dangerButton,
+                        opacity: deactivating ? 0.7 : 1,
+                      }}
+                    >
+                      {deactivating
+                        ? "Deactivating..."
+                        : "Confirm Deactivation"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* =================================================
               ACCOUNT INFORMATION
           ================================================= */}
 
@@ -1082,6 +1223,51 @@ const styles = {
     color: "#111827",
     fontSize: "18px",
     fontWeight: "700",
+  },
+
+  dangerCard: {
+    background: "#ffffff",
+    border: "1px solid #fecaca",
+    borderRadius: "14px",
+    padding: "24px",
+    marginTop: "20px",
+  },
+
+  dangerTitle: {
+    margin: 0,
+    fontSize: "20px",
+    fontWeight: 700,
+    color: "#b91c1c",
+  },
+
+  dangerButton: {
+    border: "1px solid #dc2626",
+    background: "#dc2626",
+    color: "#ffffff",
+    padding: "11px 18px",
+    borderRadius: "8px",
+    fontSize: "14px",
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+
+  deactivatePanel: {
+    marginTop: "18px",
+  },
+
+  warningBox: {
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    borderRadius: "10px",
+    padding: "14px 16px",
+    marginBottom: "18px",
+    color: "#9a3412",
+  },
+
+  warningText: {
+    margin: "8px 0 0",
+    lineHeight: 1.6,
+    fontSize: "14px",
   },
 
   accountInfo: {

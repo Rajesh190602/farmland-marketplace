@@ -17,6 +17,12 @@ function  LandDetails(){
 
   const [actionLoading, setActionLoading] = useState(null);
 
+  // =========================================================
+  // STEP 60 - ADMIN LISTING DETAILS
+  // =========================================================
+  const [selectedLand, setSelectedLand] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
   const limit = 10;
 
   // =========================================================
@@ -94,8 +100,24 @@ function  LandDetails(){
   // VIEW LAND
   // =========================================================
 
-  const viewLand = (landId) => {
-    navigate(`/admin/lands/${landId}`);
+  const viewLand = async (landId) => {
+    try {
+      setDetailsLoading(true);
+      const response = await api.get(`/admin/lands/${landId}`);
+      setSelectedLand(response.data);
+    } catch (error) {
+      console.error("Failed to load land details:", error);
+      alert(
+        error.response?.data?.detail ||
+          "Failed to load land details."
+      );
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const closeLandDetails = () => {
+    setSelectedLand(null);
   };
 
   // =========================================================
@@ -1105,11 +1127,206 @@ function  LandDetails(){
               </button>
             </div>
           )}
+
+          {/* =================================================
+              STEP 60 - ADMIN LISTING DETAILS
+          ================================================= */}
+          {detailsLoading && (
+            <div style={modalOverlayStyle}>
+              <div style={detailsModalStyle}>
+                <div style={detailsLoadingStyle}>
+                  Loading listing details...
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedLand && !detailsLoading && (
+            <div
+              style={modalOverlayStyle}
+              onClick={closeLandDetails}
+            >
+              <div
+                style={detailsModalStyle}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div style={detailsHeaderStyle}>
+                  <div>
+                    <h2 style={{ margin: 0, color: "#2E7D32" }}>
+                      🌾 Listing Details
+                    </h2>
+                    <p style={{ margin: "6px 0 0", color: "#666" }}>
+                      Listing ID: #{selectedLand.id}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeLandDetails}
+                    style={detailsCloseButtonStyle}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div style={detailsBodyStyle}>
+                  <div style={detailsImageSectionStyle}>
+                    {selectedLand.image_url ? (
+                      <img
+                        src={selectedLand.image_url}
+                        alt={selectedLand.title || "Land"}
+                        style={detailsMainImageStyle}
+                      />
+                    ) : (
+                      <div style={detailsNoImageStyle}>
+                        No Image
+                      </div>
+                    )}
+
+                    {Array.isArray(selectedLand.images) &&
+                      selectedLand.images.length > 0 && (
+                        <div style={detailsGalleryStyle}>
+                          {selectedLand.images.map((image) => (
+                            <img
+                              key={image.id}
+                              src={image.image_url}
+                              alt={selectedLand.title || "Land"}
+                              style={detailsThumbnailStyle}
+                            />
+                          ))}
+                        </div>
+                      )}
+                  </div>
+
+                  <div style={detailsSectionStyle}>
+                    <h3 style={detailsSectionTitleStyle}>
+                      Listing Information
+                    </h3>
+                    <div style={detailsGridStyle}>
+                      <DetailItem label="Title" value={selectedLand.title} />
+                      <DetailItem
+                        label="Price"
+                        value={
+                          selectedLand.price !== null &&
+                          selectedLand.price !== undefined
+                            ? `₹${Number(selectedLand.price).toLocaleString("en-IN")}`
+                            : "N/A"
+                        }
+                      />
+                      <DetailItem
+                        label="Area"
+                        value={
+                          selectedLand.area !== null &&
+                          selectedLand.area !== undefined
+                            ? `${selectedLand.area} Acres`
+                            : "N/A"
+                        }
+                      />
+                      <DetailItem label="Crop Type" value={selectedLand.crop_type} />
+                      <DetailItem label="Soil Type" value={selectedLand.soil_type} />
+                      <DetailItem label="Water Source" value={selectedLand.water_source} />
+                      <DetailItem label="Survey Number" value={selectedLand.survey_number} />
+                      <DetailItem label="Status" value={selectedLand.status} />
+                      <DetailItem
+                        label="Published"
+                        value={selectedLand.is_published ? "Yes" : "No"}
+                      />
+                    </div>
+
+                    <div style={detailsDescriptionStyle}>
+                      <strong>Description</strong>
+                      <p style={{ marginBottom: 0 }}>
+                        {selectedLand.description || "No description provided."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={detailsSectionStyle}>
+                    <h3 style={detailsSectionTitleStyle}>
+                      📍 Location
+                    </h3>
+                    <div style={detailsGridStyle}>
+                      <DetailItem label="Village" value={selectedLand.village} />
+                      <DetailItem label="Mandal" value={selectedLand.mandal} />
+                      <DetailItem label="District" value={selectedLand.district} />
+                      <DetailItem label="State" value={selectedLand.state} />
+                      <DetailItem label="Pincode" value={selectedLand.pincode} />
+                      <DetailItem label="Latitude" value={selectedLand.latitude} />
+                      <DetailItem label="Longitude" value={selectedLand.longitude} />
+                    </div>
+                  </div>
+
+                  <div style={detailsSectionStyle}>
+                    <h3 style={detailsSectionTitleStyle}>
+                      👤 Land Owner
+                    </h3>
+                    <div style={detailsGridStyle}>
+                      <DetailItem label="Owner ID" value={selectedLand.owner_id} />
+                      <DetailItem label="Name" value={selectedLand.owner_name} />
+                      <DetailItem label="Email" value={selectedLand.owner_email} />
+                      <DetailItem label="Mobile" value={selectedLand.owner_mobile} />
+                    </div>
+                  </div>
+
+                  {selectedLand.rejection_reason && (
+                    <div style={detailsWarningStyle}>
+                      <strong>Admin Feedback / Rejection Reason</strong>
+                      <p style={{ marginBottom: 0 }}>
+                        {selectedLand.rejection_reason}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div style={detailsFooterStyle}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeLandDetails();
+                      editLand(selectedLand.id);
+                    }}
+                    style={{
+                      ...actionButton,
+                      background: "#1976D2",
+                    }}
+                  >
+                    ✏️ Edit Listing
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={closeLandDetails}
+                    style={{
+                      ...actionButton,
+                      background: "#616161",
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
   );
 }
+
+// =========================================================
+// STEP 60 - DETAIL HELPERS
+// =========================================================
+
+const DetailItem = ({ label, value }) => (
+  <div style={detailItemStyle}>
+    <span style={detailLabelStyle}>{label}</span>
+    <strong style={detailValueStyle}>
+      {value !== null && value !== undefined && String(value).trim()
+        ? String(value)
+        : "N/A"}
+    </strong>
+  </div>
+);
 
 // =========================================================
 // STYLES
@@ -1147,6 +1364,170 @@ const paginationButton = {
   padding: "10px 18px",
   borderRadius: "7px",
   fontWeight: "bold",
+};
+
+const modalOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.55)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "20px",
+  boxSizing: "border-box",
+};
+
+const detailsModalStyle = {
+  width: "100%",
+  maxWidth: "1100px",
+  maxHeight: "92vh",
+  background: "#fff",
+  borderRadius: "16px",
+  overflow: "hidden",
+  boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+  display: "flex",
+  flexDirection: "column",
+};
+
+const detailsHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "20px 24px",
+  borderBottom: "1px solid #eee",
+  flexShrink: 0,
+};
+
+const detailsCloseButtonStyle = {
+  border: "none",
+  background: "#f1f1f1",
+  width: "38px",
+  height: "38px",
+  borderRadius: "50%",
+  cursor: "pointer",
+  fontSize: "18px",
+};
+
+const detailsBodyStyle = {
+  overflowY: "auto",
+  padding: "24px",
+};
+
+const detailsLoadingStyle = {
+  padding: "50px",
+  textAlign: "center",
+  color: "#2E7D32",
+  fontSize: "18px",
+  fontWeight: "bold",
+};
+
+const detailsImageSectionStyle = {
+  marginBottom: "25px",
+};
+
+const detailsMainImageStyle = {
+  width: "100%",
+  maxHeight: "380px",
+  objectFit: "cover",
+  borderRadius: "12px",
+  display: "block",
+};
+
+const detailsNoImageStyle = {
+  height: "250px",
+  background: "#f5f5f5",
+  borderRadius: "12px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#777",
+  fontWeight: "bold",
+};
+
+const detailsGalleryStyle = {
+  display: "flex",
+  gap: "10px",
+  overflowX: "auto",
+  marginTop: "12px",
+  paddingBottom: "4px",
+};
+
+const detailsThumbnailStyle = {
+  width: "90px",
+  height: "70px",
+  objectFit: "cover",
+  borderRadius: "8px",
+  border: "1px solid #ddd",
+  flexShrink: 0,
+};
+
+const detailsSectionStyle = {
+  background: "#fafafa",
+  border: "1px solid #eee",
+  borderRadius: "12px",
+  padding: "18px",
+  marginBottom: "18px",
+};
+
+const detailsSectionTitleStyle = {
+  margin: "0 0 15px",
+  color: "#2E7D32",
+};
+
+const detailsGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))",
+  gap: "12px",
+};
+
+const detailItemStyle = {
+  background: "#fff",
+  border: "1px solid #eee",
+  borderRadius: "8px",
+  padding: "12px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "5px",
+};
+
+const detailLabelStyle = {
+  fontSize: "12px",
+  color: "#777",
+  fontWeight: "bold",
+  textTransform: "uppercase",
+};
+
+const detailValueStyle = {
+  color: "#333",
+  wordBreak: "break-word",
+};
+
+const detailsDescriptionStyle = {
+  background: "#fff",
+  border: "1px solid #eee",
+  borderRadius: "8px",
+  padding: "14px",
+  marginTop: "12px",
+  lineHeight: 1.6,
+};
+
+const detailsWarningStyle = {
+  background: "#FFF3E0",
+  border: "1px solid #FFCC80",
+  borderRadius: "10px",
+  padding: "15px",
+  color: "#8D4E00",
+};
+
+const detailsFooterStyle = {
+  padding: "16px 24px",
+  borderTop: "1px solid #eee",
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "10px",
+  flexWrap: "wrap",
+  flexShrink: 0,
 };
 
 export default LandDetails;

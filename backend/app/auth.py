@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User
+from app.models import User, UserAccountStatus
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -131,7 +131,6 @@ def get_current_user(
             print("No user_id in token")
             raise credentials_exception
 
-        # Convert the ID to an integer when possible.
         try:
             user_id = int(user_id)
         except (TypeError, ValueError):
@@ -139,9 +138,8 @@ def get_current_user(
 
         # --------------------------------------------------
         # Check the user in the database.
-        #
-        # This is important because an administrator can
-        # suspend a user after the JWT was already issued.
+        # This also makes admin suspension effective for
+        # already-issued JWTs.
         # --------------------------------------------------
 
         user = (
@@ -160,7 +158,7 @@ def get_current_user(
             )
 
         # --------------------------------------------------
-        # Suspension check
+        # Administrator suspension check
         # --------------------------------------------------
 
         if user.is_suspended:
@@ -169,6 +167,27 @@ def get_current_user(
                 detail=(
                     "Your account has been suspended. "
                     "Please contact the administrator."
+                ),
+            )
+
+        # --------------------------------------------------
+        # Step 58 - Voluntary account deactivation check
+        # Existing users without a status row are treated as
+        # active for backward compatibility.
+        # --------------------------------------------------
+
+        account_status = (
+            db.query(UserAccountStatus)
+            .filter(UserAccountStatus.user_id == user_id)
+            .first()
+        )
+
+        if account_status and account_status.status == "deactivated":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your account has been deactivated. "
+                    "Please contact support if you want to reactivate it."
                 ),
             )
 
