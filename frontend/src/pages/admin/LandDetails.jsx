@@ -276,6 +276,78 @@ function  LandDetails(){
   };
 
   // =========================================================
+  // PUBLISH / UNPUBLISH
+  // =========================================================
+
+  const publishLand = async (landId) => {
+    const confirmed = window.confirm(
+      "Publish this approved land listing?\\n\\n" +
+        "The listing will become visible to buyers and its listing period will start/renew."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(landId);
+
+      await api.put(`/admin/lands/${landId}/publish`);
+
+      alert("Land published successfully.");
+
+      await fetchLands();
+
+      if (selectedLand?.id === landId) {
+        await viewLand(landId);
+      }
+    } catch (error) {
+      console.error("Publish error:", error);
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to publish land."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const unpublishLand = async (landId) => {
+    const confirmed = window.confirm(
+      "Unpublish this land listing?\\n\\n" +
+        "Buyers will no longer see the listing."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(landId);
+
+      await api.put(`/admin/lands/${landId}/unpublish`);
+
+      alert("Land unpublished successfully.");
+
+      await fetchLands();
+
+      if (selectedLand?.id === landId) {
+        await viewLand(landId);
+      }
+    } catch (error) {
+      console.error("Unpublish error:", error);
+
+      alert(
+        error.response?.data?.detail ||
+          "Failed to unpublish land."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // =========================================================
   // DELETE
   // =========================================================
 
@@ -868,29 +940,45 @@ function  LandDetails(){
                               tdStyle
                             }
                           >
-                            <span
-                              style={{
-                                ...getStatusStyle(
-                                  land.status
-                                ),
-                                display:
-                                  "inline-block",
-                                padding:
-                                  "7px 12px",
-                                borderRadius:
-                                  "20px",
-                                fontWeight:
-                                  "bold",
-                                whiteSpace:
-                                  "nowrap",
-                              }}
-                            >
-                              {currentStatus ===
-                              "changes_requested"
-                                ? "Changes Requested"
-                                : land.status ||
-                                  "Unknown"}
-                            </span>
+                            <div>
+                              <span
+                                style={{
+                                  ...getStatusStyle(
+                                    land.status
+                                  ),
+                                  display:
+                                    "inline-block",
+                                  padding:
+                                    "7px 12px",
+                                  borderRadius:
+                                    "20px",
+                                  fontWeight:
+                                    "bold",
+                                  whiteSpace:
+                                    "nowrap",
+                                }}
+                              >
+                                {currentStatus ===
+                                "changes_requested"
+                                  ? "Changes Requested"
+                                  : land.status ||
+                                    "Unknown"}
+                              </span>
+                              <div
+                                style={{
+                                  marginTop: "6px",
+                                  fontSize: "12px",
+                                  fontWeight: "bold",
+                                  color: land.is_published
+                                    ? "#2E7D32"
+                                    : "#777",
+                                }}
+                              >
+                                {land.is_published
+                                  ? "● Published"
+                                  : "○ Unpublished"}
+                              </div>
+                            </div>
                           </td>
 
                           {/* ACTIONS */}
@@ -966,6 +1054,41 @@ function  LandDetails(){
                                 {isLoading
                                   ? "..."
                                   : "✓ Approve"}
+                              </button>
+                            )}
+
+                            {/* PUBLISH */}
+
+                            {currentStatus === "approved" &&
+                              !land.is_published && (
+                                <button
+                                  onClick={() =>
+                                    publishLand(land.id)
+                                  }
+                                  disabled={isLoading}
+                                  style={{
+                                    ...actionButton,
+                                    background: "#388E3C",
+                                  }}
+                                >
+                                  {isLoading ? "..." : "📢 Publish"}
+                                </button>
+                              )}
+
+                            {/* UNPUBLISH */}
+
+                            {land.is_published && (
+                              <button
+                                onClick={() =>
+                                  unpublishLand(land.id)
+                                }
+                                disabled={isLoading}
+                                style={{
+                                  ...actionButton,
+                                  background: "#6D4C41",
+                                }}
+                              >
+                                {isLoading ? "..." : "🚫 Unpublish"}
                               </button>
                             )}
 
@@ -1231,6 +1354,16 @@ function  LandDetails(){
                         label="Published"
                         value={selectedLand.is_published ? "Yes" : "No"}
                       />
+                      <DetailItem
+                        label="Moderation"
+                        value={
+                          selectedLand.status === "approved"
+                            ? "Approved"
+                            : selectedLand.status === "changes_requested"
+                              ? "Changes Requested"
+                              : selectedLand.status || "Pending"
+                        }
+                      />
                     </div>
 
                     <div style={detailsDescriptionStyle}>
@@ -1276,9 +1409,56 @@ function  LandDetails(){
                       </p>
                     </div>
                   )}
+
+                  <div style={detailsModerationInfoStyle}>
+                    <strong>Moderation & Marketplace Safety</strong>
+                    <p style={{ margin: "6px 0 0" }}>
+                      Approval and publication are separate actions. A listing
+                      must be approved before it can be published. Requesting
+                      changes or rejecting a listing removes it from buyer
+                      visibility.
+                    </p>
+                  </div>
                 </div>
 
                 <div style={detailsFooterStyle}>
+                  {selectedLand.status === "approved" &&
+                    !selectedLand.is_published && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          publishLand(selectedLand.id)
+                        }
+                        disabled={actionLoading === selectedLand.id}
+                        style={{
+                          ...actionButton,
+                          background: "#388E3C",
+                        }}
+                      >
+                        {actionLoading === selectedLand.id
+                          ? "..."
+                          : "📢 Publish"}
+                      </button>
+                    )}
+
+                  {selectedLand.is_published && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        unpublishLand(selectedLand.id)
+                      }
+                      disabled={actionLoading === selectedLand.id}
+                      style={{
+                        ...actionButton,
+                        background: "#6D4C41",
+                      }}
+                    >
+                      {actionLoading === selectedLand.id
+                        ? "..."
+                        : "🚫 Unpublish"}
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1518,6 +1698,16 @@ const detailsWarningStyle = {
   borderRadius: "10px",
   padding: "15px",
   color: "#8D4E00",
+};
+
+const detailsModerationInfoStyle = {
+  background: "#E3F2FD",
+  border: "1px solid #90CAF9",
+  borderRadius: "10px",
+  padding: "15px",
+  color: "#0D47A1",
+  marginTop: "15px",
+  lineHeight: 1.5,
 };
 
 const detailsFooterStyle = {

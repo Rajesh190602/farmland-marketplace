@@ -37,6 +37,46 @@ router = APIRouter(
 )
 
 
+# =========================================================
+# STEP 61 - ADMIN MODERATION SAFETY
+# =========================================================
+# Only listings that are waiting for moderation may be approved,
+# sent back for changes, or rejected. Marketplace availability is
+# kept separate from moderation status.
+MODERATABLE_LAND_STATUSES = {"pending", "changes_requested"}
+
+
+def _get_land_for_moderation(
+    land_id: int,
+    db: Session,
+):
+    land = (
+        db.query(Land)
+        .filter(Land.id == land_id)
+        .first()
+    )
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found",
+        )
+
+    current_status = (land.status or "").strip().lower()
+
+    if current_status not in MODERATABLE_LAND_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f'Land cannot be moderated from its current status '
+                f'"{land.status}". Only pending or changes_requested '
+                "listings can be moderated."
+            ),
+        )
+
+    return land
+
+
 
 # =========================================================
 # PHASE 2 - ADMIN REPORTS
@@ -942,17 +982,7 @@ def approve_land(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = (
-        db.query(Land)
-        .filter(Land.id == land_id)
-        .first()
-    )
-
-    if not land:
-        raise HTTPException(
-            status_code=404,
-            detail="Land not found"
-        )
+    land = _get_land_for_moderation(land_id, db)
 
     land.status = "approved"
     land.rejection_reason = None
@@ -986,19 +1016,18 @@ def approve_land(
         )
         db.add(availability)
 
-    # Notify land owner
+    # Approval does not automatically publish the listing.
     notification = Notification(
         user_id=land.owner_id,
         title="Land Approved",
         message=(
-            f'Your land "{land.title}" has been approved '
-            "and is now visible to buyers."
+            f'Your land "{land.title}" has been approved. '
+            "It can now be published for buyers."
         )
     )
 
     db.add(notification)
 
-    # Activity log
     create_activity_log(
         db=db,
         user_id=admin,
@@ -1008,14 +1037,16 @@ def approve_land(
         target_id=land.id,
     )
 
-    # Save land update, notification and activity log together
     db.commit()
     db.refresh(land)
 
     return {
-        "message": "Land approved successfully",
-        "status": land.status
+        "message": "Land approved successfully. It can now be published.",
+        "status": land.status,
+        "is_published": land.is_published,
     }
+
+
 # ==========================
 # Request Changes
 # ==========================
@@ -1027,55 +1058,58 @@ def request_changes(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = (
-        db.query(Land)
-        .filter(Land.id == land_id)
-        .first()
-    )
+    land = _get_land_for_moderation(land_id, db)
 
-    if not land:
+    reason = (review.reason or "").strip()
+
+    if not reason:
         raise HTTPException(
-            status_code=404,
-            detail="Land not found"
+            status_code=400,
+            detail="A reason is required when requesting changes.",
         )
 
     land.status = "changes_requested"
-    land.rejection_reason = review.reason
+    land.rejection_reason = reason
 
-    # Notify land owner
+    # A listing sent back for changes must not remain visible to buyers.
+    was_published = bool(land.is_published)
+    land.is_published = False
+
     notification = Notification(
         user_id=land.owner_id,
         title="Changes Requested",
         message=(
             f'Changes have been requested for your land '
-            f'"{land.title}". Reason: {review.reason}'
+            f'"{land.title}". Reason: {reason}'
         )
     )
 
     db.add(notification)
 
-    # Activity log
     create_activity_log(
         db=db,
         user_id=admin,
         action="REQUEST_CHANGES",
         description=(
             f'Requested changes for land "{land.title}". '
-            f"Reason: {review.reason}"
+            f"Reason: {reason}"
+            + (" Listing was unpublished for moderation." if was_published else "")
         ),
         target_type="LAND",
         target_id=land.id,
     )
 
-    # Save land update, notification and activity log together
     db.commit()
     db.refresh(land)
 
     return {
-        "message": "Changes requested successfully",
+        "message": "Changes requested successfully.",
         "status": land.status,
-        "reason": land.rejection_reason
+        "reason": land.rejection_reason,
+        "is_published": land.is_published,
     }
+
+
 # ==========================
 # Reject Land
 # ==========================
@@ -1087,55 +1121,58 @@ def reject_land(
     db: Session = Depends(get_db),
     admin: int = Depends(get_current_admin)
 ):
-    land = (
-        db.query(Land)
-        .filter(Land.id == land_id)
-        .first()
-    )
+    land = _get_land_for_moderation(land_id, db)
 
-    if not land:
+    reason = (review.reason or "").strip()
+
+    if not reason:
         raise HTTPException(
-            status_code=404,
-            detail="Land not found"
+            status_code=400,
+            detail="A reason is required when rejecting a land listing.",
         )
 
     land.status = "rejected"
-    land.rejection_reason = review.reason
+    land.rejection_reason = reason
 
-    # Notify land owner
+    # Rejected listings must never remain visible to buyers.
+    was_published = bool(land.is_published)
+    land.is_published = False
+
     notification = Notification(
         user_id=land.owner_id,
         title="Land Rejected",
         message=(
             f'Your land "{land.title}" has been rejected. '
-            f"Reason: {review.reason}"
+            f"Reason: {reason}"
         )
     )
 
     db.add(notification)
 
-    # Activity log
     create_activity_log(
         db=db,
         user_id=admin,
         action="REJECT_LAND",
         description=(
             f'Rejected land "{land.title}". '
-            f"Reason: {review.reason}"
+            f"Reason: {reason}"
+            + (" Listing was unpublished for moderation." if was_published else "")
         ),
         target_type="LAND",
         target_id=land.id,
     )
 
-    # Save land update, notification and activity log together
     db.commit()
     db.refresh(land)
 
     return {
-        "message": "Land rejected successfully",
+        "message": "Land rejected successfully.",
         "status": land.status,
-        "reason": land.rejection_reason
+        "reason": land.rejection_reason,
+        "is_published": land.is_published,
     }
+
+
 # ==========================
 # Publish Land
 # ==========================
