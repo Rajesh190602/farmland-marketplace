@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api";
+import FarmlandDiscoveryMap from "../components/FarmlandDiscoveryMap.jsx";
 
 const EMPTY_FILTERS = {
   district: "",
@@ -19,6 +20,7 @@ function SearchLands() {
   const [loading, setLoading] = useState(false);
   const [lands, setLands] = useState([]);
   const [searchParams] = useSearchParams();
+  const [viewMode, setViewMode] = useState("list");
 
   // =========================================================
   // SEARCH FILTERS
@@ -706,15 +708,78 @@ function SearchLands() {
         </h4>
       )}
 
+
+      {/* =====================================================
+          STEP 63 — MAP-BASED FARMLAND DISCOVERY
+      ===================================================== */}
+
+      <div
+        className="mt-4 mb-4"
+        style={{
+          background: "#f8f9fa",
+          border: "1px solid #dee2e6",
+          borderRadius: "10px",
+          padding: "20px",
+        }}
+      >
+        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div>
+            <h4 className="mb-1">🗺️ Farmland Discovery</h4>
+            <p className="text-muted mb-0">
+              Explore the current search results on the map or in the list.
+            </p>
+          </div>
+
+          <div className="btn-group" role="group" aria-label="Farmland view">
+            <button
+              type="button"
+              className={`btn ${
+                viewMode === "list"
+                  ? "btn-primary"
+                  : "btn-outline-primary"
+              }`}
+              onClick={() => setViewMode("list")}
+            >
+              📋 List View
+            </button>
+
+            <button
+              type="button"
+              className={`btn ${
+                viewMode === "map"
+                  ? "btn-primary"
+                  : "btn-outline-primary"
+              }`}
+              onClick={() => setViewMode("map")}
+            >
+              🗺️ Map View
+            </button>
+          </div>
+        </div>
+
+        {viewMode === "map" && (
+          <>
+            {lands.length > 0 ? (
+              <FarmlandDiscoveryMap lands={lands} />
+            ) : (
+              <div className="alert alert-warning mb-0">
+                No farmland is available to display on the map for the
+                current search.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* =====================================================
           LAND RESULTS
       ===================================================== */}
 
-      {lands.length === 0 ? (
+      {viewMode === "list" && lands.length === 0 ? (
         <div className="alert alert-warning">
           No lands found.
         </div>
-      ) : (
+      ) : viewMode === "list" ? (
         lands.map((land) => (
           <div
             className="card mb-3"
@@ -779,7 +844,7 @@ function SearchLands() {
 
           </div>
         ))
-      )}
+      ) : null}
 
     </div>
   );
