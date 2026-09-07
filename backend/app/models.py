@@ -1590,6 +1590,90 @@ class LandSale(Base):
         foreign_keys=[offer_id]
     )
 
+    transaction_documents = relationship(
+        "TransactionDocument",
+        back_populates="sale",
+        cascade="all, delete-orphan",
+    )
+
+
+# =========================================================
+# STEP 65 - TRANSACTION DOCUMENTS
+# =========================================================
+
+class TransactionDocument(Base):
+    __tablename__ = "transaction_documents"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    sale_id = Column(
+        Integer,
+        ForeignKey("land_sales.id"),
+        nullable=False,
+        index=True,
+    )
+
+    uploaded_by_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    document_name = Column(
+        String,
+        nullable=False,
+    )
+
+    document_type = Column(
+        String,
+        default="other",
+        nullable=False,
+        index=True,
+    )
+
+    file_url = Column(
+        Text,
+        nullable=False,
+    )
+
+    public_id = Column(
+        String,
+        nullable=True,
+    )
+
+    resource_type = Column(
+        String,
+        default="auto",
+        nullable=False,
+    )
+
+    original_filename = Column(
+        String,
+        nullable=True,
+    )
+
+    content_type = Column(
+        String,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True,
+    )
+
+    sale = relationship(
+        "LandSale",
+        back_populates="transaction_documents",
+    )
+
 
 # =========================================================
 # PHASE 1

@@ -14,6 +14,10 @@ function MarketplaceActivity() {
   const [reservations, setReservations] = useState([]);
   const [salesByReservation, setSalesByReservation] = useState({});
   const [transactions, setTransactions] = useState([]);
+  const [transactionDocuments, setTransactionDocuments] = useState({});
+  const [documentTypeBySale, setDocumentTypeBySale] = useState({});
+  const [documentNameBySale, setDocumentNameBySale] = useState({});
+  const [documentLoading, setDocumentLoading] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
@@ -24,6 +28,120 @@ function MarketplaceActivity() {
   const [reviewComment, setReviewComment] = useState({});
   const [reviewLoading, setReviewLoading] = useState(null);
   const [reviewError, setReviewError] = useState({});
+
+  // =====================================================
+  // STEP 65 - TRANSACTION DOCUMENTS
+  // =====================================================
+
+  const loadTransactionDocuments = async (items) => {
+    const entries = await Promise.all(
+      (items || []).map(async (item) => {
+        try {
+          const response = await api.get(
+            `/marketplace/transactions/${item.sale_id}/documents`
+          );
+          return [item.sale_id, response.data || []];
+        } catch (error) {
+          console.error(
+            `Failed to load documents for sale ${item.sale_id}:`,
+            error
+          );
+          return [item.sale_id, []];
+        }
+      })
+    );
+
+    setTransactionDocuments(Object.fromEntries(entries));
+  };
+
+  const uploadTransactionDocument = async (saleId, file) => {
+    if (!file) return;
+
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      alert("Only PDF, JPG, PNG, and WEBP documents are allowed.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Transaction documents must be 10 MB or smaller.");
+      return;
+    }
+
+    const documentName = String(documentNameBySale[saleId] || "").trim();
+    if (!documentName) {
+      alert("Enter a document name before uploading.");
+      return;
+    }
+
+    const documentType = documentTypeBySale[saleId] || "other";
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("document_name", documentName);
+    formData.append("document_type", documentType);
+
+    try {
+      setDocumentLoading((prev) => ({ ...prev, [`upload-${saleId}`]: true }));
+
+      const response = await api.post(
+        `/marketplace/transactions/${saleId}/documents/upload`,
+        formData
+      );
+
+      setTransactionDocuments((prev) => ({
+        ...prev,
+        [saleId]: [response.data, ...(prev[saleId] || [])],
+      }));
+      setDocumentNameBySale((prev) => ({ ...prev, [saleId]: "" }));
+      alert("Transaction document uploaded successfully.");
+    } catch (error) {
+      alert(
+        error.response?.data?.detail ||
+          "Failed to upload transaction document."
+      );
+    } finally {
+      setDocumentLoading((prev) => ({ ...prev, [`upload-${saleId}`]: false }));
+    }
+  };
+
+  const deleteTransactionDocument = async (document) => {
+    const confirmed = window.confirm(
+      `Delete transaction document "${document.document_name}"?`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDocumentLoading((prev) => ({
+        ...prev,
+        [`delete-${document.id}`]: true,
+      }));
+
+      await api.delete(`/marketplace/transactions/documents/${document.id}`);
+
+      setTransactionDocuments((prev) => ({
+        ...prev,
+        [document.sale_id]: (prev[document.sale_id] || []).filter(
+          (item) => item.id !== document.id
+        ),
+      }));
+    } catch (error) {
+      alert(
+        error.response?.data?.detail ||
+          "Failed to delete transaction document."
+      );
+    } finally {
+      setDocumentLoading((prev) => ({
+        ...prev,
+        [`delete-${document.id}`]: false,
+      }));
+    }
+  };
 
   // =====================================================
   // LOAD MARKETPLACE ACTIVITY
@@ -58,6 +176,7 @@ function MarketplaceActivity() {
         setSiteVisits(visitsResponse.data || []);
         setReservations(reservationsResponse.data || []);
         setTransactions(transactionsResponse.data || []);
+        await loadTransactionDocuments(transactionsResponse.data || []);
         await loadReservationSales(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else if (userRole === "buyer") {
@@ -81,6 +200,7 @@ function MarketplaceActivity() {
         setSiteVisits(visitsResponse.data || []);
         setReservations(reservationsResponse.data || []);
         setTransactions(transactionsResponse.data || []);
+        await loadTransactionDocuments(transactionsResponse.data || []);
         await loadReservationSales(reservationsResponse.data || []);
         await checkCompletedReviewEligibility(visitsResponse.data || []);
       } else {
@@ -1705,11 +1825,175 @@ function MarketplaceActivity() {
                           style={{
                             fontSize: "13px",
                             color: "#666",
-                            marginBottom: 0,
+                            marginBottom: "14px",
                           }}
                         >
                           Completed: {new Date(item.completed_at).toLocaleString()}
                         </p>
+
+                        <div
+                          style={{
+                            borderTop: "1px solid #eee",
+                            paddingTop: "14px",
+                            marginTop: "8px",
+                          }}
+                        >
+                          <strong style={{ color: "#6A1B9A" }}>📄 Transaction Documents</strong>
+
+                          {(transactionDocuments[item.sale_id] || []).length === 0 ? (
+                            <p style={{ color: "#777", fontSize: "13px", margin: "8px 0" }}>
+                              No documents uploaded yet.
+                            </p>
+                          ) : (
+                            <div style={{ display: "grid", gap: "8px", marginTop: "9px" }}>
+                              {(transactionDocuments[item.sale_id] || []).map((document) => (
+                                <div
+                                  key={document.id}
+                                  style={{
+                                    border: "1px solid #e0e0e0",
+                                    borderRadius: "8px",
+                                    padding: "9px",
+                                    background: "#fafafa",
+                                  }}
+                                >
+                                  <div style={{ fontWeight: "700", fontSize: "13px" }}>
+                                    {document.document_name}
+                                  </div>
+                                  <div style={{ color: "#777", fontSize: "12px", marginTop: "3px" }}>
+                                    {document.document_type.replaceAll("_", " ")} • {document.original_filename || "Document"}
+                                  </div>
+                                  <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                                    <a
+                                      href={document.file_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{
+                                        textDecoration: "none",
+                                        background: "#1565C0",
+                                        color: "#fff",
+                                        padding: "7px 10px",
+                                        borderRadius: "7px",
+                                        fontSize: "12px",
+                                        fontWeight: "700",
+                                      }}
+                                    >
+                                      View / Download
+                                    </a>
+
+                                    {Number(document.uploaded_by_id) ===
+                                      Number(sessionStorage.getItem("user_id")) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteTransactionDocument(document)}
+                                        disabled={documentLoading[`delete-${document.id}`]}
+                                        style={{
+                                          border: "none",
+                                          background: "#C62828",
+                                          color: "#fff",
+                                          padding: "7px 10px",
+                                          borderRadius: "7px",
+                                          cursor: documentLoading[`delete-${document.id}`]
+                                            ? "not-allowed"
+                                            : "pointer",
+                                          fontSize: "12px",
+                                          fontWeight: "700",
+                                        }}
+                                      >
+                                        {documentLoading[`delete-${document.id}`]
+                                          ? "Deleting..."
+                                          : "Delete"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr 1fr",
+                              gap: "8px",
+                              marginTop: "10px",
+                            }}
+                          >
+                            <input
+                              value={documentNameBySale[item.sale_id] || ""}
+                              onChange={(e) =>
+                                setDocumentNameBySale((prev) => ({
+                                  ...prev,
+                                  [item.sale_id]: e.target.value,
+                                }))
+                              }
+                              maxLength={200}
+                              placeholder="Document name"
+                              style={{
+                                width: "100%",
+                                boxSizing: "border-box",
+                                padding: "8px",
+                                border: "1px solid #ccc",
+                                borderRadius: "7px",
+                              }}
+                            />
+
+                            <select
+                              value={documentTypeBySale[item.sale_id] || "other"}
+                              onChange={(e) =>
+                                setDocumentTypeBySale((prev) => ({
+                                  ...prev,
+                                  [item.sale_id]: e.target.value,
+                                }))
+                              }
+                              style={{
+                                width: "100%",
+                                padding: "8px",
+                                border: "1px solid #ccc",
+                                borderRadius: "7px",
+                                background: "#fff",
+                              }}
+                            >
+                              <option value="sale_agreement">Sale Agreement</option>
+                              <option value="payment_receipt">Payment Receipt</option>
+                              <option value="registration_document">Registration Document</option>
+                              <option value="identity_document">Identity Document</option>
+                              <option value="other">Other</option>
+                            </select>
+                          </div>
+
+                          <label
+                            style={{
+                              display: "block",
+                              marginTop: "8px",
+                              background: "#6A1B9A",
+                              color: "#fff",
+                              textAlign: "center",
+                              padding: "9px",
+                              borderRadius: "7px",
+                              cursor: documentLoading[`upload-${item.sale_id}`]
+                                ? "not-allowed"
+                                : "pointer",
+                              fontWeight: "700",
+                              fontSize: "13px",
+                              opacity: documentLoading[`upload-${item.sale_id}`] ? 0.7 : 1,
+                            }}
+                          >
+                            {documentLoading[`upload-${item.sale_id}`]
+                              ? "Uploading..."
+                              : "📎 Upload Transaction Document"}
+                            <input
+                              type="file"
+                              accept="application/pdf,image/jpeg,image/png,image/webp"
+                              disabled={documentLoading[`upload-${item.sale_id}`]}
+                              style={{ display: "none" }}
+                              onChange={(e) => {
+                                const selectedFile = e.target.files?.[0];
+                                e.target.value = "";
+                                uploadTransactionDocument(item.sale_id, selectedFile);
+                              }}
+                            />
+                          </label>
+                        </div>
                       </Card>
                     ))}
                   </div>

@@ -1,10 +1,12 @@
+import cloudinary.uploader
 from datetime import datetime, timezone,timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
+from app import cloudinary_config
 from app.utils.activity_log import create_activity_log
 from app.models import (
     User,
@@ -19,6 +21,7 @@ from app.models import (
     Notification,
     LandReport,
     UserReport,
+    TransactionDocument,
 )
 from app.schemas import (
     LandAvailabilityResponse,
@@ -43,6 +46,7 @@ from app.schemas import (
     LandReportResponse,
     UserReportCreate,
     UserReportResponse,
+    TransactionDocumentResponse,
 )
 
 
@@ -2021,6 +2025,199 @@ def get_my_transaction_history(
         })
 
     return result
+
+
+# =========================================================
+# STEP 65 - TRANSACTION DOCUMENTS
+# =========================================================
+
+ALLOWED_TRANSACTION_DOCUMENT_TYPES = {
+    "sale_agreement",
+    "payment_receipt",
+    "registration_document",
+    "identity_document",
+    "other",
+}
+
+ALLOWED_TRANSACTION_CONTENT_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
+MAX_TRANSACTION_DOCUMENT_SIZE = 10 * 1024 * 1024
+
+
+def get_sale_for_document_access(
+    db: Session,
+    sale_id: int,
+    current_user: int,
+):
+    sale = (
+        db.query(LandSale)
+        .filter(LandSale.id == sale_id, LandSale.status == "completed")
+        .first()
+    )
+
+    if not sale:
+        raise HTTPException(
+            status_code=404,
+            detail="Completed sale not found.",
+        )
+
+    if current_user not in {sale.buyer_id, sale.farmer_id}:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to access documents for this transaction.",
+        )
+
+    return sale
+
+
+@router.get(
+    "/transactions/{sale_id}/documents",
+    response_model=list[TransactionDocumentResponse],
+)
+def get_transaction_documents(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    get_sale_for_document_access(db, sale_id, current_user)
+
+    return (
+        db.query(TransactionDocument)
+        .filter(TransactionDocument.sale_id == sale_id)
+        .order_by(
+            TransactionDocument.created_at.desc(),
+            TransactionDocument.id.desc(),
+        )
+        .all()
+    )
+
+
+@router.post(
+    "/transactions/{sale_id}/documents/upload",
+    response_model=TransactionDocumentResponse,
+)
+async def upload_transaction_document(
+    sale_id: int,
+    file: UploadFile = File(...),
+    document_name: str = Form(...),
+    document_type: str = Form("other"),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    sale = get_sale_for_document_access(db, sale_id, current_user)
+
+    name = (document_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Document name is required.")
+    if len(name) > 200:
+        raise HTTPException(status_code=400, detail="Document name must be 200 characters or less.")
+
+    normalized_type = (document_type or "other").strip().lower()
+    if normalized_type not in ALLOWED_TRANSACTION_DOCUMENT_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid transaction document type.")
+
+    content_type = (file.content_type or "").lower().strip()
+    if content_type not in ALLOWED_TRANSACTION_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF, JPG, PNG, and WEBP transaction documents are allowed.",
+        )
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="A file is required.")
+
+    try:
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Unable to read the uploaded file.") from exc
+
+    if file_size <= 0:
+        raise HTTPException(status_code=400, detail="The uploaded document is empty.")
+
+    if file_size > MAX_TRANSACTION_DOCUMENT_SIZE:
+        raise HTTPException(status_code=400, detail="Transaction documents must be 10 MB or smaller.")
+
+    try:
+        upload_result = cloudinary.uploader.upload(
+            file.file,
+            resource_type="auto",
+            folder="farmland-marketplace/transaction-documents",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to upload transaction document.") from exc
+
+    document = TransactionDocument(
+        sale_id=sale.id,
+        uploaded_by_id=current_user,
+        document_name=name,
+        document_type=normalized_type,
+        file_url=upload_result.get("secure_url"),
+        public_id=upload_result.get("public_id"),
+        resource_type=upload_result.get("resource_type", "auto"),
+        original_filename=file.filename,
+        content_type=content_type,
+    )
+
+    if not document.file_url:
+        raise HTTPException(status_code=500, detail="Cloudinary did not return a document URL.")
+
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    return document
+
+
+@router.delete(
+    "/transactions/documents/{document_id}",
+)
+def delete_transaction_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user),
+):
+    document = (
+        db.query(TransactionDocument)
+        .filter(TransactionDocument.id == document_id)
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Transaction document not found.")
+
+    sale = get_sale_for_document_access(db, document.sale_id, current_user)
+
+    if document.uploaded_by_id != current_user:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the user who uploaded this document can delete it.",
+        )
+
+    try:
+        if document.public_id:
+            cloudinary.uploader.destroy(
+                document.public_id,
+                resource_type=document.resource_type or "auto",
+            )
+    except Exception:
+        # The database record is still removed even if Cloudinary cleanup fails.
+        pass
+
+    db.delete(document)
+    db.commit()
+
+    return {
+        "message": "Transaction document deleted successfully.",
+        "document_id": document_id,
+        "sale_id": sale.id,
+    }
 
 
 # =========================================================

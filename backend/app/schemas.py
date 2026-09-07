@@ -445,3 +445,22 @@ class UserReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# =========================================================
+# STEP 65 - TRANSACTION DOCUMENTS
+# =========================================================
+
+class TransactionDocumentResponse(BaseModel):
+    id: int
+    sale_id: int
+    uploaded_by_id: int
+    document_name: str
+    document_type: str
+    file_url: str
+    original_filename: Optional[str] = None
+    content_type: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
