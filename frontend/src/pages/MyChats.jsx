@@ -29,17 +29,6 @@ function MyChats() {
   useEffect(() => {
     loadConversations();
     loadArchivedConversations();
-
-    // Keep unread counts and latest messages reasonably fresh without
-    // changing the existing chat-page message polling behavior.
-    const refreshInterval = setInterval(() => {
-      loadConversations();
-      loadArchivedConversations();
-    }, 5000);
-
-    return () => {
-      clearInterval(refreshInterval);
-    };
   }, []);
 
   const loadConversations = async () => {
