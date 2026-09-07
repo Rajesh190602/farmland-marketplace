@@ -30,12 +30,6 @@ def _queue_notifications(session: Session, flush_context=None):
         if not isinstance(obj, Notification):
             continue
 
-        print(
-            f"STEP66 NOTIFICATION FOUND: "
-            f"user_id={obj.user_id}, "
-            f"title={obj.title}"
-        )
-
         if obj.user_id is None:
             continue
 
@@ -49,9 +43,6 @@ def _queue_notifications(session: Session, flush_context=None):
         )
 
         if not user:
-            print(
-                f"STEP66 USER NOT FOUND: user_id={obj.user_id}"
-            )
             continue
 
         preference = (
@@ -74,13 +65,6 @@ def _queue_notifications(session: Session, flush_context=None):
             else True
         )
 
-        print(
-            f"STEP66 PREFERENCE: "
-            f"user_id={obj.user_id}, "
-            f"email_enabled={email_enabled}, "
-            f"push_enabled={push_enabled}"
-        )
-
         subscriptions = []
 
         if push_enabled:
@@ -92,12 +76,6 @@ def _queue_notifications(session: Session, flush_context=None):
                 )
                 .all()
             )
-
-        print(
-            f"STEP66 SUBSCRIPTIONS FOUND: "
-            f"user_id={obj.user_id}, "
-            f"count={len(subscriptions)}"
-        )
 
         queued.append(
             {
@@ -129,32 +107,14 @@ def _queue_notifications(session: Session, flush_context=None):
 
 @event.listens_for(Session, "after_flush")
 def _capture_notifications_after_flush(session, flush_context):
-    print("STEP66 AFTER_FLUSH FIRED")
-
-    before = len(
-        session.info.get(_QUEUE_KEY, [])
-    )
-
     _queue_notifications(
         session,
         flush_context
     )
 
-    after = len(
-        session.info.get(_QUEUE_KEY, [])
-    )
-
-    print(
-        f"STEP66 AFTER_FLUSH QUEUE: "
-        f"before={before}, "
-        f"after={after}"
-    )
-
 
 @event.listens_for(Session, "after_commit")
 def _dispatch_notifications_after_commit(session):
-    print("STEP66 AFTER_COMMIT FIRED")
-
     queued = session.info.pop(
         _QUEUE_KEY,
         []
@@ -165,66 +125,30 @@ def _dispatch_notifications_after_commit(session):
         None
     )
 
-    print(
-        f"STEP66 AFTER_COMMIT QUEUE SIZE: "
-        f"{len(queued)}"
-    )
-
     if not queued:
         return
 
-    # Delivery is intentionally best-effort.
-    # A Brevo or push-provider failure must never turn a
-    # successful marketplace transaction into a failed one.
-
+    # Delivery is intentionally best-effort. A Brevo or push-provider failure
+    # must never turn a successful marketplace transaction into a failed one.
     for item in queued:
 
-        print(
-            f"STEP66 DELIVERY START: "
-            f"notification_id={item['notification_id']}, "
-            f"user_id={item['user_id']}, "
-            f"title={item['title']}"
-        )
-
+        # Email notification
         if item["email_enabled"]:
-            print(
-                f"STEP66 EMAIL ATTEMPT: "
-                f"notification_id={item['notification_id']}"
-            )
-
             try:
-                email_result = send_notification_email(
+                send_notification_email(
                     receiver_email=item["email"],
                     receiver_name=item["name"],
                     title=item["title"],
                     message=item["message"],
                 )
+            except Exception:
+                # Notification delivery must never break the
+                # already-successful marketplace transaction.
+                pass
 
-                print(
-                    "STEP66 EMAIL RESULT:",
-                    email_result
-                )
-
-            except Exception as exc:
-                print(
-                    "STEP66 EMAIL ERROR:",
-                    repr(exc)
-                )
-
+        # Browser push notification
         if item["push_enabled"]:
-
-            print(
-                f"STEP66 PUSH ENABLED: "
-                f"notification_id={item['notification_id']}, "
-                f"subscriptions={len(item['subscriptions'])}"
-            )
-
             for subscription_data in item["subscriptions"]:
-
-                print(
-                    f"STEP66 PUSH ATTEMPT: "
-                    f"subscription_id={subscription_data['id']}"
-                )
 
                 class SubscriptionSnapshot:
                     pass
@@ -251,31 +175,14 @@ def _dispatch_notifications_after_commit(session):
                         target_type=item["target_type"],
                         target_id=item["target_id"],
                     )
-
-                    print(
-                        "STEP66 PUSH DELIVERY RESULT:",
-                        result
-                    )
-
-                except Exception as exc:
-                    print(
-                        "STEP66 PUSH UNEXPECTED ERROR:",
-                        repr(exc)
-                    )
+                except Exception:
+                    # Push delivery must never break the
+                    # already-successful marketplace transaction.
                     continue
 
-                if result.get("sent"):
-                    print(
-                        f"STEP66 PUSH SUCCESS: "
-                        f"subscription_id={subscription_data['id']}"
-                    )
-
+                # Remove subscriptions that the push provider reports
+                # as permanently expired or no longer valid.
                 if result.get("stale"):
-                    print(
-                        f"STEP66 PUSH STALE SUBSCRIPTION: "
-                        f"subscription_id={subscription_data['id']}"
-                    )
-
                     _remove_stale_subscription(
                         subscription_data["id"]
                     )
@@ -283,8 +190,6 @@ def _dispatch_notifications_after_commit(session):
 
 @event.listens_for(Session, "after_rollback")
 def _clear_notification_queue_after_rollback(session):
-    print("STEP66 AFTER_ROLLBACK FIRED")
-
     session.info.pop(
         _QUEUE_KEY,
         None
@@ -297,8 +202,7 @@ def _clear_notification_queue_after_rollback(session):
 
 
 def _remove_stale_subscription(subscription_id):
-    # Import lazily to avoid creating a module-level
-    # database dependency.
+    # Import lazily to avoid creating a module-level database dependency.
     from sqlalchemy.orm import sessionmaker
     from app.database import engine
 
@@ -322,18 +226,8 @@ def _remove_stale_subscription(subscription_id):
             db.delete(subscription)
             db.commit()
 
-            print(
-                f"STEP66 STALE SUBSCRIPTION REMOVED: "
-                f"id={subscription_id}"
-            )
-
-    except Exception as exc:
+    except Exception:
         db.rollback()
-
-        print(
-            "STEP66 STALE SUBSCRIPTION ERROR:",
-            repr(exc)
-        )
 
     finally:
         db.close()

@@ -1,13 +1,9 @@
 import json
-import logging
 import os
 
 from dotenv import load_dotenv
 
 load_dotenv()
-
-logger = logging.getLogger(__name__)
-
 
 try:
     from pywebpush import webpush, WebPushException
@@ -24,24 +20,12 @@ VAPID_CLAIMS_EMAIL = os.getenv("VAPID_CLAIMS_EMAIL")
 
 
 def push_is_configured():
-    configured = bool(
+    return bool(
         webpush
         and VAPID_PUBLIC_KEY
         and VAPID_PRIVATE_KEY
         and VAPID_CLAIMS_EMAIL
     )
-
-    logger.info(
-        "STEP66 PUSH CONFIGURED: %s | "
-        "webpush=%s | public_key=%s | private_key=%s | claims_email=%s",
-        configured,
-        bool(webpush),
-        bool(VAPID_PUBLIC_KEY),
-        bool(VAPID_PRIVATE_KEY),
-        bool(VAPID_CLAIMS_EMAIL),
-    )
-
-    return configured
 
 
 def send_web_push(
@@ -52,10 +36,6 @@ def send_web_push(
     target_id=None,
 ):
     if not push_is_configured():
-        logger.error(
-            "STEP66 PUSH NOT CONFIGURED"
-        )
-
         return {
             "sent": False,
             "stale": False,
@@ -79,11 +59,6 @@ def send_web_push(
         },
     }
 
-    logger.info(
-        "STEP66 PUSH ATTEMPT: endpoint=%s",
-        subscription.endpoint,
-    )
-
     try:
         webpush(
             subscription_info=subscription_info,
@@ -92,10 +67,6 @@ def send_web_push(
             vapid_claims={
                 "sub": VAPID_CLAIMS_EMAIL,
             },
-        )
-
-        logger.info(
-            "STEP66 PUSH SUCCESS"
         )
 
         return {
@@ -111,12 +82,6 @@ def send_web_push(
             None,
         )
 
-        logger.error(
-            "STEP66 PUSH FAILED: status=%s error=%s",
-            status,
-            exc,
-        )
-
         return {
             "sent": False,
             "stale": status in {404, 410},
@@ -124,11 +89,6 @@ def send_web_push(
         }
 
     except Exception as exc:
-        logger.error(
-            "STEP66 PUSH UNEXPECTED ERROR: %s",
-            exc,
-        )
-
         return {
             "sent": False,
             "stale": False,
