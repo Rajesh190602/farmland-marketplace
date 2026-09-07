@@ -252,6 +252,10 @@ function MyChats() {
   const normalizeSearchValue = (value) =>
     String(value ?? "").trim().toLowerCase();
 
+  const displayedConversations = showArchived
+    ? archivedConversations
+    : conversations;
+
   const activeUnreadCount = conversations.reduce(
     (total, chat) =>
       total + Number(chat.unread_count || 0),
