@@ -13,6 +13,13 @@ function MyChats() {
   const [archiveLoading, setArchiveLoading] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(null);
 
+  // =====================================================
+  // STEP 64 - ADVANCED CHAT LIST
+  // =====================================================
+
+  const [searchText, setSearchText] = useState("");
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+
   const navigate = useNavigate();
 
   // =====================================================
@@ -22,6 +29,17 @@ function MyChats() {
   useEffect(() => {
     loadConversations();
     loadArchivedConversations();
+
+    // Keep unread counts and latest messages reasonably fresh without
+    // changing the existing chat-page message polling behavior.
+    const refreshInterval = setInterval(() => {
+      loadConversations();
+      loadArchivedConversations();
+    }, 5000);
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
   }, []);
 
   const loadConversations = async () => {
@@ -231,9 +249,29 @@ function MyChats() {
     );
   }
 
-  const displayedConversations = showArchived
-    ? archivedConversations
-    : conversations;
+  const normalizeSearchValue = (value) =>
+    String(value ?? "").trim().toLowerCase();
+
+  const activeUnreadCount = conversations.reduce(
+    (total, chat) =>
+      total + Number(chat.unread_count || 0),
+    0
+  );
+
+  const filteredConversations = displayedConversations.filter((chat) => {
+    const query = normalizeSearchValue(searchText);
+
+    const matchesSearch =
+      !query ||
+      normalizeSearchValue(chat.other_user).includes(query) ||
+      normalizeSearchValue(chat.land_title).includes(query) ||
+      normalizeSearchValue(chat.last_message).includes(query);
+
+    const matchesUnread =
+      !showUnreadOnly || Number(chat.unread_count || 0) > 0;
+
+    return matchesSearch && matchesUnread;
+  });
 
   // =====================================================
   // UI
@@ -283,7 +321,7 @@ function MyChats() {
                 : "#fff",
             }}
           >
-            💬 Active Chats
+            💬 Active Chats ({conversations.length})
           </button>
 
           <button
@@ -302,32 +340,132 @@ function MyChats() {
                 : "#555",
             }}
           >
-            📦 Archived Chats
+            📦 Archived Chats ({archivedConversations.length})
           </button>
         </div>
 
-        {/* Refresh */}
-        <button
-          onClick={() => {
-            loadConversations();
-            loadArchivedConversations();
-          }}
+        {/* STEP 64 - SEARCH / UNREAD FILTER / SUMMARY */}
+        <div
           style={{
-            marginBottom: "25px",
-            background: "#1976D2",
-            color: "#fff",
-            border: "none",
-            padding: "10px 20px",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontWeight: "bold",
+            background: "#F5F7F8",
+            border: "1px solid #E0E0E0",
+            borderRadius: "12px",
+            padding: "14px",
+            marginBottom: "20px",
           }}
         >
-          🔄 Refresh
-        </button>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <input
+              type="text"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search chats, users, land or messages..."
+              style={{
+                flex: "1 1 280px",
+                minWidth: "220px",
+                padding: "11px 13px",
+                border: "1px solid #CCC",
+                borderRadius: "8px",
+                fontSize: "14px",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowUnreadOnly((previous) => !previous)}
+              style={{
+                padding: "10px 15px",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                background: showUnreadOnly ? "#C62828" : "#E3F2FD",
+                color: showUnreadOnly ? "#fff" : "#1565C0",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {showUnreadOnly ? "✓ Unread Only" : "🔵 Unread Only"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                loadConversations();
+                loadArchivedConversations();
+              }}
+              style={{
+                padding: "10px 15px",
+                background: "#1976D2",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                whiteSpace: "nowrap",
+              }}
+            >
+              🔄 Refresh
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+              marginTop: "12px",
+              fontSize: "13px",
+            }}
+          >
+            <span
+              style={{
+                background: "#E8F5E9",
+                color: "#2E7D32",
+                padding: "6px 10px",
+                borderRadius: "20px",
+                fontWeight: "bold",
+              }}
+            >
+              💬 {conversations.length} Active
+            </span>
+
+            <span
+              style={{
+                background: activeUnreadCount > 0 ? "#FFEBEE" : "#F5F5F5",
+                color: activeUnreadCount > 0 ? "#C62828" : "#666",
+                padding: "6px 10px",
+                borderRadius: "20px",
+                fontWeight: "bold",
+              }}
+            >
+              🔵 {activeUnreadCount} Unread
+            </span>
+
+            <span
+              style={{
+                background: "#EEEEEE",
+                color: "#555",
+                padding: "6px 10px",
+                borderRadius: "20px",
+                fontWeight: "bold",
+              }}
+            >
+              📦 {archivedConversations.length} Archived
+            </span>
+          </div>
+        </div>
 
         {/* No conversations */}
-        {displayedConversations.length === 0 ? (
+        {filteredConversations.length === 0 ? (
           <div
             style={{
               textAlign: "center",
@@ -340,19 +478,27 @@ function MyChats() {
             }}
           >
             <h2>
-              {showArchived
-                ? "📦 No Archived Conversations"
-                : "💬 No Conversations Yet"}
+              {showUnreadOnly
+                ? "🔵 No Unread Conversations"
+                : searchText.trim()
+                  ? "🔎 No Matching Conversations"
+                  : showArchived
+                    ? "📦 No Archived Conversations"
+                    : "💬 No Conversations Yet"}
             </h2>
 
             <p>
-              {showArchived
-                ? "Archived conversations will appear here."
-                : "Start chatting with a farmer from any land listing."}
+              {showUnreadOnly
+                ? "All displayed conversations are currently read."
+                : searchText.trim()
+                  ? "Try a different user name, land title or message."
+                  : showArchived
+                    ? "Archived conversations will appear here."
+                    : "Start chatting with a farmer from any land listing."}
             </p>
           </div>
         ) : (
-          displayedConversations.map((chat) => (
+          filteredConversations.map((chat) => (
             <div
               key={chat.conversation_id}
               style={{
@@ -375,18 +521,58 @@ function MyChats() {
                 👤 {chat.other_user}
               </h3>
 
-              {/* Last message */}
-              <p
+              {/* Last message + unread count */}
+              <div
                 style={{
-                  color: "#555",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
                   marginTop: "10px",
                   marginBottom: "8px",
-                  fontSize: "16px",
                 }}
               >
-                {chat.last_message ||
-                  "No messages yet."}
-              </p>
+                <p
+                  style={{
+                    color: Number(chat.unread_count || 0) > 0
+                      ? "#222"
+                      : "#555",
+                    margin: 0,
+                    fontSize: "16px",
+                    lineHeight: "1.45",
+                    flex: 1,
+                    fontWeight:
+                      Number(chat.unread_count || 0) > 0
+                        ? "600"
+                        : "400",
+                  }}
+                >
+                  {chat.last_message || "No messages yet."}
+                </p>
+
+                {Number(chat.unread_count || 0) > 0 && (
+                  <span
+                    title={`${Number(chat.unread_count)} unread message${Number(chat.unread_count) === 1 ? "" : "s"}`}
+                    style={{
+                      minWidth: "26px",
+                      height: "26px",
+                      padding: "0 7px",
+                      borderRadius: "50%",
+                      background: "#25D366",
+                      color: "#fff",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    {Number(chat.unread_count) > 99
+                      ? "99+"
+                      : Number(chat.unread_count)}
+                  </span>
+                )}
+              </div>
 
               {/* Land */}
               <p
@@ -411,6 +597,20 @@ function MyChats() {
                     chat.last_message_time
                   ).toLocaleString()}
                 </small>
+              )}
+
+              {Number(chat.unread_count || 0) > 0 && (
+                <div
+                  style={{
+                    marginBottom: "10px",
+                    color: "#C62828",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                  }}
+                >
+                  🔵 {Number(chat.unread_count)} unread message
+                  {Number(chat.unread_count) === 1 ? "" : "s"}
+                </div>
               )}
 
               {/* Open chat */}
