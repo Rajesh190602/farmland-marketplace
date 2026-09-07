@@ -274,6 +274,12 @@ function ActivityLogs() {
     if (action === "REQUEST_CHANGES")
       return "#EF6C00";
 
+    if (action === "PUBLISH_LAND")
+      return "#00897B";
+
+    if (action === "UNPUBLISH_LAND")
+      return "#757575";
+
     if (action === "UPLOAD_IMAGES")
       return "#6A1B9A";
 
@@ -570,6 +576,14 @@ function ActivityLogs() {
 
                   <option value="REQUEST_CHANGES">
                     REQUEST_CHANGES
+                  </option>
+
+                  <option value="PUBLISH_LAND">
+                    PUBLISH_LAND
+                  </option>
+
+                  <option value="UNPUBLISH_LAND">
+                    UNPUBLISH_LAND
                   </option>
 
                   <option value="UPLOAD_IMAGES">
