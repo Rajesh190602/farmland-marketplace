@@ -1,10 +1,13 @@
 import json
-import os
 import logging
+import os
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
 
 try:
     from pywebpush import webpush, WebPushException
@@ -15,15 +18,9 @@ except ImportError:
         pass
 
 
-logger = logging.getLogger(__name__)
-
-
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
-VAPID_CLAIMS_EMAIL = os.getenv(
-    "VAPID_CLAIMS_EMAIL",
-    "mailto:admin@example.com"
-)
+VAPID_CLAIMS_EMAIL = os.getenv("VAPID_CLAIMS_EMAIL")
 
 
 def push_is_configured():
@@ -35,7 +32,8 @@ def push_is_configured():
     )
 
     logger.info(
-        "STEP66 PUSH CONFIGURED: %s | webpush=%s | public_key=%s | private_key=%s | claims_email=%s",
+        "STEP66 PUSH CONFIGURED: %s | "
+        "webpush=%s | public_key=%s | private_key=%s | claims_email=%s",
         configured,
         bool(webpush),
         bool(VAPID_PUBLIC_KEY),
@@ -64,12 +62,14 @@ def send_web_push(
             "reason": "push_not_configured",
         }
 
-    payload = json.dumps({
-        "title": title,
-        "body": message,
-        "target_type": target_type,
-        "target_id": target_id,
-    })
+    payload = json.dumps(
+        {
+            "title": title,
+            "body": message,
+            "target_type": target_type,
+            "target_id": target_id,
+        }
+    )
 
     subscription_info = {
         "endpoint": subscription.endpoint,
@@ -80,34 +80,22 @@ def send_web_push(
     }
 
     logger.info(
-        "STEP66 PUSH ATTEMPT: endpoint=%s title=%s target_type=%s target_id=%s",
+        "STEP66 PUSH ATTEMPT: endpoint=%s",
         subscription.endpoint,
-        title,
-        target_type,
-        target_id,
     )
 
     try:
-        response = webpush(
+        webpush(
             subscription_info=subscription_info,
             data=payload,
             vapid_private_key=VAPID_PRIVATE_KEY,
             vapid_claims={
-                "sub": VAPID_CLAIMS_EMAIL
+                "sub": VAPID_CLAIMS_EMAIL,
             },
-            verbose=True,
-        )
-
-        status_code = getattr(
-            response,
-            "status_code",
-            None,
         )
 
         logger.info(
-            "STEP66 PUSH SUCCESS: status=%s response=%s",
-            status_code,
-            getattr(response, "text", ""),
+            "STEP66 PUSH SUCCESS"
         )
 
         return {
@@ -117,39 +105,26 @@ def send_web_push(
         }
 
     except WebPushException as exc:
-        response = getattr(
-            exc,
-            "response",
-            None,
-        )
-
-        status_code = getattr(
-            response,
+        status = getattr(
+            getattr(exc, "response", None),
             "status_code",
             None,
         )
 
-        response_text = getattr(
-            response,
-            "text",
-            "",
-        )
-
         logger.error(
-            "STEP66 PUSH FAILED: status=%s error=%s response=%s",
-            status_code,
-            str(exc),
-            response_text,
+            "STEP66 PUSH FAILED: status=%s error=%s",
+            status,
+            exc,
         )
 
         return {
             "sent": False,
-            "stale": status_code in {404, 410},
+            "stale": status in {404, 410},
             "reason": str(exc),
         }
 
     except Exception as exc:
-        logger.exception(
+        logger.error(
             "STEP66 PUSH UNEXPECTED ERROR: %s",
             exc,
         )
