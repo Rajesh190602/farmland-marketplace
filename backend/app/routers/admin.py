@@ -8,9 +8,11 @@ from app.models import (
     User,
     LandAvailability,
     LandInquiry,
-    LandInquiry,
     LandOffer,
+    ListingView,
     SiteVisit,
+    Reservation,
+    LandSale,
     Land,
     Notification,
     LandImage,
@@ -3221,3 +3223,187 @@ def marketplace_statistics(
             "cancelled": cancelled_site_visits,
         },
     }
+
+# =========================================================
+# STEP 62 - MARKETPLACE FUNNEL ANALYTICS
+# =========================================================
+
+@router.get("/marketplace-funnel")
+def marketplace_funnel(
+    from_date: str = Query(default=""),
+    to_date: str = Query(default=""),
+    db: Session = Depends(get_db),
+    admin: int = Depends(get_current_admin),
+):
+    """
+    Return marketplace funnel analytics for the Admin Dashboard.
+
+    Funnel stages are based on the existing marketplace records:
+    - Unique listing views
+    - Buyer inquiries
+    - Buyer offers
+    - Site-visit requests
+    - Confirmed reservations
+    - Completed sales
+
+    The endpoint is read-only and does not change any marketplace data.
+    Date filters are optional and apply to the timestamp belonging to each
+    stage. ListingView uses viewed_at; confirmed reservations use
+    confirmed_at; the other stages use created_at.
+    """
+
+    from_date = from_date.strip()
+    to_date = to_date.strip()
+
+    start_date = None
+    end_date = None
+
+    try:
+        if from_date:
+            start_date = datetime.strptime(from_date, "%Y-%m-%d")
+
+        if to_date:
+            end_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Dates must use YYYY-MM-DD format.",
+        )
+
+    if start_date and end_date and start_date >= end_date:
+        raise HTTPException(
+            status_code=400,
+            detail="From Date cannot be later than To Date.",
+        )
+
+    def apply_range(query, column):
+        if start_date:
+            query = query.filter(column >= start_date)
+        if end_date:
+            query = query.filter(column < end_date)
+        return query
+
+    # ---------------------------------------------------------
+    # STAGE 1 - UNIQUE LISTING VIEWS
+    # ---------------------------------------------------------
+    views_query = db.query(ListingView)
+    views_query = apply_range(views_query, ListingView.viewed_at)
+    listing_views = views_query.count()
+
+    # ---------------------------------------------------------
+    # STAGE 2 - INQUIRIES
+    # ---------------------------------------------------------
+    inquiries_query = db.query(LandInquiry)
+    inquiries_query = apply_range(inquiries_query, LandInquiry.created_at)
+    inquiries = inquiries_query.count()
+
+    # ---------------------------------------------------------
+    # STAGE 3 - OFFERS
+    # ---------------------------------------------------------
+    offers_query = db.query(LandOffer)
+    offers_query = apply_range(offers_query, LandOffer.created_at)
+    offers = offers_query.count()
+
+    # ---------------------------------------------------------
+    # STAGE 4 - SITE-VISIT REQUESTS
+    # ---------------------------------------------------------
+    site_visits_query = db.query(SiteVisit)
+    site_visits_query = apply_range(site_visits_query, SiteVisit.created_at)
+    site_visits = site_visits_query.count()
+
+    # ---------------------------------------------------------
+    # STAGE 5 - CONFIRMED RESERVATIONS
+    # ---------------------------------------------------------
+    reservations_query = (
+        db.query(Reservation)
+        .filter(Reservation.status == "confirmed")
+    )
+    reservations_query = apply_range(
+        reservations_query,
+        Reservation.confirmed_at,
+    )
+    confirmed_reservations = reservations_query.count()
+
+    # ---------------------------------------------------------
+    # STAGE 6 - COMPLETED SALES
+    # ---------------------------------------------------------
+    sales_query = (
+        db.query(LandSale)
+        .filter(LandSale.status == "completed")
+    )
+    sales_query = apply_range(sales_query, LandSale.created_at)
+    completed_sales = sales_query.count()
+
+    stages = [
+        {
+            "key": "listing_views",
+            "label": "Listing Views",
+            "value": listing_views,
+        },
+        {
+            "key": "inquiries",
+            "label": "Inquiries",
+            "value": inquiries,
+        },
+        {
+            "key": "offers",
+            "label": "Offers",
+            "value": offers,
+        },
+        {
+            "key": "site_visits",
+            "label": "Site Visits",
+            "value": site_visits,
+        },
+        {
+            "key": "confirmed_reservations",
+            "label": "Confirmed Reservations",
+            "value": confirmed_reservations,
+        },
+        {
+            "key": "completed_sales",
+            "label": "Completed Sales",
+            "value": completed_sales,
+        },
+    ]
+
+    # Conversion is calculated against the immediately preceding stage.
+    # For the first stage there is no previous-stage conversion.
+    previous_value = None
+    for stage in stages:
+        if previous_value is None:
+            stage["conversion_from_previous_percent"] = None
+            stage["drop_off_from_previous"] = None
+        else:
+            stage["conversion_from_previous_percent"] = (
+                round((stage["value"] / previous_value) * 100, 2)
+                if previous_value > 0
+                else 0.0
+            )
+            stage["drop_off_from_previous"] = max(
+                previous_value - stage["value"],
+                0,
+            )
+        previous_value = stage["value"]
+
+    overall_conversion = (
+        round((completed_sales / listing_views) * 100, 2)
+        if listing_views > 0
+        else 0.0
+    )
+
+    return {
+        "from_date": from_date or None,
+        "to_date": to_date or None,
+        "stages": stages,
+        "summary": {
+            "listing_views": listing_views,
+            "inquiries": inquiries,
+            "offers": offers,
+            "site_visits": site_visits,
+            "confirmed_reservations": confirmed_reservations,
+            "completed_sales": completed_sales,
+            "overall_view_to_sale_percent": overall_conversion,
+        },
+    }
+
