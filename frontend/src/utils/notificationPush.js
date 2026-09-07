@@ -1,7 +1,10 @@
 import api from "../services/api";
 
 function urlBase64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const padding = "=".repeat(
+    (4 - (base64String.length % 4)) % 4
+  );
+
   const base64 = (base64String + padding)
     .replace(/-/g, "+")
     .replace(/_/g, "/");
@@ -14,7 +17,10 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export async function getNotificationPreferences() {
-  const response = await api.get("/notifications/preferences");
+  const response = await api.get(
+    "/notifications/preferences"
+  );
+
   return response.data;
 }
 
@@ -28,7 +34,10 @@ export async function updateNotificationPreferences(payload) {
 }
 
 export async function enableBrowserPush() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+  if (
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window)
+  ) {
     throw new Error(
       "Browser push notifications are not supported by this browser."
     );
@@ -78,7 +87,17 @@ export async function enableBrowserPush() {
       });
   }
 
-  const subscriptionJson = subscription.toJSON();
+  const subscriptionJson =
+    subscription.toJSON();
+
+  if (
+    !subscriptionJson.keys?.p256dh ||
+    !subscriptionJson.keys?.auth
+  ) {
+    throw new Error(
+      "Browser push subscription keys are missing."
+    );
+  }
 
   await api.post(
     "/notifications/push-subscriptions",
@@ -86,8 +105,11 @@ export async function enableBrowserPush() {
       endpoint: subscription.endpoint,
 
       keys: {
-        p256dh: subscriptionJson.keys?.p256dh,
-        auth: subscriptionJson.keys?.auth,
+        p256dh:
+          subscriptionJson.keys.p256dh,
+
+        auth:
+          subscriptionJson.keys.auth,
       },
 
       user_agent: navigator.userAgent,
@@ -103,7 +125,9 @@ export async function disableBrowserPush() {
   }
 
   const registration =
-    await navigator.serviceWorker.getRegistration("/sw.js");
+    await navigator.serviceWorker.getRegistration(
+      "/sw.js"
+    );
 
   const subscription = registration
     ? await registration.pushManager.getSubscription()
@@ -113,14 +137,32 @@ export async function disableBrowserPush() {
     return;
   }
 
-  await api.delete(
-    "/notifications/push-subscriptions",
-    {
-      params: {
-        endpoint: subscription.endpoint,
-      },
+  try {
+    await api.delete(
+      "/notifications/push-subscriptions",
+      {
+        params: {
+          endpoint: subscription.endpoint,
+        },
+      }
+    );
+  } catch (error) {
+    /*
+     * A 404 means the browser has a subscription,
+     * but the server does not currently have that
+     * subscription recorded.
+     *
+     * That is safe to ignore because we are
+     * unsubscribing the browser locally below.
+     */
+    if (error.response?.status !== 404) {
+      throw error;
     }
-  );
+
+    console.warn(
+      "Push subscription was not found on the server; continuing with local unsubscribe."
+    );
+  }
 
   await subscription.unsubscribe();
 }
