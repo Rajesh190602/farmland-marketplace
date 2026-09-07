@@ -87,6 +87,19 @@ class User(Base):
         cascade="all, delete-orphan"
     )
 
+    notification_preferences = relationship(
+        "UserNotificationPreference",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    push_subscriptions = relationship(
+        "NotificationPushSubscription",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
     activity_logs = relationship(
         "ActivityLog",
         back_populates="user",
@@ -1030,6 +1043,38 @@ class Notification(Base):
     user = relationship(
         "User"
     )
+
+
+# =========================================================
+# STEP 66 - NOTIFICATION PREFERENCES
+# =========================================================
+
+class UserNotificationPreference(Base):
+    __tablename__ = "user_notification_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    email_enabled = Column(Boolean, default=True, nullable=False)
+    push_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="notification_preferences")
+
+
+class NotificationPushSubscription(Base):
+    __tablename__ = "notification_push_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(Text, nullable=False)
+    auth = Column(Text, nullable=False)
+    user_agent = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="push_subscriptions")
 
 
 # =========================================================

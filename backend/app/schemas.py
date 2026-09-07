@@ -464,3 +464,28 @@ class TransactionDocumentResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+
+# =========================================================
+# STEP 66 - EMAIL / PUSH NOTIFICATIONS
+# =========================================================
+
+class NotificationPreferencesResponse(BaseModel):
+    email_enabled: bool
+    push_enabled: bool
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    email_enabled: Optional[bool] = None
+    push_enabled: Optional[bool] = None
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+    user_agent: Optional[str] = None

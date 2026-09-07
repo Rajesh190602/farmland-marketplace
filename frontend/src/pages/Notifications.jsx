@@ -12,6 +12,12 @@ import {
 
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  enableBrowserPush,
+  disableBrowserPush,
+} from "../utils/notificationPush";
 
 const getNotificationCategory = (notification, role) => {
   const targetType = String(notification?.target_type || "").toLowerCase();
@@ -130,6 +136,18 @@ function Notifications() {
   const [processingId, setProcessingId] = useState(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
+  const [preferences, setPreferences] = useState({
+    email_enabled: true,
+    push_enabled: true,
+  });
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState(
+    typeof window !== "undefined" && "Notification" in window
+      ? window.Notification.permission
+      : "default"
+  );
 
   const userRole = String(
     sessionStorage.getItem("role") || ""
@@ -160,7 +178,72 @@ function Notifications() {
 
   useEffect(() => {
     fetchNotifications();
+
+    setPushSupported(
+      "serviceWorker" in navigator && "PushManager" in window
+    );
+
+    const loadPreferences = async () => {
+      try {
+        const data = await getNotificationPreferences();
+        setPreferences({
+          email_enabled: data?.email_enabled !== false,
+          push_enabled: data?.push_enabled !== false,
+        });
+      } catch (error) {
+        console.error("Notification Preferences Error:", error);
+      } finally {
+        setPreferencesLoading(false);
+      }
+    };
+
+    loadPreferences();
   }, []);
+
+  const savePreference = async (key, value) => {
+    try {
+      const data = await updateNotificationPreferences({
+        [key]: value,
+      });
+      setPreferences({
+        email_enabled: data?.email_enabled !== false,
+        push_enabled: data?.push_enabled !== false,
+      });
+    } catch (error) {
+      console.error("Update Notification Preference Error:", error);
+      alert(
+        error.response?.data?.detail ||
+          "Failed to update notification preference"
+      );
+    }
+  };
+
+  const togglePushNotifications = async () => {
+    if (pushBusy) return;
+
+    try {
+      setPushBusy(true);
+
+      if (preferences.push_enabled) {
+        await disableBrowserPush();
+        await savePreference("push_enabled", false);
+      } else {
+        const subscription = await enableBrowserPush();
+        if (!subscription) return;
+        setPushPermission(
+          "Notification" in window
+            ? window.Notification.permission
+            : "default"
+        );
+        await savePreference("push_enabled", true);
+      }
+    } catch (error) {
+      console.error("Browser Push Error:", error);
+      alert(error.message || "Unable to update browser push notifications");
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   // =====================================================
   // MARK SINGLE NOTIFICATION AS READ
@@ -638,6 +721,108 @@ function Notifications() {
                   : "Mark All as Read"}
               </button>
             </div>
+          </div>
+
+          {/* =================================================
+              STEP 66 - EMAIL / PUSH SETTINGS
+          ================================================= */}
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "15px",
+              padding: "18px 20px",
+              marginBottom: "20px",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "15px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, color: "#2E7D32" }}>
+                  Notification Delivery
+                </h3>
+                <p style={{ margin: "5px 0 0", color: "#666", fontSize: "13px" }}>
+                  Choose whether important marketplace notifications are also delivered by email or browser push.
+                </p>
+              </div>
+
+              {!preferencesLoading && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    onClick={() =>
+                      savePreference(
+                        "email_enabled",
+                        !preferences.email_enabled
+                      )
+                    }
+                    style={{
+                      padding: "9px 13px",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      background: preferences.email_enabled
+                        ? "#2E7D32"
+                        : "#9E9E9E",
+                      color: "#fff",
+                    }}
+                  >
+                    ✉️ Email: {preferences.email_enabled ? "On" : "Off"}
+                  </button>
+
+                  <button
+                    onClick={togglePushNotifications}
+                    disabled={pushBusy || !pushSupported}
+                    title={
+                      !pushSupported
+                        ? "Browser push is not supported by this browser"
+                        : undefined
+                    }
+                    style={{
+                      padding: "9px 13px",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: pushBusy || !pushSupported
+                        ? "not-allowed"
+                        : "pointer",
+                      fontWeight: "bold",
+                      background: preferences.push_enabled
+                        ? "#1976D2"
+                        : "#9E9E9E",
+                      color: "#fff",
+                      opacity: pushSupported ? 1 : 0.65,
+                    }}
+                  >
+                    🔔 Push: {pushBusy ? "Updating..." : preferences.push_enabled ? "On" : "Off"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {pushSupported && pushPermission === "denied" && (
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  color: "#B71C1C",
+                  fontSize: "12px",
+                }}
+              >
+                Browser notifications are blocked. Allow notifications for this site in your browser settings before enabling Push again.
+              </p>
+            )}
           </div>
 
           {/* =================================================
