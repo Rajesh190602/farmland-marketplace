@@ -944,18 +944,6 @@ function AdminDashboard() {
       }}
     >
 
-      {/* STEP 62 - MARKETPLACE FUNNEL ANALYTICS */}
-      <div style={{ background: "#fff", borderRadius: "18px", padding: "25px", marginTop: "35px", boxShadow: "0 8px 20px rgba(0,0,0,0.12)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"15px", flexWrap:"wrap", marginBottom:"20px" }}>
-          <div><h2 style={{color:"#2E7D32",margin:0}}>Marketplace Funnel Analytics</h2><p style={{margin:"8px 0 0",color:"#666"}}>Track the marketplace journey from listing views to completed sales.</p></div>
-          <select value={funnelPeriod} onChange={(e)=>setFunnelPeriod(e.target.value)} style={{padding:"10px 14px",borderRadius:"8px",border:"1px solid #ccc",fontSize:"15px"}}><option value="all">All Time</option><option value="7">Last 7 Days</option><option value="30">Last 30 Days</option><option value="90">Last 90 Days</option><option value="365">Last 365 Days</option></select>
-        </div>
-        {funnelLoading ? <div style={{padding:"30px",textAlign:"center",color:"#2E7D32",fontWeight:"bold"}}>Loading marketplace funnel analytics...</div> : funnelError ? <div style={{padding:"18px",borderRadius:"10px",background:"#FFEBEE",color:"#C62828"}}>{funnelError}</div> : <>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"15px",marginBottom:"25px"}}>{[['Listing Views',funnelAnalytics.summary.listing_views],['Inquiries',funnelAnalytics.summary.inquiries],['Offers',funnelAnalytics.summary.offers],['Site Visits',funnelAnalytics.summary.site_visits],['Confirmed Reservations',funnelAnalytics.summary.confirmed_reservations],['Completed Sales',funnelAnalytics.summary.completed_sales]].map(([label,value])=><div key={label} style={{padding:"18px",borderRadius:"12px",background:"#F5F7FA",textAlign:"center",border:"1px solid #E0E0E0"}}><div style={{fontSize:"14px",color:"#666",marginBottom:"8px"}}>{label}</div><div style={{fontSize:"26px",fontWeight:"bold",color:"#2E7D32"}}>{value}</div></div>)}</div>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(0,2fr) minmax(260px,1fr)",gap:"25px"}}><div><h3>Funnel — {funnelPeriodLabel}</h3>{funnelChartData.length ? <ResponsiveContainer width="100%" height={330}><BarChart data={funnelChartData}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="name" angle={-20} textAnchor="end" interval={0} height={70}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" fill="#43A047"/></BarChart></ResponsiveContainer> : <div style={{padding:"35px",textAlign:"center",color:"#777",background:"#F5F7FA",borderRadius:"12px"}}>No funnel data available for this period.</div>}</div><div style={{padding:"20px",borderRadius:"14px",background:"#F5F7FA",alignSelf:"start"}}><h3 style={{marginTop:0}}>Conversion Summary</h3><div style={{fontSize:"14px",color:"#666"}}>Overall View → Sale</div><div style={{fontSize:"32px",fontWeight:"bold",color:"#2E7D32",marginTop:"5px"}}>{Number(funnelAnalytics.summary.overall_view_to_sale_percent||0).toFixed(2)}%</div></div></div>
-        </>}
-      </div>
-
       {/* =====================================================
           HEADER
       ===================================================== */}
@@ -2731,6 +2719,19 @@ function AdminDashboard() {
 
         </button>
 
+      </div>
+
+
+      {/* STEP 62 - MARKETPLACE FUNNEL ANALYTICS */}
+      <div style={{ background: "#fff", borderRadius: "18px", padding: "25px", marginTop: "35px", boxShadow: "0 8px 20px rgba(0,0,0,0.12)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"15px", flexWrap:"wrap", marginBottom:"20px" }}>
+          <div><h2 style={{color:"#2E7D32",margin:0}}>Marketplace Funnel Analytics</h2><p style={{margin:"8px 0 0",color:"#666"}}>Track the marketplace journey from listing views to completed sales.</p></div>
+          <select value={funnelPeriod} onChange={(e)=>setFunnelPeriod(e.target.value)} style={{padding:"10px 14px",borderRadius:"8px",border:"1px solid #ccc",fontSize:"15px"}}><option value="all">All Time</option><option value="7">Last 7 Days</option><option value="30">Last 30 Days</option><option value="90">Last 90 Days</option><option value="365">Last 365 Days</option></select>
+        </div>
+        {funnelLoading ? <div style={{padding:"30px",textAlign:"center",color:"#2E7D32",fontWeight:"bold"}}>Loading marketplace funnel analytics...</div> : funnelError ? <div style={{padding:"18px",borderRadius:"10px",background:"#FFEBEE",color:"#C62828"}}>{funnelError}</div> : <>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"15px",marginBottom:"25px"}}>{[['Listing Views',funnelAnalytics.summary.listing_views],['Inquiries',funnelAnalytics.summary.inquiries],['Offers',funnelAnalytics.summary.offers],['Site Visits',funnelAnalytics.summary.site_visits],['Confirmed Reservations',funnelAnalytics.summary.confirmed_reservations],['Completed Sales',funnelAnalytics.summary.completed_sales]].map(([label,value])=><div key={label} style={{padding:"18px",borderRadius:"12px",background:"#F5F7FA",textAlign:"center",border:"1px solid #E0E0E0"}}><div style={{fontSize:"14px",color:"#666",marginBottom:"8px"}}>{label}</div><div style={{fontSize:"26px",fontWeight:"bold",color:"#2E7D32"}}>{value}</div></div>)}</div>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(0,2fr) minmax(260px,1fr)",gap:"25px"}}><div><h3>Funnel — {funnelPeriodLabel}</h3>{funnelChartData.length ? <ResponsiveContainer width="100%" height={330}><BarChart data={funnelChartData}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="name" angle={-20} textAnchor="end" interval={0} height={70}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="value" fill="#43A047"/></BarChart></ResponsiveContainer> : <div style={{padding:"35px",textAlign:"center",color:"#777",background:"#F5F7FA",borderRadius:"12px"}}>No funnel data available for this period.</div>}</div><div style={{padding:"20px",borderRadius:"14px",background:"#F5F7FA",alignSelf:"start"}}><h3 style={{marginTop:0}}>Conversion Summary</h3><div style={{fontSize:"14px",color:"#666"}}>Overall View → Sale</div><div style={{fontSize:"32px",fontWeight:"bold",color:"#2E7D32",marginTop:"5px"}}>{Number(funnelAnalytics.summary.overall_view_to_sale_percent||0).toFixed(2)}%</div></div></div>
+        </>}
       </div>
 
 
