@@ -9,11 +9,15 @@ from app.models import User
 from app.models import User,EmailVerification
 from app.schemas import UserCreate
 from datetime import datetime, timedelta
+import secrets
 from app.schemas import ChangePassword
 from app.auth import verify_password, get_password_hash
 from app.models import User, EmailVerification
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Literal
+import io
+import cloudinary.uploader
+from PIL import Image, UnidentifiedImageError
 from app.utils.activity_log import create_activity_log
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -38,7 +42,98 @@ from app.schemas import (
     SendOTPRequest,
     VerifyOTPRequest
 )
-from app.utils.email import generate_otp, send_email_otp
+from app.utils.email import  send_email_otp
+def generate_otp():
+    return f"{secrets.randbelow(1_000_000):06d}"
+OTP_EXPIRY_MINUTES = 10
+OTP_MAX_ATTEMPTS = 5
+OTP_RESEND_COOLDOWN_SECONDS = 60
+MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+def check_otp_resend_allowed(verification):
+    if not verification or not verification.last_sent_at:
+        return
+
+    elapsed = datetime.utcnow() - verification.last_sent_at
+
+    if elapsed.total_seconds() < OTP_RESEND_COOLDOWN_SECONDS:
+        remaining = max(
+            1,
+            OTP_RESEND_COOLDOWN_SECONDS - int(elapsed.total_seconds())
+        )
+
+        raise HTTPException(
+            status_code=429,
+            detail=f"Please wait {remaining} seconds before requesting another OTP."
+        )
+
+
+def create_otp_verification(verification, otp):
+    verification.otp_hash = get_password_hash(otp)
+    verification.verified = False
+    verification.otp_attempts = 0
+    verification.expires_at = (
+        datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+    )
+    verification.last_sent_at = datetime.utcnow()
+
+
+def verify_otp_value(verification, supplied_otp):
+    now = datetime.utcnow()
+
+    # Check expiration
+    if verification.expires_at < now:
+        verification.otp_hash = None
+        verification.verified = False
+
+        raise HTTPException(
+            status_code=400,
+            detail="OTP has expired. Please request a new OTP."
+        )
+
+    # Check maximum attempts
+    if verification.otp_attempts >= OTP_MAX_ATTEMPTS:
+        verification.otp_hash = None
+        verification.verified = False
+
+        raise HTTPException(
+            status_code=429,
+            detail="Too many incorrect OTP attempts. Please request a new OTP."
+        )
+
+    # Make sure an OTP exists
+    if not verification.otp_hash:
+        raise HTTPException(
+            status_code=400,
+            detail="OTP is no longer valid. Please request a new OTP."
+        )
+
+    # Verify hashed OTP
+    if not verify_password(supplied_otp, verification.otp_hash):
+        verification.otp_attempts += 1
+
+        remaining = OTP_MAX_ATTEMPTS - verification.otp_attempts
+
+        if remaining <= 0:
+            verification.otp_hash = None
+            verification.verified = False
+
+            raise HTTPException(
+                status_code=429,
+                detail="Too many incorrect OTP attempts. Please request a new OTP."
+            )
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid OTP. {remaining} attempts remaining."
+        )
+
+    # OTP is correct
+    verification.verified = True
+
+    # OTP can no longer be used
+    verification.otp_hash = None
+
+    return True
 from app.auth import (
     hash_password,
     verify_password,
@@ -138,18 +233,12 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    print("=" * 60)
-    print("LOGIN ATTEMPT")
-    print("Email:", form_data.username)
-
     # Find user by email
     db_user = (
         db.query(User)
         .filter(User.email == form_data.username)
         .first()
     )
-
-    print("Database User:", db_user)
 
     # Check user exists
     if db_user is None:
@@ -183,8 +272,6 @@ def login(
         form_data.password,
         db_user.password
     )
-
-    print("Password Match:", password_ok)
 
     if not password_ok:
         raise HTTPException(
@@ -224,9 +311,6 @@ def login(
     # Save activity log
     db.commit()
 
-    print("Login Successful")
-    print("=" * 60)
-
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -255,7 +339,6 @@ def send_otp(
     data: SendOTPRequest,
     db: Session = Depends(get_db)
 ):
-
     existing_user = db.query(User).filter(
         User.email == data.email
     ).first()
@@ -266,44 +349,54 @@ def send_otp(
             detail="Email already registered"
         )
 
-    otp = generate_otp()
-
-    expiry = datetime.utcnow() + timedelta(minutes=10)
-
     verification = db.query(EmailVerification).filter(
         EmailVerification.email == data.email
     ).first()
 
+    check_otp_resend_allowed(verification)
+
+    otp = generate_otp()
+
     if verification:
-        verification.otp = otp
-        verification.verified = False
-        verification.expires_at = expiry
+        create_otp_verification(verification, otp)
     else:
         verification = EmailVerification(
             email=data.email,
-            otp=otp,
+            otp_hash=get_password_hash(otp),
             verified=False,
-            expires_at=expiry
+            otp_attempts=0,
+            expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES),
+            last_sent_at=datetime.utcnow(),
         )
         db.add(verification)
 
-    db.commit()
+    try:
+        if not send_email_otp(data.email, otp):
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to send OTP"
+            )
 
-    if send_email_otp(data.email, otp):
-        return {
-            "message": "OTP sent successfully"
-        }
+        db.commit()
 
-    raise HTTPException(
-        status_code=500,
-        detail="Unable to send OTP"
-    )
+        return {"message": "OTP sent successfully"}
+
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to save OTP"
+        )
+
+
 @router.post("/verify-otp")
 def verify_otp(
     data: VerifyOTPRequest,
     db: Session = Depends(get_db)
 ):
-
     verification = db.query(EmailVerification).filter(
         EmailVerification.email == data.email
     ).first()
@@ -311,34 +404,23 @@ def verify_otp(
     if not verification:
         raise HTTPException(
             status_code=404,
-            detail="OTP not found"
+            detail="OTP not found. Please request a new OTP."
         )
 
-    if verification.expires_at < datetime.utcnow():
-        raise HTTPException(
-            status_code=400,
-            detail="OTP has expired"
-        )
-
-    if verification.otp != data.otp:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid OTP"
-        )
-
-    verification.verified = True
-
+    verify_otp_value(verification, data.otp.strip())
     db.commit()
 
-    return {
-        "message": "Email verified successfully"
-    }
+    return {"message": "Email verified successfully"}
+
+
 @router.post("/forgot-password")
 def forgot_password(
     data: ForgotPasswordRequest,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == data.email).first()
+    user = db.query(User).filter(
+        User.email == data.email
+    ).first()
 
     if not user:
         raise HTTPException(
@@ -363,35 +445,49 @@ def forgot_password(
             )
         )
 
-    otp = generate_otp()
-    expiry = datetime.utcnow() + timedelta(minutes=10)
-
     verification = db.query(EmailVerification).filter(
         EmailVerification.email == data.email
     ).first()
 
+    check_otp_resend_allowed(verification)
+
+    otp = generate_otp()
+
     if verification:
-        verification.otp = otp
-        verification.verified = False
-        verification.expires_at = expiry
+        create_otp_verification(verification, otp)
     else:
         verification = EmailVerification(
             email=data.email,
-            otp=otp,
+            otp_hash=get_password_hash(otp),
             verified=False,
-            expires_at=expiry
+            otp_attempts=0,
+            expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES),
+            last_sent_at=datetime.utcnow(),
         )
         db.add(verification)
 
-    db.commit()
+    try:
+        if not send_email_otp(data.email, otp):
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to send OTP"
+            )
 
-    if send_email_otp(data.email, otp):
+        db.commit()
+
         return {"message": "OTP sent successfully"}
 
-    raise HTTPException(
-        status_code=500,
-        detail="Unable to send OTP"
-    )
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to send OTP"
+        )
+
+
 @router.post("/verify-forgot-otp")
 def verify_forgot_otp(
     data: VerifyForgotOTPRequest,
@@ -404,27 +500,15 @@ def verify_forgot_otp(
     if not verification:
         raise HTTPException(
             status_code=404,
-            detail="OTP not found"
+            detail="OTP not found. Please request a new OTP."
         )
 
-    if verification.expires_at < datetime.utcnow():
-        raise HTTPException(
-            status_code=400,
-            detail="OTP has expired"
-        )
-
-    if verification.otp != data.otp:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid OTP"
-        )
-
-    verification.verified = True
+    verify_otp_value(verification, data.otp.strip())
     db.commit()
 
-    return {
-        "message": "OTP verified successfully"
-    }
+    return {"message": "OTP verified successfully"}
+
+
 @router.post("/reset-password")
 def reset_password(
     data: ResetPasswordRequest,
@@ -444,6 +528,14 @@ def reset_password(
         raise HTTPException(
             status_code=400,
             detail="Please verify OTP first"
+        )
+
+    if verification.expires_at < datetime.utcnow():
+        db.delete(verification)
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="OTP has expired. Please request a new OTP."
         )
 
     user = db.query(User).filter(
@@ -473,15 +565,19 @@ def reset_password(
 
     user.password = hash_password(data.new_password)
 
+    # Consume the verified OTP authorization so it cannot be reused.
+    verification.verified = False
+    verification.otp_hash = None
+    verification.otp_attempts = OTP_MAX_ATTEMPTS
+
     db.commit()
 
-    # Clean up the OTP record
+    # Clean up the OTP record after successful password reset.
     db.delete(verification)
     db.commit()
 
-    return {
-        "message": "Password reset successfully"
-    }
+    return {"message": "Password reset successfully"}
+
 @router.get("/profile")
 def get_profile(
     db: Session = Depends(get_db),
@@ -531,32 +627,82 @@ async def upload_profile_photo(
             detail="User not found"
         )
 
-    # ----------------------------------
+        # ----------------------------------
     # Validate file type
     # ----------------------------------
 
-    if not file.content_type or not file.content_type.startswith("image/"):
+    ALLOWED_PROFILE_IMAGE_TYPES = {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    }
+
+    if file.content_type not in ALLOWED_PROFILE_IMAGE_TYPES:
         raise HTTPException(
             status_code=400,
-            detail="Please upload a valid image file"
+            detail="Only JPEG, PNG, and WebP images are allowed."
         )
 
     # ----------------------------------
-    # Upload to Cloudinary
+    # Read file and validate size
+    # ----------------------------------
+
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file is empty."
+        )
+
+    if len(contents) > MAX_PROFILE_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="Profile image must be 5 MB or smaller."
+        )
+
+    # ----------------------------------
+    # Validate actual image contents
+    # ----------------------------------
+
+    try:
+        with Image.open(io.BytesIO(contents)) as image:
+            detected_format = image.format
+
+            if detected_format not in {"JPEG", "PNG", "WEBP"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only JPEG, PNG, and WebP images are allowed."
+                )
+
+            image.verify()
+
+    except HTTPException:
+        raise
+
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded file is not a valid image."
+        )
+
+    # ----------------------------------
+    # Upload validated image to Cloudinary
     # ----------------------------------
 
     try:
         result = cloudinary.uploader.upload(
-            file.file,
+            contents,
+            resource_type="image",
             folder=f"farmland-marketplace/profiles/{current_user}"
         )
 
         profile_image_url = result["secure_url"]
 
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to upload profile photo: {str(e)}"
+            detail="Failed to upload profile photo."
         )
 
     # ----------------------------------
