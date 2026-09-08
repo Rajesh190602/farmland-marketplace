@@ -645,14 +645,23 @@ class EmailVerification(Base):
         index=True
     )
 
+    # Legacy plaintext OTP column is kept temporarily for database compatibility.
+    # New code must never write or read this column.
     otp = Column(
         String,
-        nullable=False
+        nullable=True
+    )
+
+    # Secure OTP storage: only a password hash is stored.
+    otp_hash = Column(
+        String,
+        nullable=True
     )
 
     verified = Column(
         Boolean,
-        default=False
+        default=False,
+        nullable=False
     )
 
     expires_at = Column(
@@ -660,9 +669,23 @@ class EmailVerification(Base):
         nullable=False
     )
 
+    # Number of failed OTP verification attempts for the current OTP.
+    otp_attempts = Column(
+        Integer,
+        default=0,
+        nullable=False
+    )
+
+    # Used to enforce the OTP resend cooldown.
+    last_sent_at = Column(
+        DateTime,
+        nullable=True
+    )
+
     created_at = Column(
         DateTime,
-        default=datetime.utcnow
+        default=datetime.utcnow,
+        nullable=False
     )
 
 
