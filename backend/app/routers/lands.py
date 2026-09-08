@@ -666,6 +666,7 @@ def get_my_lands(
             Land.owner_id == current_user
         )
         .order_by(Land.id.desc())
+        .limit(100)
         .all()
     )
 
