@@ -423,10 +423,10 @@ def forgot_password(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="Email not registered"
-        )
+        return {
+            "message": "If an account exists for this email, an OTP has been sent."
+        }
+        
 
     # Deactivated accounts cannot use password recovery to bypass
     # the account deactivation state.
