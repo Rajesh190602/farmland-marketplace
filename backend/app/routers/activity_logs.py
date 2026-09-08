@@ -335,13 +335,11 @@ def export_activity_logs(
 
         excel_file.seek(0)
 
-    except Exception as e:
-
+    except Exception:
         db.rollback()
-
         raise HTTPException(
             status_code=500,
-            detail=f"Excel generation failed: {str(e)}"
+            detail="Excel generation failed."
         )
 
     # =====================================================
@@ -362,13 +360,11 @@ def export_activity_logs(
 
         db.commit()
 
-    except Exception as e:
-
+    except Exception:
         db.rollback()
-
         raise HTTPException(
             status_code=500,
-            detail=f"Database archive failed: {str(e)}"
+            detail="Database archive failed."
         )
 
     # =====================================================
