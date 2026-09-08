@@ -1214,6 +1214,7 @@ def get_blocked_users(
             UserBlock.blocker_id == current_user
         )
         .order_by(UserBlock.created_at.desc())
+        .limit(100)
         .all()
     )
 

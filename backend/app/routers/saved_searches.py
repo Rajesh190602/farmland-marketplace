@@ -1,3 +1,5 @@
+import math
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -36,6 +38,67 @@ def create_saved_search(
             detail="Saved search name cannot exceed 100 characters.",
         )
 
+    # Validate numeric search filters.
+    numeric_fields = {
+        "min_price": data.get("min_price"),
+        "max_price": data.get("max_price"),
+        "min_area": data.get("min_area"),
+        "max_area": data.get("max_area"),
+    }
+
+    validated_numbers = {}
+
+    for field_name, value in numeric_fields.items():
+        if value is None or value == "":
+            validated_numbers[field_name] = None
+            continue
+
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field_name} must be a valid number.",
+            )
+
+        if not math.isfinite(number):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field_name} must be a finite number.",
+            )
+
+        if number < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field_name} cannot be negative.",
+            )
+
+        validated_numbers[field_name] = number
+
+    # Validate minimum/maximum price relationship.
+    if (
+        validated_numbers["min_price"] is not None
+        and validated_numbers["max_price"] is not None
+        and validated_numbers["min_price"]
+        > validated_numbers["max_price"]
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Minimum price cannot be greater than maximum price.",
+        )
+
+    # Validate minimum/maximum area relationship.
+    if (
+        validated_numbers["min_area"] is not None
+        and validated_numbers["max_area"] is not None
+        and validated_numbers["min_area"]
+        > validated_numbers["max_area"]
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Minimum area cannot be greater than maximum area.",
+        )
+
     saved_search = SavedSearch(
         user_id=current_user,
         name=name,
@@ -45,10 +108,10 @@ def create_saved_search(
         crop_type=data.get("crop_type") or None,
         soil_type=data.get("soil_type") or None,
         water_source=data.get("water_source") or None,
-        min_price=data.get("min_price"),
-        max_price=data.get("max_price"),
-        min_area=data.get("min_area"),
-        max_area=data.get("max_area"),
+        min_price=validated_numbers["min_price"],
+        max_price=validated_numbers["max_price"],
+        min_area=validated_numbers["min_area"],
+        max_area=validated_numbers["max_area"],
     )
 
     db.add(saved_search)
@@ -75,6 +138,7 @@ def get_saved_searches(
         .order_by(
             SavedSearch.created_at.desc()
         )
+        .limit(100)
         .all()
     )
 

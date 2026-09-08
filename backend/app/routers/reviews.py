@@ -176,6 +176,7 @@ def get_user_reviews(
             UserReview.status == "published",
         )
         .order_by(UserReview.created_at.desc())
+        .limit(100)
         .all()
     )
 
@@ -227,6 +228,7 @@ def get_my_written_reviews(
         db.query(UserReview)
         .filter(UserReview.reviewer_id == current_user)
         .order_by(UserReview.created_at.desc())
+        .limit(100)
         .all()
     )
 
@@ -247,6 +249,7 @@ def get_my_received_reviews(
             UserReview.status == "published",
         )
         .order_by(UserReview.created_at.desc())
+        .limit(100)
         .all()
     )
 

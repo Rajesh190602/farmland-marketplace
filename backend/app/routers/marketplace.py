@@ -1,9 +1,9 @@
-import cloudinary.uploader
+﻿import cloudinary.uploader
 from datetime import datetime, timezone,timedelta
-
+import io
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-
+from PIL import Image, UnidentifiedImageError
 from app.auth import get_current_user
 from app.database import get_db
 from app import cloudinary_config
@@ -437,7 +437,7 @@ def update_land_availability(
             notify(
                 db,
                 inquiry.buyer_id,
-                "🔴 Land Sold",
+                "ðŸ”´ Land Sold",
                 (
                     f"Your inquiry for '{land.title}' was closed "
                     "because the land has been marked sold."
@@ -461,7 +461,7 @@ def update_land_availability(
             notify(
                 db,
                 offer.buyer_id,
-                "🔴 Land Sold",
+                "ðŸ”´ Land Sold",
                 (
                     f"Your offer for '{land.title}' was closed "
                     "because the land has been marked sold."
@@ -485,7 +485,7 @@ def update_land_availability(
             notify(
                 db,
                 visit.buyer_id,
-                "🔴 Land Sold",
+                "ðŸ”´ Land Sold",
                 (
                     f"Your site visit request for '{land.title}' "
                     "was cancelled because the land has been marked sold."
@@ -620,7 +620,7 @@ def create_inquiry(
     notify(
         db,
         land.owner_id,
-        "🌾 New Land Inquiry",
+        "ðŸŒ¾ New Land Inquiry",
         (
             f"{buyer.full_name} is interested in "
             f"your land '{land.title}'."
@@ -664,6 +664,7 @@ def get_received_inquiries(
         .order_by(
             LandInquiry.created_at.desc()
         )
+        .limit(100)
         .all()
     )
 
@@ -695,6 +696,7 @@ def get_my_inquiries(
         .order_by(
             LandInquiry.created_at.desc()
         )
+        .limit(100)
         .all()
     )
 
@@ -757,6 +759,35 @@ def update_inquiry_status(
             detail="Invalid inquiry status.",
         )
 
+    # STEP 79 - Prevent invalid inquiry state changes.
+    # Once an inquiry has been accepted or rejected, it cannot be
+    # reopened or changed into the other terminal state.
+    current_status = (inquiry.status or "pending").strip().lower()
+    allowed_transitions = {
+        "pending": {"pending", "accepted", "rejected"},
+        "accepted": {"accepted"},
+        "rejected": {"rejected"},
+    }
+
+    if status not in allowed_transitions.get(current_status, set()):
+        if current_status in {"accepted", "rejected"}:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This inquiry is already {current_status} "
+                    "and cannot be changed."
+                ),
+            )
+        raise HTTPException(
+            status_code=409,
+            detail=f"Invalid inquiry transition: {current_status} -> {status}.",
+        )
+
+    # No-op updates do not create duplicate state changes/notifications.
+    if current_status == status:
+        db.refresh(inquiry)
+        return inquiry
+
     inquiry.status = status
     inquiry.updated_at = datetime.utcnow()
 
@@ -764,7 +795,7 @@ def update_inquiry_status(
         notify(
             db,
             inquiry.buyer_id,
-            "✅ Inquiry Accepted",
+            "âœ… Inquiry Accepted",
             (
                 f"Your inquiry for '{land.title}' "
                 f"was accepted by the farmer."
@@ -777,7 +808,7 @@ def update_inquiry_status(
         notify(
             db,
             inquiry.buyer_id,
-            "❌ Inquiry Rejected",
+            "âŒ Inquiry Rejected",
             (
                 f"Your inquiry for '{land.title}' "
                 f"was rejected by the farmer."
@@ -968,10 +999,10 @@ def create_offer(
     notify(
         db,
         land.owner_id,
-        "💰 New Land Offer",
+        "ðŸ’° New Land Offer",
         (
             f"{buyer.full_name} submitted an offer of "
-            f"₹{data.amount:,.2f} for '{land.title}'."
+            f"â‚¹{data.amount:,.2f} for '{land.title}'."
         ),
         "offer",
         offer.id,
@@ -982,7 +1013,7 @@ def create_offer(
         user_id=buyer.id,
         action="CREATE_OFFER",
         description=(
-            f'Submitted offer of ₹{data.amount:,.2f} for land "{land.title}".'
+            f'Submitted offer of â‚¹{data.amount:,.2f} for land "{land.title}".'
         ),
         target_type="OFFER",
         target_id=offer.id,
@@ -1007,6 +1038,7 @@ def get_received_offers(
         .join(Land, Land.id == LandOffer.land_id)
         .filter(Land.owner_id == farmer.id)
         .order_by(LandOffer.updated_at.desc(), LandOffer.created_at.desc())
+        .limit(100)
         .all()
     )
 
@@ -1024,6 +1056,7 @@ def get_my_offers(
         db.query(LandOffer)
         .filter(LandOffer.buyer_id == buyer.id)
         .order_by(LandOffer.updated_at.desc(), LandOffer.created_at.desc())
+        .limit(100)
         .all()
     )
 
@@ -1052,6 +1085,7 @@ def get_offer_history(
         db.query(OfferNegotiationHistory)
         .filter(OfferNegotiationHistory.offer_id == offer.id)
         .order_by(OfferNegotiationHistory.created_at.asc(), OfferNegotiationHistory.id.asc())
+        .limit(100)
         .all()
     )
 
@@ -1141,7 +1175,7 @@ def create_confirmed_reservation_for_offer(
         notify(
             db,
             other_reservation.buyer_id,
-            "❌ Reservation Rejected",
+            "âŒ Reservation Rejected",
             f"Another negotiated offer was accepted for '{land.title}'.",
             "reservation",
             other_reservation.id,
@@ -1266,7 +1300,7 @@ def create_reservation(
     notify(
         db,
         land.owner_id,
-        "📌 Reservation Request",
+        "ðŸ“Œ Reservation Request",
         f"{buyer.full_name} requested a reservation for '{land.title}'.",
         "reservation",
         reservation.id,
@@ -1298,6 +1332,7 @@ def get_my_reservations(
         db.query(Reservation)
         .filter(Reservation.buyer_id == buyer.id)
         .order_by(Reservation.updated_at.desc(), Reservation.created_at.desc())
+        .limit(100)
         .all()
     )
 
@@ -1315,6 +1350,7 @@ def get_received_reservations(
         db.query(Reservation)
         .filter(Reservation.farmer_id == farmer.id)
         .order_by(Reservation.updated_at.desc(), Reservation.created_at.desc())
+        .limit(100)
         .all()
     )
 
@@ -1373,7 +1409,7 @@ def _update_reservation_status(
             notify(
                 db,
                 other.buyer_id,
-                "❌ Reservation Rejected",
+                "âŒ Reservation Rejected",
                 f"Another reservation was confirmed for '{land.title}'.",
                 "reservation",
                 other.id,
@@ -1388,7 +1424,7 @@ def _update_reservation_status(
         notify(
             db,
             reservation.buyer_id,
-            "✅ Reservation Confirmed",
+            "âœ… Reservation Confirmed",
             f"Your reservation for '{land.title}' has been confirmed by the farmer.",
             "reservation",
             reservation.id,
@@ -1405,7 +1441,7 @@ def _update_reservation_status(
         notify(
             db,
             reservation.buyer_id,
-            "❌ Reservation Rejected",
+            "âŒ Reservation Rejected",
             f"Your reservation request for '{land.title}' was rejected by the farmer.",
             "reservation",
             reservation.id,
@@ -1448,7 +1484,7 @@ def _update_reservation_status(
         notify(
             db,
             other_user_id,
-            "⚠️ Reservation Cancelled",
+            "âš ï¸ Reservation Cancelled",
             f"The reservation for '{land.title}' was cancelled by the {actor.role}.",
             "reservation",
             reservation.id,
@@ -1542,7 +1578,7 @@ def _update_offer_status(
             notify(
                 db,
                 other_offer.buyer_id,
-                "❌ Offer Rejected",
+                "âŒ Offer Rejected",
                 f"Another offer was accepted for '{land.title}'.",
                 "offer",
                 other_offer.id,
@@ -1564,8 +1600,8 @@ def _update_offer_status(
         notify(
             db,
             offer.buyer_id,
-            "✅ Offer Accepted",
-            f"Your offer of ₹{offer.amount:,.2f} for '{land.title}' was accepted.",
+            "âœ… Offer Accepted",
+            f"Your offer of â‚¹{offer.amount:,.2f} for '{land.title}' was accepted.",
             "offer",
             offer.id,
         )
@@ -1574,7 +1610,7 @@ def _update_offer_status(
         notify(
             db,
             other_user_id,
-            "❌ Offer Rejected",
+            "âŒ Offer Rejected",
             f"The offer for '{land.title}' was rejected by the {actor.role}.",
             "offer",
             offer.id,
@@ -1586,7 +1622,7 @@ def _update_offer_status(
         action="ACCEPT_OFFER" if status == "accepted" else "REJECT_OFFER",
         description=(
             f'{actor.role.title()} {status} offer #{offer.id} for land "{land.title}" '
-            f'at ₹{offer.amount:,.2f}.'
+            f'at â‚¹{offer.amount:,.2f}.'
         ),
         target_type="OFFER",
         target_id=offer.id,
@@ -1667,10 +1703,10 @@ def counter_offer(
     notify(
         db,
         recipient_id,
-        "🔄 New Counter-Offer",
+        "ðŸ”„ New Counter-Offer",
         (
             f"{actor.full_name} countered the offer for '{land.title}' "
-            f"with ₹{data.amount:,.2f}."
+            f"with â‚¹{data.amount:,.2f}."
         ),
         "offer",
         offer.id,
@@ -1682,7 +1718,7 @@ def counter_offer(
         action="COUNTER_OFFER",
         description=(
             f'{actor.role.title()} countered offer #{offer.id} for land "{land.title}" '
-            f'at ₹{data.amount:,.2f}.'
+            f'at â‚¹{data.amount:,.2f}.'
         ),
         target_type="OFFER",
         target_id=offer.id,
@@ -1805,7 +1841,7 @@ def complete_sale(
         notify(
             db,
             inquiry.buyer_id,
-            "🔴 Land Sold",
+            "ðŸ”´ Land Sold",
             (
                 f"Your inquiry for '{land.title}' was closed "
                 "because the land has been sold."
@@ -1829,7 +1865,7 @@ def complete_sale(
         notify(
             db,
             offer.buyer_id,
-            "🔴 Land Sold",
+            "ðŸ”´ Land Sold",
             (
                 f"Your offer for '{land.title}' was closed "
                 "because the land has been sold."
@@ -1853,7 +1889,7 @@ def complete_sale(
         notify(
             db,
             visit.buyer_id,
-            "🔴 Land Sold",
+            "ðŸ”´ Land Sold",
             (
                 f"Your site visit request for '{land.title}' "
                 "was cancelled because the land has been sold."
@@ -1865,10 +1901,10 @@ def complete_sale(
     notify(
         db,
         sale.buyer_id,
-        "🎉 Sale Completed",
+        "ðŸŽ‰ Sale Completed",
         (
             f"The sale of '{land.title}' has been completed "
-            f"for ₹{sale.amount:,.2f}."
+            f"for â‚¹{sale.amount:,.2f}."
         ),
         "sale",
         sale.id,
@@ -1880,7 +1916,7 @@ def complete_sale(
         action="COMPLETE_SALE",
         description=(
             f'Completed sale #{sale.id} for land "{land.title}" '
-            f"with buyer #{sale.buyer_id} at ₹{sale.amount:,.2f}."
+            f"with buyer #{sale.buyer_id} at â‚¹{sale.amount:,.2f}."
         ),
         target_type="SALE",
         target_id=sale.id,
@@ -1999,6 +2035,7 @@ def get_my_transaction_history(
     sales = (
         sales_query
         .order_by(LandSale.completed_at.desc(), LandSale.id.desc())
+        .limit(100)
         .all()
     )
 
@@ -2049,6 +2086,36 @@ ALLOWED_TRANSACTION_CONTENT_TYPES = {
 MAX_TRANSACTION_DOCUMENT_SIZE = 10 * 1024 * 1024
 
 
+def validate_transaction_document_contents(
+    contents: bytes,
+    content_type: str,
+):
+    """Validate the actual uploaded bytes instead of trusting the MIME type."""
+    if content_type == "application/pdf":
+        if not contents.startswith(b"%PDF-"):
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded file is not a valid PDF.",
+            )
+        return
+
+    try:
+        with Image.open(io.BytesIO(contents)) as image:
+            if image.format not in {"JPEG", "PNG", "WEBP"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail="The uploaded image format is not allowed.",
+                )
+            image.verify()
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded file is not a valid image.",
+        )
+
+
 def get_sale_for_document_access(
     db: Session,
     sale_id: int,
@@ -2093,6 +2160,7 @@ def get_transaction_documents(
             TransactionDocument.created_at.desc(),
             TransactionDocument.id.desc(),
         )
+        .limit(100)
         .all()
     )
 
@@ -2132,11 +2200,11 @@ async def upload_transaction_document(
         raise HTTPException(status_code=400, detail="A file is required.")
 
     try:
-        file.file.seek(0, 2)
-        file_size = file.file.tell()
-        file.file.seek(0)
+        contents = await file.read()
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Unable to read the uploaded file.") from exc
+
+    file_size = len(contents)
 
     if file_size <= 0:
         raise HTTPException(status_code=400, detail="The uploaded document is empty.")
@@ -2144,9 +2212,11 @@ async def upload_transaction_document(
     if file_size > MAX_TRANSACTION_DOCUMENT_SIZE:
         raise HTTPException(status_code=400, detail="Transaction documents must be 10 MB or smaller.")
 
+    validate_transaction_document_contents(contents, content_type)
+
     try:
         upload_result = cloudinary.uploader.upload(
-            file.file,
+            contents,
             resource_type="auto",
             folder="farmland-marketplace/transaction-documents",
         )
@@ -2334,7 +2404,7 @@ def create_site_visit(
     notify(
         db,
         land.owner_id,
-        "📅 New Site Visit Request",
+        "ðŸ“… New Site Visit Request",
         (
             f"{buyer.full_name} requested a site visit "
             f"for '{land.title}'."
@@ -2378,6 +2448,7 @@ def get_received_site_visits(
         .order_by(
             SiteVisit.requested_date.asc()
         )
+        .limit(100)
         .all()
     )
 
@@ -2407,9 +2478,9 @@ def get_my_site_visits(
         .order_by(
             SiteVisit.requested_date.asc()
         )
+        .limit(100)
         .all()
     )
-
 
 # =========================================================
 # FARMER - UPDATE SITE VISIT
@@ -2435,6 +2506,7 @@ def update_site_visit_status(
         .filter(
             SiteVisit.id == visit_id
         )
+        .with_for_update()
         .first()
     )
 
@@ -2455,9 +2527,17 @@ def update_site_visit_status(
             detail="You can update only site visits for your own land.",
         )
 
-    status = (
+    current_status = (
+        visit.status or "pending"
+    ).strip().lower()
+
+    requested_status = (
         data.status or ""
     ).strip().lower()
+
+    # =====================================================
+    # VALID SITE VISIT STATUSES
+    # =====================================================
 
     allowed_statuses = {
         "pending",
@@ -2467,20 +2547,93 @@ def update_site_visit_status(
         "cancelled",
     }
 
-    if status not in allowed_statuses:
+    if requested_status not in allowed_statuses:
         raise HTTPException(
             status_code=400,
-            detail="Invalid site visit status.",
+            detail=(
+                "Invalid site visit status. "
+                "Use pending, accepted, rejected, completed, or cancelled."
+            ),
         )
 
-    visit.status = status
+    # =====================================================
+    # CONTROLLED SITE VISIT LIFECYCLE
+    # =====================================================
+
+    allowed_transitions = {
+        "pending": {
+            "pending",
+            "accepted",
+            "rejected",
+            "cancelled",
+        },
+        "accepted": {
+            "accepted",
+            "completed",
+            "cancelled",
+        },
+        "rejected": {
+            "rejected",
+        },
+        "completed": {
+            "completed",
+        },
+        "cancelled": {
+            "cancelled",
+        },
+    }
+
+    allowed_next_statuses = allowed_transitions.get(
+        current_status,
+        set(),
+    )
+
+    if requested_status not in allowed_next_statuses:
+        if current_status in {
+            "completed",
+            "rejected",
+            "cancelled",
+        }:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This site visit is already {current_status} "
+                    "and cannot be changed."
+                ),
+            )
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Invalid site visit transition: "
+                f"{current_status} -> {requested_status}."
+            ),
+        )
+
+    # =====================================================
+    # NO-OP UPDATE
+    # =====================================================
+
+    if current_status == requested_status:
+        db.refresh(visit)
+        return visit
+
+    # =====================================================
+    # UPDATE STATUS
+    # =====================================================
+
+    visit.status = requested_status
     visit.updated_at = datetime.utcnow()
 
-    if status == "accepted":
+    # =====================================================
+    # NOTIFICATIONS
+    # =====================================================
+
+    if requested_status == "accepted":
         notify(
             db,
             visit.buyer_id,
-            "✅ Site Visit Accepted",
+            "âœ… Site Visit Accepted",
             (
                 f"Your site visit request for "
                 f"'{land.title}' was accepted."
@@ -2489,11 +2642,11 @@ def update_site_visit_status(
             visit.id,
         )
 
-    elif status == "rejected":
+    elif requested_status == "rejected":
         notify(
             db,
             visit.buyer_id,
-            "❌ Site Visit Rejected",
+            "âŒ Site Visit Rejected",
             (
                 f"Your site visit request for "
                 f"'{land.title}' was rejected."
@@ -2502,11 +2655,11 @@ def update_site_visit_status(
             visit.id,
         )
 
-    elif status == "completed":
+    elif requested_status == "completed":
         notify(
             db,
             visit.buyer_id,
-            "🏡 Site Visit Completed",
+            "ðŸ¡ Site Visit Completed",
             (
                 f"The site visit for '{land.title}' "
                 f"has been marked completed."
@@ -2515,11 +2668,11 @@ def update_site_visit_status(
             visit.id,
         )
 
-    elif status == "cancelled":
+    elif requested_status == "cancelled":
         notify(
             db,
             visit.buyer_id,
-            "⚠️ Site Visit Cancelled",
+            "âš ï¸ Site Visit Cancelled",
             (
                 f"The site visit for '{land.title}' "
                 f"has been cancelled."
@@ -2537,60 +2690,51 @@ def update_site_visit_status(
 # PHASE 2 - TRUST & SAFETY
 # #8 REPORT LAND
 # =========================================================
-
-@router.post(
-    "/lands/{land_id}/report",
-    response_model=LandReportResponse,
-)
+@router.post("/lands/{land_id}/report", response_model=LandReportResponse)
 def report_land(
     land_id: int,
     data: LandReportCreate,
+    current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user),
 ):
-    """
-    Allow an authenticated user to report an approved land listing.
-
-    A report only creates a pending moderation record. It does not
-    automatically hide, delete, reserve, or change the land status.
-    """
-
-    # The path and body must refer to the same land.
+    # =====================================================
+    # BASIC ID VALIDATION
+    # =====================================================
     if data.land_id != land_id:
         raise HTTPException(
             status_code=400,
-            detail="Land ID in the request does not match the selected land.",
+            detail="Land ID mismatch.",
         )
 
-    reporter = get_user(
-        db,
-        current_user,
-    )
+    # =====================================================
+    # GET REPORTER
+    # =====================================================
+    reporter = get_user(db, current_user)
 
-    land = get_land(
-        db,
-        land_id,
-    )
+    # =====================================================
+    # GET LAND
+    # =====================================================
+    land = get_land(db, land_id)
 
     if land.status != "approved":
         raise HTTPException(
             status_code=404,
-            detail="Approved land not found.",
+            detail="Land not found.",
         )
 
-    # A land owner cannot report their own listing.
+    # =====================================================
+    # PREVENT SELF-REPORTING
+    # =====================================================
     if land.owner_id == reporter.id:
         raise HTTPException(
             status_code=400,
             detail="You cannot report your own land.",
         )
 
+    # =====================================================
+    # VALIDATE REASON
+    # =====================================================
     reason = (data.reason or "").strip()
-    description = (
-        data.description.strip()
-        if data.description
-        else None
-    )
 
     if not reason:
         raise HTTPException(
@@ -2604,13 +2748,24 @@ def report_land(
             detail="Report reason is too long.",
         )
 
+    # =====================================================
+    # VALIDATE DESCRIPTION
+    # =====================================================
+    description = (
+        data.description.strip()
+        if data.description
+        else None
+    )
+
     if description and len(description) > 1000:
         raise HTTPException(
             status_code=400,
-            detail="Report description must be 1000 characters or less.",
+            detail="Report description is too long.",
         )
 
-    # Prevent repeated active reports from the same user for the same land.
+    # =====================================================
+    # PREVENT DUPLICATE PENDING REPORT
+    # =====================================================
     existing = (
         db.query(LandReport)
         .filter(
@@ -2627,6 +2782,39 @@ def report_land(
             detail="You already have a pending report for this land.",
         )
 
+    # =====================================================
+    # ANTI-SPAM COOLDOWN
+    # =====================================================
+    # Prevent the same user from repeatedly reporting
+    # the same land immediately after an earlier report
+    # was resolved.
+    recent_report = (
+        db.query(LandReport)
+        .filter(
+            LandReport.land_id == land.id,
+            LandReport.reporter_id == reporter.id,
+            LandReport.created_at >= (
+                datetime.utcnow() - timedelta(minutes=5)
+            ),
+        )
+        .order_by(
+            LandReport.created_at.desc()
+        )
+        .first()
+    )
+
+    if recent_report:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Please wait 5 minutes before submitting "
+                "another report for this land."
+            ),
+        )
+
+    # =====================================================
+    # CREATE REPORT
+    # =====================================================
     report = LandReport(
         land_id=land.id,
         reporter_id=reporter.id,
@@ -2665,42 +2853,37 @@ def get_my_land_reports(
         .order_by(
             LandReport.created_at.desc(),
         )
+        .limit(100)
         .all()
     )
 # =========================================================
 # PHASE 2 - TRUST & SAFETY
 # #9 REPORT USER
 # =========================================================
-
-@router.post(
-    "/users/{user_id}/report",
-    response_model=UserReportResponse,
-)
+@router.post("/users/{user_id}/report", response_model=UserReportResponse)
 def report_user(
     user_id: int,
     data: UserReportCreate,
+    current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user),
 ):
-    """
-    Allow an authenticated user to report another user.
-
-    The report is stored as pending and does not automatically
-    suspend, block, or otherwise modify the reported user.
-    """
-
-    # The path and request body must refer to the same user.
+    # =====================================================
+    # BASIC ID VALIDATION
+    # =====================================================
     if data.reported_user_id != user_id:
         raise HTTPException(
             status_code=400,
-            detail="Reported user ID does not match the selected user.",
+            detail="User ID mismatch.",
         )
 
-    reporter = get_user(
-        db,
-        current_user,
-    )
+    # =====================================================
+    # GET REPORTER
+    # =====================================================
+    reporter = get_user(db, current_user)
 
+    # =====================================================
+    # GET REPORTED USER
+    # =====================================================
     reported_user = (
         db.query(User)
         .filter(User.id == user_id)
@@ -2713,20 +2896,19 @@ def report_user(
             detail="User not found.",
         )
 
-    # A user cannot report themselves.
+    # =====================================================
+    # PREVENT SELF-REPORTING
+    # =====================================================
     if reporter.id == reported_user.id:
         raise HTTPException(
             status_code=400,
             detail="You cannot report yourself.",
         )
 
+    # =====================================================
+    # VALIDATE REASON
+    # =====================================================
     reason = (data.reason or "").strip()
-
-    description = (
-        data.description.strip()
-        if data.description
-        else None
-    )
 
     if not reason:
         raise HTTPException(
@@ -2737,17 +2919,27 @@ def report_user(
     if len(reason) > 100:
         raise HTTPException(
             status_code=400,
-            detail="Report reason must be 100 characters or less.",
+            detail="Report reason is too long.",
         )
+
+    # =====================================================
+    # VALIDATE DESCRIPTION
+    # =====================================================
+    description = (
+        data.description.strip()
+        if data.description
+        else None
+    )
 
     if description and len(description) > 1000:
         raise HTTPException(
             status_code=400,
-            detail="Report description must be 1000 characters or less.",
+            detail="Report description is too long.",
         )
 
-    # Prevent duplicate pending reports from the same reporter
-    # against the same user.
+    # =====================================================
+    # PREVENT DUPLICATE PENDING REPORT
+    # =====================================================
     existing = (
         db.query(UserReport)
         .filter(
@@ -2764,6 +2956,39 @@ def report_user(
             detail="You already have a pending report for this user.",
         )
 
+    # =====================================================
+    # ANTI-SPAM COOLDOWN
+    # =====================================================
+    # Prevent the same user from repeatedly reporting
+    # the same user immediately after an earlier report
+    # was resolved or dismissed.
+    recent_report = (
+        db.query(UserReport)
+        .filter(
+            UserReport.reporter_id == reporter.id,
+            UserReport.reported_user_id == reported_user.id,
+            UserReport.created_at >= (
+                datetime.utcnow() - timedelta(minutes=5)
+            ),
+        )
+        .order_by(
+            UserReport.created_at.desc()
+        )
+        .first()
+    )
+
+    if recent_report:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Please wait 5 minutes before submitting "
+                "another report for this user."
+            ),
+        )
+
+    # =====================================================
+    # CREATE REPORT
+    # =====================================================
     report = UserReport(
         reporter_id=reporter.id,
         reported_user_id=reported_user.id,
@@ -2777,7 +3002,6 @@ def report_user(
     db.refresh(report)
 
     return report
-
 
 @router.get(
     "/user-reports/my",
@@ -2799,5 +3023,7 @@ def get_my_user_reports(
         .order_by(
             UserReport.created_at.desc(),
         )
+        .limit(100)
         .all()
     )
+

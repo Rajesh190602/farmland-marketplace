@@ -869,26 +869,20 @@ async def send_chat_file(
                 "Cloudinary did not return secure_url"
             )
 
-    except Exception as cloudinary_error:
-
-        import traceback
-
-        print("=" * 50)
-        print("CLOUDINARY UPLOAD ERROR")
-        print(
-            "ERROR:",
-            str(cloudinary_error)
-        )
-        traceback.print_exc()
-        print("=" * 50)
-
+    except Exception :
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Cloudinary upload failed: "
-                f"{str(cloudinary_error)}"
-            )
+            detail="Failed to upload chat file."
         )
+
+
+        
+
+        
+        
+        
+
+       
 
     # ----------------------------------
     # Determine receiver
@@ -922,28 +916,15 @@ async def send_chat_file(
         db.commit()
         db.refresh(message)
 
-    except Exception as database_error:
+    except Exception  :
 
         db.rollback()
 
-        import traceback
-
-        print("=" * 50)
-        print("DATABASE ERROR WHILE SAVING CHAT FILE")
-        print(
-            "ERROR:",
-            str(database_error)
-        )
-        traceback.print_exc()
-        print("=" * 50)
-
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Database error: "
-                f"{str(database_error)}"
-            )
+            detail="Failed to save chat file."
         )
+
 
     # ----------------------------------
     # SECURITY ACTIVITY LOG
@@ -1174,6 +1155,7 @@ def get_messages(
         .order_by(
             Message.created_at.asc()
         )
+        .limit(100)
         .all()
     )
 
@@ -1369,6 +1351,7 @@ def my_archived_conversations(
             )
         )
         .order_by(desc(Conversation.id))
+        .limit(100)
         .all()
     )
 
@@ -1535,6 +1518,7 @@ def my_conversations(
         .order_by(
             desc(Conversation.id)
         )
+        .limit(100)
         .all()
     )
 
@@ -1859,6 +1843,38 @@ def get_presence(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
+        # ----------------------------------
+    # SECURITY: Only allow presence checks
+    # for users who share a conversation
+    # with the current user.
+    # ----------------------------------
+
+    if user_id != current_user:
+        conversation = (
+            db.query(Conversation)
+            .filter(
+                or_(
+                    (
+                        Conversation.buyer_id == current_user
+                    ) & (
+                        Conversation.farmer_id == user_id
+                    ),
+                    (
+                        Conversation.farmer_id == current_user
+                    ) & (
+                        Conversation.buyer_id == user_id
+                    ),
+                )
+            )
+            .first()
+        )
+
+        if not conversation:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only check the presence of users you have a conversation with."
+            )
+    
     # ----------------------------------
     # Find requested user
     # ----------------------------------

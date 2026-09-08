@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from openpyxl import Workbook
@@ -16,7 +16,6 @@ router = APIRouter(
     tags=["Reports"]
 )
 
-
 def create_excel_response(
     workbook: Workbook,
     filename: str
@@ -29,7 +28,13 @@ def create_excel_response(
     temp_dir = tempfile.gettempdir()
     file_path = os.path.join(temp_dir, filename)
 
-    workbook.save(file_path)
+    try:
+        workbook.save(file_path)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate Excel report."
+        )
 
     return FileResponse(
         path=file_path,

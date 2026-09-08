@@ -42,6 +42,7 @@ def get_notifications(
             Notification.created_at.desc(),
             Notification.id.desc(),
         )
+        .limit(100)
         .all()
     )
 

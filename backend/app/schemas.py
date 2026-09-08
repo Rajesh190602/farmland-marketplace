@@ -1,14 +1,19 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List,Literal
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List, Literal
 from datetime import datetime
-from typing import Optional
+
+
 class ProfileUpdate(BaseModel):
     full_name: str
     mobile: str
+
+
 class ChangePassword(BaseModel):
     current_password: str
     new_password: str
     confirm_password: str
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -22,6 +27,7 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     new_password: str
     confirm_password: str
+
 
 # =========================
 # LAND UPDATE
@@ -49,10 +55,10 @@ class LandUpdate(BaseModel):
     longitude: Optional[float] = None
 
     image_url: Optional[str] = None
+
+
 class LandReview(BaseModel):
     reason: str
-
-
 
 
 # =========================
@@ -81,11 +87,13 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     mobile: Optional[str] = None
     email: Optional[EmailStr] = None
     role: Optional[str] = None
+
 
 class SendOTPRequest(BaseModel):
     email: EmailStr
@@ -172,6 +180,8 @@ class LandResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
 # =========================
 # CHAT SCHEMAS
 # =========================
@@ -179,9 +189,12 @@ class LandResponse(BaseModel):
 class ConversationCreate(BaseModel):
     land_id: int
     buyer_id: Optional[int] = None
+
+
 class FarmerReplyConversationCreate(BaseModel):
     land_id: int
     buyer_id: int
+
 
 class MessageCreate(BaseModel):
     conversation_id: int
@@ -197,13 +210,14 @@ class MessageResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class ConversationResponse(BaseModel):
-    id: int 
-    buyer_id: int 
-    farmer_id: int 
-    land_id: int 
 
-    class Config: 
+class ConversationResponse(BaseModel):
+    id: int
+    buyer_id: int
+    farmer_id: int
+    land_id: int
+
+    class Config:
         from_attributes = True
 
 
@@ -257,8 +271,20 @@ class LandInquiryStatusUpdate(BaseModel):
 
 class LandOfferCreate(BaseModel):
     land_id: int
-    amount: float
-    message: Optional[str] = None
+
+    # Security:
+    # - Must be greater than zero.
+    # - NaN and Infinity are not allowed.
+    amount: float = Field(
+        gt=0,
+        allow_inf_nan=False,
+    )
+
+    # Prevent excessively large messages.
+    message: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+    )
 
 
 class LandOfferResponse(BaseModel):
@@ -280,8 +306,19 @@ class LandOfferStatusUpdate(BaseModel):
 
 
 class LandOfferCounterCreate(BaseModel):
-    amount: float
-    message: Optional[str] = None
+    # Security:
+    # - Must be greater than zero.
+    # - NaN and Infinity are not allowed.
+    amount: float = Field(
+        gt=0,
+        allow_inf_nan=False,
+    )
+
+    # Prevent excessively large messages.
+    message: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+    )
 
 
 class OfferNegotiationHistoryResponse(BaseModel):
@@ -305,7 +342,12 @@ class OfferNegotiationHistoryResponse(BaseModel):
 class ReservationCreate(BaseModel):
     land_id: int
     offer_id: Optional[int] = None
-    message: Optional[str] = None
+
+    # Prevent excessively large reservation messages.
+    message: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+    )
 
 
 class ReservationResponse(BaseModel):
@@ -336,7 +378,12 @@ class ReservationStatusUpdate(BaseModel):
 
 class SaleCompleteCreate(BaseModel):
     reservation_id: int
-    message: Optional[str] = None
+
+    # Prevent excessively large sale messages.
+    message: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+    )
 
 
 class SaleResponse(BaseModel):
@@ -372,7 +419,6 @@ class TransactionHistoryResponse(BaseModel):
     created_at: datetime
 
 
-
 # =========================================================
 # SITE VISIT
 # =========================================================
@@ -380,7 +426,12 @@ class TransactionHistoryResponse(BaseModel):
 class SiteVisitCreate(BaseModel):
     land_id: int
     requested_date: datetime
-    message: Optional[str] = None
+
+    # Prevent excessively large site-visit messages.
+    message: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+    )
 
 
 class SiteVisitResponse(BaseModel):
@@ -400,14 +451,25 @@ class SiteVisitResponse(BaseModel):
 class SiteVisitStatusUpdate(BaseModel):
     status: str
 
+
 # =========================================================
 # PHASE 2 - LAND REPORT
 # =========================================================
 
 class LandReportCreate(BaseModel):
     land_id: int
-    reason: str
-    description: Optional[str] = None
+
+    # Match the router's existing 100-character limit.
+    reason: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
+    # Match the router's existing 1000-character limit.
+    description: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+    )
 
 
 class LandReportResponse(BaseModel):
@@ -423,14 +485,25 @@ class LandReportResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 # =========================================================
 # PHASE 2 - USER REPORT
 # =========================================================
 
 class UserReportCreate(BaseModel):
     reported_user_id: int
-    reason: str
-    description: Optional[str] = None
+
+    # Match the router's existing 100-character limit.
+    reason: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
+    # Match the router's existing 1000-character limit.
+    description: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+    )
 
 
 class UserReportResponse(BaseModel):
@@ -445,6 +518,7 @@ class UserReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 # =========================================================
 # STEP 65 - TRANSACTION DOCUMENTS
@@ -463,7 +537,6 @@ class TransactionDocumentResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
 
 
 # =========================================================

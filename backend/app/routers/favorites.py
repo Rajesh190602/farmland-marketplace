@@ -341,6 +341,7 @@ def get_my_favorites(
         .order_by(
             Favorite.created_at.desc()
         )
+        .limit(100)
         .all()
     )
 
