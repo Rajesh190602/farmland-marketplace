@@ -105,9 +105,6 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    print("=" * 50)
-    print("Received token:", token)
-
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -123,12 +120,9 @@ def get_current_user(
             algorithms=[ALGORITHM]
         )
 
-        print("Decoded payload:", payload)
-
         user_id = payload.get("user_id")
 
         if user_id is None:
-            print("No user_id in token")
             raise credentials_exception
 
         try:
@@ -138,8 +132,8 @@ def get_current_user(
 
         # --------------------------------------------------
         # Check the user in the database.
-        # This also makes admin suspension effective for
-        # already-issued JWTs.
+        # This also makes administrator suspension effective
+        # for already-issued JWTs.
         # --------------------------------------------------
 
         user = (
@@ -178,11 +172,16 @@ def get_current_user(
 
         account_status = (
             db.query(UserAccountStatus)
-            .filter(UserAccountStatus.user_id == user_id)
+            .filter(
+                UserAccountStatus.user_id == user_id
+            )
             .first()
         )
 
-        if account_status and account_status.status == "deactivated":
+        if (
+            account_status
+            and account_status.status == "deactivated"
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
@@ -196,8 +195,7 @@ def get_current_user(
     except HTTPException:
         raise
 
-    except JWTError as e:
-        print("JWT ERROR:", e)
+    except JWTError:
         raise credentials_exception
 
 
