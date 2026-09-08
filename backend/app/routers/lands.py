@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app import models
+import math
 from sqlalchemy import or_
 from app.auth import get_current_user
 from app.database import get_db
@@ -414,6 +415,8 @@ def get_all_lands(
     location: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None),
     max_price: Optional[float] = Query(None),
+    # STEP 78 - Bound list results to prevent unbounded database reads.
+    limit: int = Query(100, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
@@ -426,6 +429,33 @@ def get_all_lands(
         raise HTTPException(
             status_code=404,
             detail="User not found"
+        )
+
+    # =====================================================
+    # STEP 77 - VALIDATE PRICE FILTERS
+    # =====================================================
+    if min_price is not None:
+        if not math.isfinite(min_price) or min_price < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Minimum price must be a valid non-negative number.",
+            )
+
+    if max_price is not None:
+        if not math.isfinite(max_price) or max_price < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Maximum price must be a valid non-negative number.",
+            )
+
+    if (
+        min_price is not None
+        and max_price is not None
+        and min_price > max_price
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Minimum price cannot be greater than maximum price.",
         )
 
     # Buyers and admins can see approved marketplace lands.
@@ -470,9 +500,11 @@ def get_all_lands(
             models.Land.price <= max_price
         )
 
-    return query.order_by(
-        models.Land.id.desc()
-    ).all()
+    return (
+        query.order_by(models.Land.id.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 # ==========================
@@ -491,6 +523,8 @@ def search_lands(
     max_price: float | None = Query(None),
     min_area: float | None = Query(None),
     max_area: float | None = Query(None),
+    # STEP 78 - Bound search results to prevent unbounded database reads.
+    limit: int = Query(100, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
@@ -503,6 +537,44 @@ def search_lands(
         raise HTTPException(
             status_code=404,
             detail="User not found"
+        )
+
+    # =====================================================
+    # STEP 77 - VALIDATE NUMERIC SEARCH FILTERS
+    # =====================================================
+    numeric_filters = {
+        "min_price": min_price,
+        "max_price": max_price,
+        "min_area": min_area,
+        "max_area": max_area,
+    }
+
+    for field_name, value in numeric_filters.items():
+        if value is not None:
+            if not math.isfinite(value) or value < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{field_name} must be a valid non-negative number.",
+                )
+
+    if (
+        min_price is not None
+        and max_price is not None
+        and min_price > max_price
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Minimum price cannot be greater than maximum price.",
+        )
+
+    if (
+        min_area is not None
+        and max_area is not None
+        and min_area > max_area
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Minimum area cannot be greater than maximum area.",
         )
 
     # Buyers and admins can search approved marketplace lands.
@@ -569,9 +641,11 @@ def search_lands(
             Land.area <= max_area
         )
 
-    return query.order_by(
-        Land.id.desc()
-    ).all()
+    return (
+        query.order_by(Land.id.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 # ==========================
@@ -1072,6 +1146,9 @@ def record_land_view(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    # =====================================================
+    # GET USER
+    # =====================================================
     user = (
         db.query(User)
         .filter(User.id == current_user)
@@ -1081,9 +1158,12 @@ def record_land_view(
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="User not found"
+            detail="User not found",
         )
 
+    # =====================================================
+    # GET LAND
+    # =====================================================
     land = (
         db.query(Land)
         .filter(Land.id == land_id)
@@ -1093,52 +1173,77 @@ def record_land_view(
     if not land:
         raise HTTPException(
             status_code=404,
-            detail="Land not found"
+            detail="Land not found",
         )
 
-    # Only approved and published marketplace lands
-    # should be added to recently viewed.
+    # =====================================================
+    # ONLY APPROVED + PUBLISHED LAND
+    # =====================================================
     if land.status != "approved" or not land.is_published:
         raise HTTPException(
             status_code=404,
-            detail="Land is not available"
+            detail="Land is not available",
         )
 
     now = datetime.utcnow()
 
     # =====================================================
-    # PHASE 6 - LISTING VIEWS
-    # Record one unique view per authenticated user/listing.
-    # Re-opening the same listing updates the timestamp but
-    # does not inflate the view count.
+    # LISTING VIEW
     # =====================================================
+    # One view record per authenticated user/listing.
     listing_view = (
         db.query(ListingView)
         .filter(
             ListingView.user_id == current_user,
-            ListingView.land_id == land_id
+            ListingView.land_id == land_id,
         )
         .first()
     )
 
+    # =====================================================
+    # SHORT ANTI-SPAM COOLDOWN
+    # =====================================================
+    # If the same user has viewed this listing within the
+    # last 10 seconds, do not perform another database write.
+    if (
+        listing_view
+        and listing_view.viewed_at
+        and (now - listing_view.viewed_at).total_seconds() < 10
+    ):
+        view_count = (
+            db.query(ListingView)
+            .filter(ListingView.land_id == land_id)
+            .count()
+        )
+
+        return {
+            "message": "Land view already recorded recently",
+            "land_id": land_id,
+            "viewed_at": listing_view.viewed_at,
+            "view_count": view_count,
+        }
+
+    # =====================================================
+    # UPDATE / CREATE LISTING VIEW
+    # =====================================================
     if listing_view:
         listing_view.viewed_at = now
     else:
         listing_view = ListingView(
             user_id=current_user,
             land_id=land_id,
-            viewed_at=now
+            viewed_at=now,
         )
         db.add(listing_view)
 
     # =====================================================
-    # EXISTING - RECENTLY VIEWED LANDS
+    # RECENTLY VIEWED LANDS
     # =====================================================
     existing = (
         db.query(RecentlyViewedLand)
         .filter(
             RecentlyViewedLand.user_id == current_user,
-            RecentlyViewedLand.land_id == land_id
+            RecentlyViewedLand.land_id == land_id,
         )
         .first()
     )
@@ -1149,13 +1254,15 @@ def record_land_view(
         viewed = RecentlyViewedLand(
             user_id=current_user,
             land_id=land_id,
-            viewed_at=now
+            viewed_at=now,
         )
         db.add(viewed)
 
     db.commit()
 
-    # Keep only the latest 20 recently viewed lands.
+    # =====================================================
+    # KEEP ONLY LATEST 20 RECENTLY VIEWED LANDS
+    # =====================================================
     old_views = (
         db.query(RecentlyViewedLand)
         .filter(
@@ -1173,9 +1280,14 @@ def record_land_view(
 
     db.commit()
 
+    # =====================================================
+    # VIEW COUNT
+    # =====================================================
     view_count = (
         db.query(ListingView)
-        .filter(ListingView.land_id == land_id)
+        .filter(
+            ListingView.land_id == land_id
+        )
         .count()
     )
 
@@ -1183,7 +1295,7 @@ def record_land_view(
         "message": "Land view recorded",
         "land_id": land_id,
         "viewed_at": now,
-        "view_count": view_count
+        "view_count": view_count,
     }
 
 
