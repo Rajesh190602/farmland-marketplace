@@ -100,7 +100,7 @@ async def upload_land_images(
                         f"{file.filename} must be 5 MB or smaller."
                     )
                 )
-                        # -------------------------------------------------
+            # -------------------------------------------------
             # Validate actual image contents
             # -------------------------------------------------
             try:
@@ -195,7 +195,8 @@ async def upload_land_images(
 @router.get("/{land_id}/images")
 def get_land_images(
     land_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)
 ):
     land = (
         db.query(models.Land)
@@ -207,6 +208,33 @@ def get_land_images(
         raise HTTPException(
             status_code=404,
             detail="Land not found"
+        )
+    # Owners and admins may access their land images.
+    # Other users may access images only for approved,
+    # published marketplace land.
+    user = (
+        db.query(models.User)
+        .filter(models.User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    if (
+        land.owner_id != current_user
+        and user.role != "admin"
+        and (
+            land.status != "approved"
+            or not land.is_published
+        )
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You are not allowed to access images for this land"
         )
 
     images = (
