@@ -209,6 +209,16 @@ def register(
     )
 
     db.add(new_user)
+    db.flush()
+
+    # Buyer accounts must complete KYC before marketplace access.
+    # Farmers remain active immediately after registration.
+    account_status = UserAccountStatus(
+        user_id=new_user.id,
+        status="pending_kyc" if new_user.role == "buyer" else "active",
+    )
+    db.add(account_status)
+
     db.commit()
     db.refresh(new_user)
 
@@ -216,10 +226,22 @@ def register(
     db.delete(verification)
     db.commit()
 
-    return {
+    response = {
         "message": "User Registered Successfully",
-        "user_id": new_user.id
+        "user_id": new_user.id,
+        "role": new_user.role,
+        "account_status": account_status.status,
+        "kyc_required": new_user.role == "buyer",
     }
+
+    if new_user.role == "buyer":
+        # Restricted token can access only the KYC workflow.
+        response["kyc_token"] = create_access_token(
+            {"user_id": new_user.id, "scope": "kyc"},
+            expires_delta=timedelta(minutes=30),
+        )
+
+    return response
 
 # ==========================
 # Login User
@@ -277,6 +299,25 @@ def login(
         raise HTTPException(
             status_code=400,
             detail="Invalid email or password"
+        )
+
+    # Buyer accounts remain blocked from the marketplace until KYC is verified.
+    # Password verification happens first so account status is not exposed for
+    # invalid credentials. A fresh restricted KYC token is issued here so a
+    # buyer can resume KYC even if the registration token expired.
+    if db_user.role == "buyer" and account_status and account_status.status == "pending_kyc":
+        kyc_token = create_access_token(
+            {"user_id": db_user.id, "scope": "kyc"},
+            expires_delta=timedelta(minutes=30),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "KYC_REQUIRED",
+                "message": "KYC verification is required before you can access the marketplace.",
+                "account_status": "pending_kyc",
+                "kyc_token": kyc_token,
+            },
         )
 
     # Create JWT access token

@@ -77,6 +77,11 @@ const Notifications = lazy(() =>
   import("./pages/Notifications")
 );
 
+// Step 68 - Farmer + Buyer KYC / Identity Verification
+const KYCVerification = lazy(() =>
+  import("./pages/KYCVerification")
+);
+
 // =====================================================
 // PHASE 1 - Marketplace
 // =====================================================
@@ -149,6 +154,11 @@ const AdminReports = lazy(() =>
 // Admin land ownership / Pattadhar Passbook verification queue
 const LandOwnershipVerificationAdmin = lazy(() =>
   import("./pages/admin/LandOwnershipVerificationAdmin")
+);
+
+// Step 68 - Admin KYC / Identity Verification
+const KYCVerificationAdmin = lazy(() =>
+  import("./pages/admin/KYCVerificationAdmin")
 );
 
 // =====================================================
@@ -346,6 +356,20 @@ function App() {
           />
 
           {/* =====================================================
+              STEP 68 - KYC / IDENTITY VERIFICATION
+              Available to both Farmer and Buyer
+          ===================================================== */}
+
+          <Route
+            path="/kyc"
+            element={
+              <ProtectedRoute>
+                <KYCVerification />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =====================================================
               PHASE 1 - MARKETPLACE ACTIVITY
           ===================================================== */}
 
@@ -441,6 +465,15 @@ function App() {
             <Route
               path="land-ownership"
               element={<LandOwnershipVerificationAdmin />}
+            />
+
+            {/* =================================================
+                STEP 68 - ADMIN KYC / IDENTITY VERIFICATION
+            ================================================= */}
+
+            <Route
+              path="kyc"
+              element={<KYCVerificationAdmin />}
             />
 
           </Route>

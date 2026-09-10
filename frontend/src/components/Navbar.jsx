@@ -424,6 +424,15 @@ function Navbar() {
                 </span>
               </NavLink>
 
+              {/* STEP 68 - KYC VERIFICATION */}
+
+              <NavLink
+                to="/kyc"
+                style={desktopLinkStyle}
+              >
+                🪪 KYC Verification
+              </NavLink>
+
               {/* PROFILE */}
 
               <NavLink
@@ -734,6 +743,18 @@ function Navbar() {
                   </span>
                 )}
               </span>
+            </NavLink>
+
+            {/* STEP 68 - KYC VERIFICATION */}
+
+            <NavLink
+              to="/kyc"
+              style={mobileLinkStyle}
+              onClick={() =>
+                setMenuOpen(false)
+              }
+            >
+              🪪 KYC Verification
             </NavLink>
 
             {/* PROFILE */}

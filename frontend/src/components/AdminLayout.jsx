@@ -86,6 +86,17 @@ function AdminLayout() {
             📜 Land Ownership Verification
           </Link>
 
+          {/* KYC / Identity Verification - Step 68 */}
+          <Link
+            to="/admin/kyc"
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
+          >
+            🪪 KYC Verification
+          </Link>
+
           {/* Reports */}
           <Link
             to="/admin/reports"

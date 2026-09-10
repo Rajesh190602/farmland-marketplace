@@ -19,9 +19,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_admin, get_current_user
+from app.auth import get_current_admin, get_current_user, get_current_kyc_user
 from app.database import get_db
-from app.models import User, UserKYCVerification
+from app.models import User, UserKYCVerification, UserAccountStatus
 from app.schemas import (
     KYCReviewRequest,
     KYCSubmitResponse,
@@ -223,7 +223,7 @@ def _private_document_url(
 
 
 # =========================================================
-# FARMER - SUBMIT / RE-SUBMIT KYC
+# FARMER + BUYER - SUBMIT / RE-SUBMIT KYC
 # =========================================================
 
 @router.post(
@@ -235,14 +235,14 @@ async def submit_kyc(
     document_type: str = Form(...),
     document_number: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user),
+    current_user: int = Depends(get_current_kyc_user),
 ):
     user = _get_user(db, current_user)
 
-    if user.role != "farmer":
+    if user.role not in {"farmer", "buyer"}:
         raise HTTPException(
             status_code=403,
-            detail="Only farmers can submit KYC verification.",
+            detail="Only farmers and buyers can submit KYC verification.",
         )
 
     normalized_type = (document_type or "").strip().lower()
@@ -305,7 +305,7 @@ async def submit_kyc(
         .first()
     )
 
-    # A verified KYC record is not silently replaced. The farmer must
+    # A verified KYC record is not silently replaced. The user must
     # contact/re-submit only when the verification workflow permits it.
     if existing and existing.status == "verified":
         raise HTTPException(
@@ -402,7 +402,7 @@ async def submit_kyc(
 
 
 # =========================================================
-# FARMER - OWN KYC STATUS
+# FARMER + BUYER - OWN KYC STATUS
 # =========================================================
 
 @router.get(
@@ -411,7 +411,7 @@ async def submit_kyc(
 )
 def get_my_kyc(
     db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user),
+    current_user: int = Depends(get_current_kyc_user),
 ):
     verification = (
         db.query(UserKYCVerification)
@@ -620,6 +620,24 @@ def review_kyc(
         reason if action != "verify" else None
     )
     verification.reviewed_by_id = admin
+
+    # Buyer access is controlled by KYC approval.
+    user = db.query(User).filter(User.id == verification.user_id).first()
+    if user and user.role == "buyer":
+        account_status = (
+            db.query(UserAccountStatus)
+            .filter(UserAccountStatus.user_id == user.id)
+            .first()
+        )
+        if not account_status:
+            account_status = UserAccountStatus(user_id=user.id)
+            db.add(account_status)
+
+        account_status.status = (
+            "active" if action == "verify" else "pending_kyc"
+        )
+        if action == "verify":
+            account_status.reactivated_at = datetime.utcnow()
     verification.reviewed_at = datetime.now(timezone.utc)
 
     create_activity_log(

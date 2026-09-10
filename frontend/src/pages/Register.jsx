@@ -277,10 +277,34 @@ function Register() {
         }
       );
 
-      await api.post(
+      const response = await api.post(
         "/users/register",
         registrationData
       );
+
+      // Buyer accounts are locked to the KYC workflow until admin approval.
+      if (formData.role === "buyer" && response.data?.kyc_required) {
+        if (!response.data?.kyc_token) {
+          throw new Error("Buyer KYC session was not issued by the server.");
+        }
+
+        sessionStorage.setItem("token", response.data.kyc_token);
+        sessionStorage.setItem("user_id", String(response.data.user_id));
+        sessionStorage.setItem("user_role", "buyer");
+        sessionStorage.setItem("account_status", "pending_kyc");
+        sessionStorage.setItem("kyc_required", "true");
+
+        // Never persist the restricted KYC token.
+        localStorage.removeItem("token");
+        localStorage.removeItem("user_id");
+        localStorage.removeItem("user_role");
+
+        alert(
+          "Buyer account created successfully. Please complete KYC verification before accessing the marketplace."
+        );
+        navigate("/kyc", { replace: true });
+        return;
+      }
 
       alert(
         `${
