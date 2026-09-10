@@ -153,7 +153,7 @@ function KYCVerification() {
 
     // Full navigation prevents a ProtectedRoute render race while the
     // temporary KYC token is being removed.
-    window.location.replace("/login");
+    window.location.replace("/");
   };
 
   useEffect(() => {
