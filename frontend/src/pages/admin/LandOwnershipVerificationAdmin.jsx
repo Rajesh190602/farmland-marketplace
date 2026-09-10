@@ -9,6 +9,10 @@ function LandOwnershipVerificationAdmin() {
   const [reviewing, setReviewing] = useState(false);
   const [reason, setReason] = useState("");
 
+  // Private passbook preview state.
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState(null);
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
+
   const loadPending = async () => {
     try {
       setLoading(true);
@@ -28,7 +32,25 @@ function LandOwnershipVerificationAdmin() {
     loadPending();
   }, []);
 
+  // Clean up the private browser-local object URL.
+  useEffect(() => {
+    return () => {
+      if (documentPreviewUrl) {
+        URL.revokeObjectURL(documentPreviewUrl);
+      }
+    };
+  }, [documentPreviewUrl]);
+
+  const closeDocumentPreview = () => {
+    if (documentPreviewUrl) {
+      URL.revokeObjectURL(documentPreviewUrl);
+    }
+    setDocumentPreviewUrl(null);
+  };
+
   const openVerification = async (verificationId) => {
+    closeDocumentPreview();
+
     try {
       const response = await api.get(
         `/land-ownership/admin/${verificationId}`
@@ -43,11 +65,19 @@ function LandOwnershipVerificationAdmin() {
     }
   };
 
+  const closeVerification = () => {
+    closeDocumentPreview();
+    setSelected(null);
+    setReason("");
+  };
+
   const review = async (action) => {
     if (!selected) return;
 
-    if ((action === "reject" || action === "changes_requested") &&
-        !reason.trim()) {
+    if (
+      (action === "reject" || action === "changes_requested") &&
+      !reason.trim()
+    ) {
       alert("Please enter a reason.");
       return;
     }
@@ -70,8 +100,7 @@ function LandOwnershipVerificationAdmin() {
           : "Changes requested successfully."
       );
 
-      setSelected(null);
-      setReason("");
+      closeVerification();
       await loadPending();
     } catch (error) {
       alert(
@@ -87,21 +116,42 @@ function LandOwnershipVerificationAdmin() {
     if (!selected) return;
 
     try {
+      setDocumentPreviewLoading(true);
+      closeDocumentPreview();
+
       const response = await api.get(
         `/land-ownership/admin/${selected.verification_id}/document`,
         { responseType: "blob" }
       );
 
-      const blobUrl = URL.createObjectURL(response.data);
-      window.open(blobUrl, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      // Cloudinary authenticated/raw delivery can return a generic
+      // application/octet-stream MIME type. Re-assign the verified
+      // database content type so the browser knows to render the
+      // image/PDF instead of downloading it.
+      const contentType =
+        selected.verification?.content_type ||
+        response.data?.type ||
+        "application/octet-stream";
+
+      const viewableBlob = new Blob([response.data], {
+        type: contentType,
+      });
+
+      const blobUrl = URL.createObjectURL(viewableBlob);
+      setDocumentPreviewUrl(blobUrl);
     } catch (error) {
       alert(
         error.response?.data?.detail ||
           "Unable to open the private passbook."
       );
+    } finally {
+      setDocumentPreviewLoading(false);
     }
   };
+
+  const contentType = selected?.verification?.content_type || "";
+  const isImage = contentType.startsWith("image/");
+  const isPdf = contentType === "application/pdf";
 
   return (
     <>
@@ -243,7 +293,7 @@ function LandOwnershipVerificationAdmin() {
                 Review Verification #{selected.verification_id}
               </h2>
               <button
-                onClick={() => setSelected(null)}
+                onClick={closeVerification}
                 style={{
                   border: "none",
                   background: "#eee",
@@ -277,24 +327,108 @@ function LandOwnershipVerificationAdmin() {
 
             <button
               onClick={viewDocument}
+              disabled={documentPreviewLoading}
               style={{
                 marginTop: 20,
-                background: "#6a1b9a",
+                background: documentPreviewLoading ? "#9e9e9e" : "#6a1b9a",
                 color: "#fff",
                 border: "none",
                 borderRadius: 8,
                 padding: "11px 16px",
-                cursor: "pointer",
+                cursor: documentPreviewLoading ? "not-allowed" : "pointer",
                 fontWeight: 700,
               }}
             >
-              📄 View Private Passbook
+              {documentPreviewLoading
+                ? "Opening Passbook..."
+                : "📄 View Private Passbook"}
             </button>
+
+            {documentPreviewUrl && (
+              <div
+                style={{
+                  marginTop: 20,
+                  border: "1px solid #d1d5db",
+                  borderRadius: 10,
+                  padding: 12,
+                  background: "#f8fafc",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <strong>Private Passbook Preview</strong>
+                  <button
+                    onClick={closeDocumentPreview}
+                    style={{
+                      border: "none",
+                      background: "#eee",
+                      padding: "7px 12px",
+                      borderRadius: 7,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Close Preview
+                  </button>
+                </div>
+
+                {isImage ? (
+                  <div
+                    style={{
+                      maxHeight: "70vh",
+                      overflow: "auto",
+                      textAlign: "center",
+                      background: "#fff",
+                      borderRadius: 8,
+                      padding: 8,
+                    }}
+                  >
+                    <img
+                      src={documentPreviewUrl}
+                      alt="Private Pattadhar Passbook"
+                      style={{
+                        maxWidth: "100%",
+                        height: "auto",
+                        display: "block",
+                        margin: "0 auto",
+                      }}
+                    />
+                  </div>
+                ) : isPdf ? (
+                  <iframe
+                    src={documentPreviewUrl}
+                    title="Private Pattadhar Passbook"
+                    style={{
+                      width: "100%",
+                      height: "70vh",
+                      border: "none",
+                      borderRadius: 8,
+                      background: "#fff",
+                    }}
+                  />
+                ) : (
+                  <p>
+                    This document type cannot be previewed in the browser.
+                    Please use the original document viewer.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div style={{ marginTop: 20 }}>
               <label
                 htmlFor="ownership-review-reason"
-                style={{ display: "block", fontWeight: 700, marginBottom: 8 }}
+                style={{
+                  display: "block",
+                  fontWeight: 700,
+                  marginBottom: 8,
+                }}
               >
                 Reason / Admin feedback
               </label>
