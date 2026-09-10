@@ -615,7 +615,7 @@ def review_kyc(
             detail="A reason is required when rejecting or requesting changes.",
         )
 
-    verification.status = action
+    verification.status = "verified" if action == "verify" else action
     verification.rejection_reason = (
         reason if action != "verify" else None
     )

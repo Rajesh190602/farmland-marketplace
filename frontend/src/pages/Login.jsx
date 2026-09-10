@@ -75,6 +75,9 @@ function Login() {
         "role",
         response.data.role
       );
+      // Buyer KYC session is finished after normal login.
+      sessionStorage.removeItem("kyc_required");
+      sessionStorage.removeItem("account_status");
 
       // =====================================================
       // Remember Me

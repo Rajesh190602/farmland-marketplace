@@ -97,6 +97,11 @@ function KYCVerification() {
   const roleLabel = isBuyer ? "Buyer" : isFarmer ? "Farmer" : "User";
   const verifiedLabel = isBuyer ? "Verified Buyer" : "Verified Farmer";
 
+  // True only during the temporary KYC approval/login handoff.
+  // Login.jsx clears this flag after a normal marketplace login.
+  const isKycOnlySession =
+    sessionStorage.getItem("kyc_required") === "true";
+
   const maskedNumber = verification?.masked_document_number || "";
 
   const loadKyc = async () => {
@@ -146,7 +151,9 @@ function KYCVerification() {
     localStorage.removeItem("user_role");
     localStorage.removeItem("user");
 
-    navigate("/login", { replace: true });
+    // Full navigation prevents a ProtectedRoute render race while the
+    // temporary KYC token is being removed.
+    window.location.replace("/login");
   };
 
   useEffect(() => {
@@ -336,22 +343,38 @@ function KYCVerification() {
 
               <p style={{ margin: "10px 0 0", color: "#455A64", lineHeight: 1.6 }}>
                 Your {roleLabel.toLowerCase()} account is now active.
-                Please log in with your credentials to continue to the
-                Farmland Marketplace.
+                {isKycOnlySession
+                  ? " Please log in with your credentials to continue to the Farmland Marketplace."
+                  : " You can continue using the Farmland Marketplace."}
               </p>
 
-              <button
-                type="button"
-                onClick={handleLoginAfterKyc}
-                style={{
-                  ...primaryButton,
-                  marginTop: "18px",
-                  width: "100%",
-                  cursor: "pointer",
-                }}
-              >
-                🔐 Login with your credentials
-              </button>
+              {isKycOnlySession ? (
+                <button
+                  type="button"
+                  onClick={handleLoginAfterKyc}
+                  style={{
+                    ...primaryButton,
+                    marginTop: "18px",
+                    width: "100%",
+                    cursor: "pointer",
+                  }}
+                >
+                  🔐 Login with your credentials
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigate("/home")}
+                  style={{
+                    ...primaryButton,
+                    marginTop: "18px",
+                    width: "100%",
+                    cursor: "pointer",
+                  }}
+                >
+                  ← Continue to Marketplace
+                </button>
+              )}
             </div>
           </div>
         ) : (
