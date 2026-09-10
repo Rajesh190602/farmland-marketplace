@@ -107,17 +107,46 @@ function KYCVerification() {
       const response = await api.get("/kyc/me");
       setVerification(response.data);
     } catch (err) {
-      if (err.response?.status === 404) {
+      const detail = err.response?.data?.detail;
+
+      if (err.response?.status === 403 && detail?.code === "KYC_APPROVED") {
+        setVerification({
+          status: "verified",
+          account_status: "active",
+          kyc_approved: true,
+        });
+        setSuccess("");
+        setError("");
+      } else if (err.response?.status === 404) {
         setVerification(null);
       } else {
         setError(
-          err.response?.data?.detail ||
-            "Unable to load your KYC verification status."
+          typeof detail === "string"
+            ? detail
+            : detail?.message ||
+              "Unable to load your KYC verification status."
         );
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLoginAfterKyc = () => {
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user_id");
+    sessionStorage.removeItem("role");
+    sessionStorage.removeItem("user_role");
+    sessionStorage.removeItem("account_status");
+    sessionStorage.removeItem("kyc_required");
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("role");
+    localStorage.removeItem("user_role");
+    localStorage.removeItem("user");
+
+    navigate("/login", { replace: true });
   };
 
   useEffect(() => {
@@ -295,15 +324,34 @@ function KYCVerification() {
         {isVerified ? (
           <div style={verifiedCardStyle}>
             <div style={verifiedIconStyle}>✓</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <h2 style={{ margin: "0 0 8px", color: "#1B5E20" }}>
-                {verifiedLabel}
+                KYC Verification Approved
               </h2>
+
               <p style={{ margin: 0, color: "#455A64", lineHeight: 1.6 }}>
-                Your identity has been verified by the administrator.
-                Your verification badge can now be shown on your marketplace
-                profile.
+                Your identity verification has been successfully approved by
+                the administrator.
               </p>
+
+              <p style={{ margin: "10px 0 0", color: "#455A64", lineHeight: 1.6 }}>
+                Your {roleLabel.toLowerCase()} account is now active.
+                Please log in with your credentials to continue to the
+                Farmland Marketplace.
+              </p>
+
+              <button
+                type="button"
+                onClick={handleLoginAfterKyc}
+                style={{
+                  ...primaryButton,
+                  marginTop: "18px",
+                  width: "100%",
+                  cursor: "pointer",
+                }}
+              >
+                🔐 Login with your credentials
+              </button>
             </div>
           </div>
         ) : (

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, UserAccountStatus
+from app.models import User, UserAccountStatus, UserKYCVerification
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -119,13 +119,9 @@ def get_current_user(
             SECRET_KEY,
             algorithms=[ALGORITHM]
         )
-
-
-
         user_id = payload.get("user_id")
 
         if user_id is None:
-
             raise credentials_exception
 
         try:
@@ -202,8 +198,7 @@ def get_current_user(
     except HTTPException:
         raise
 
-    except JWTError as e:
-
+    except JWTError:
         raise credentials_exception
 
 
@@ -221,6 +216,9 @@ def get_current_kyc_user(
     - Normal application tokens may access KYC for active farmers/buyers.
     - A restricted `scope=kyc` token is accepted only for a buyer whose
       account is currently pending KYC.
+    - If a restricted buyer KYC token is still valid but the admin has
+      already approved KYC, return a machine-readable KYC_APPROVED response
+      so the frontend can tell the user to log in normally.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -263,17 +261,53 @@ def get_current_kyc_user(
             .first()
         )
 
+        # --------------------------------------------------
+        # Restricted buyer KYC session
+        # --------------------------------------------------
         if scope == "kyc":
-            if user.role != "buyer" or (
-                not account_status or account_status.status != "pending_kyc"
-            ):
+            if user.role != "buyer":
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="This KYC session is no longer valid.",
                 )
+
+            # The temporary KYC token must NEVER become a normal
+            # marketplace token. Once the admin approves KYC, tell the
+            # frontend to clear this token and make the user log in normally.
+            if account_status and account_status.status == "active":
+                kyc_verification = (
+                    db.query(UserKYCVerification)
+                    .filter(UserKYCVerification.user_id == user_id)
+                    .first()
+                )
+
+                if (
+                    kyc_verification
+                    and kyc_verification.status == "verified"
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={
+                            "code": "KYC_APPROVED",
+                            "message": (
+                                "Your KYC has been approved. "
+                                "Please log in with your credentials to continue."
+                            ),
+                            "account_status": "active",
+                        },
+                    )
+
+            if not account_status or account_status.status != "pending_kyc":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This KYC session is no longer valid.",
+                )
+
             return user_id
 
-        # Normal application token: preserve deactivation protection.
+        # --------------------------------------------------
+        # Normal application token
+        # --------------------------------------------------
         if account_status and account_status.status == "deactivated":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
