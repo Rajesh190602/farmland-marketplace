@@ -86,6 +86,15 @@ const MarketplaceActivity = lazy(() =>
 );
 
 // =====================================================
+// PHASE 2 - TRUST & SAFETY
+// =====================================================
+
+// Farmer land ownership / Pattadhar Passbook verification
+const LandOwnershipVerification = lazy(() =>
+  import("./pages/LandOwnershipVerification")
+);
+
+// =====================================================
 // Admin Pages
 // =====================================================
 
@@ -135,6 +144,11 @@ const ActivityLogs = lazy(() =>
 
 const AdminReports = lazy(() =>
   import("./pages/admin/AdminReports")
+);
+
+// Admin land ownership / Pattadhar Passbook verification queue
+const LandOwnershipVerificationAdmin = lazy(() =>
+  import("./pages/admin/LandOwnershipVerificationAdmin")
 );
 
 // =====================================================
@@ -224,6 +238,19 @@ function App() {
             element={
               <FarmerRoute>
                 <MyLands />
+              </FarmerRoute>
+            }
+          />
+
+          {/* =====================================================
+              STEP 69 - LAND OWNERSHIP VERIFICATION
+          ===================================================== */}
+
+          <Route
+            path="/land-ownership/:landId"
+            element={
+              <FarmerRoute>
+                <LandOwnershipVerification />
               </FarmerRoute>
             }
           />
@@ -407,6 +434,15 @@ function App() {
               element={<AdminReports />}
             />
 
+            {/* =================================================
+                STEP 69 - ADMIN LAND OWNERSHIP VERIFICATION
+            ================================================= */}
+
+            <Route
+              path="land-ownership"
+              element={<LandOwnershipVerificationAdmin />}
+            />
+
           </Route>
 
         </Routes>
@@ -414,4 +450,5 @@ function App() {
     </BrowserRouter>
   );
 }
+
 export default App;

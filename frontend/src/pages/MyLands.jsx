@@ -490,6 +490,36 @@ function MyLands() {
   };
 
   // =========================================================
+  // Step 69 - Land Ownership / Pattadhar Passbook Verification
+  // =========================================================
+
+  const getOwnershipVerificationStatus = (land) =>
+    String(land.ownership_verification_status || "not_submitted").toLowerCase();
+
+  const getOwnershipVerificationLabel = (land) => {
+    switch (getOwnershipVerificationStatus(land)) {
+      case "verified": return "✅ Land Verified";
+      case "pending": return "⏳ Passbook Under Review";
+      case "changes_requested": return "⚠️ Passbook Changes Requested";
+      case "rejected": return "❌ Passbook Rejected";
+      default: return "📄 Submit Pattadhar Passbook";
+    }
+  };
+
+  const getOwnershipVerificationStyle = (land) => {
+    const status = getOwnershipVerificationStatus(land);
+    if (status === "verified") return { background: "#E8F5E9", color: "#2E7D32", border: "1px solid #C8E6C9" };
+    if (status === "pending") return { background: "#FFF8E1", color: "#8D6E00", border: "1px solid #FFE082" };
+    if (status === "changes_requested") return { background: "#FFF3E0", color: "#EF6C00", border: "1px solid #FFE0B2" };
+    if (status === "rejected") return { background: "#FFEBEE", color: "#C62828", border: "1px solid #FFCDD2" };
+    return { background: "#EEF3F7", color: "#546E7A", border: "1px solid #CFD8DC" };
+  };
+
+  const openOwnershipVerification = (landId) => {
+    navigate(`/land-ownership/${landId}`);
+  };
+
+  // =========================================================
   // Select Multiple Images
   // =========================================================
 
@@ -1014,6 +1044,9 @@ function MyLands() {
                       <span style={{ ...getExpiryBadgeStyle(land), borderRadius: "18px", padding: "6px 10px", fontSize: "12px", fontWeight: "800" }}>
                         {getExpiryLabel(land)}
                       </span>
+                      <span style={{ ...getOwnershipVerificationStyle(land), borderRadius: "18px", padding: "6px 10px", fontSize: "12px", fontWeight: "800" }}>
+                        {getOwnershipVerificationLabel(land)}
+                      </span>
                     </div>
 
                     {land.rejection_reason && (
@@ -1052,6 +1085,9 @@ function MyLands() {
                           </button>
                         )}
                       <button type="button" onClick={() => setExpandedManagementId((current) => current === land.id ? null : land.id)} style={{ background: "#EF6C00", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>⚙️ Manage / Availability</button>
+                      <button type="button" onClick={() => openOwnershipVerification(land.id)} style={{ background: getOwnershipVerificationStatus(land) === "verified" ? "#2E7D32" : "#5D4037", color: "#fff", border: "none", borderRadius: "7px", padding: "9px 13px", cursor: "pointer", fontWeight: "700" }}>
+                        {getOwnershipVerificationStatus(land) === "verified" ? "✅ Ownership Verified" : "📄 Verify Ownership"}
+                      </button>
                     </div>
 
                     {expandedAnalyticsId === land.id && (
@@ -1537,6 +1573,25 @@ function MyLands() {
                       Availability can be changed only after
                       this land is approved by the admin.
                     </p>
+                  )}
+                </div>
+
+                {/* =================================================
+                    Step 69 - Pattadhar Passbook Verification
+                ================================================= */}
+
+                <div style={{ marginTop: "25px", padding: "20px", background: getOwnershipVerificationStatus(land) === "verified" ? "#F1F8E9" : "#FFFDF5", border: getOwnershipVerificationStatus(land) === "verified" ? "1px solid #C5E1A5" : "1px solid #FFE082", borderRadius: "10px" }}>
+                  <h3 style={{ color: getOwnershipVerificationStatus(land) === "verified" ? "#2E7D32" : "#6D4C41", marginTop: 0 }}>📄 Land Ownership Verification</h3>
+                  <p style={{ color: "#555", marginBottom: "10px" }}>Pattadhar Passbook verification is required before admin can approve this land listing.</p>
+                  <div style={{ display: "inline-block", ...getOwnershipVerificationStyle(land), padding: "8px 14px", borderRadius: "20px", fontWeight: "800", marginBottom: "12px" }}>
+                    {getOwnershipVerificationLabel(land)}
+                  </div>
+                  {getOwnershipVerificationStatus(land) === "verified" ? (
+                    <p style={{ color: "#2E7D32", fontWeight: "700", margin: "6px 0 0" }}>Your land ownership document has been verified by admin.</p>
+                  ) : (
+                    <button type="button" onClick={() => openOwnershipVerification(land.id)} style={{ background: "#5D4037", color: "#fff", border: "none", borderRadius: "8px", padding: "10px 16px", cursor: "pointer", fontWeight: "700" }}>
+                      📤 {getOwnershipVerificationStatus(land) === "pending" ? "View Verification Status" : "Submit / Update Pattadhar Passbook"}
+                    </button>
                   )}
                 </div>
 

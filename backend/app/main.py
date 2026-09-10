@@ -10,7 +10,8 @@ from app.database import Base, engine
 from app.routers import admin, chat, dashboard, lands, upload, users,notifications, reports,land_images,activity_logs
 from app.routers import saved_searches
 from app.routers import reviews
-
+from app.routers import kyc
+from app.routers import land_ownership
 # Create all database tables
 Base.metadata.create_all(bind=engine)
 
@@ -73,6 +74,14 @@ app.include_router(reports.router)
 app.include_router(activity_logs.router)
 app.include_router(saved_searches.router)
 app.include_router(reviews.router)
+app.include_router(land_ownership.router)
+# =========================================================
+# STEP 68 - KYC / IDENTITY VERIFICATION
+# =========================================================
+
+app.include_router(
+    kyc.router
+)
 @app.get("/")
 def root():
     return {

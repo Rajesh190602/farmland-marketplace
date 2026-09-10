@@ -178,6 +178,10 @@ class LandResponse(BaseModel):
     rejection_reason: Optional[str] = None
     owner_id: int
 
+    # Public-safe field. Never expose the private passbook/document URL.
+    is_land_verified: bool = False
+    ownership_verification_status: str = "not_submitted"
+
     class Config:
         from_attributes = True
 
@@ -562,3 +566,71 @@ class PushSubscriptionCreate(BaseModel):
     endpoint: str
     keys: PushSubscriptionKeys
     user_agent: Optional[str] = None
+
+
+# =========================================================
+# STEP 68 - KYC / IDENTITY VERIFICATION
+# =========================================================
+
+class KYCSubmitResponse(BaseModel):
+    message: str
+    status: str
+
+
+class KYCVerificationResponse(BaseModel):
+    id: int
+    user_id: int
+    status: str
+    document_type: str
+    original_filename: Optional[str] = None
+    content_type: Optional[str] = None
+    masked_document_number: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    submitted_at: datetime
+    reviewed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class KYCReviewRequest(BaseModel):
+    action: Literal["verify", "reject", "changes_requested"]
+    reason: Optional[str] = Field(
+        default=None,
+        max_length=1000
+    )
+
+
+# =========================================================
+# STEP 69 - LAND OWNERSHIP / PATTADHAR PASSBOOK
+# =========================================================
+
+class LandOwnershipSubmitResponse(BaseModel):
+    message: str
+    land_id: int
+    status: str
+
+
+class LandOwnershipVerificationResponse(BaseModel):
+    id: int
+    land_id: int
+    status: str
+    original_filename: Optional[str] = None
+    content_type: Optional[str] = None
+    masked_document_number: Optional[str] = None
+    survey_number_snapshot: Optional[str] = None
+    owner_name_snapshot: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    submitted_at: datetime
+    reviewed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class LandOwnershipReviewRequest(BaseModel):
+    action: Literal["verify", "reject", "changes_requested"]
+    reason: Optional[str] = Field(
+        default=None,
+        max_length=1000
+    )

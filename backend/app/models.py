@@ -220,6 +220,19 @@ class User(Base):
     )
 
 
+    # -----------------------------------------------------
+    # Step 68 - KYC / Identity Verification
+    # -----------------------------------------------------
+
+    kyc_verification = relationship(
+        "UserKYCVerification",
+        foreign_keys="UserKYCVerification.user_id",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+
 # =========================================================
 # STEP 58 - USER ACCOUNT STATUS
 # =========================================================
@@ -274,6 +287,101 @@ class UserAccountStatus(Base):
     user = relationship(
         "User",
         back_populates="account_status"
+    )
+
+
+
+# =========================================================
+# STEP 68 - USER KYC / IDENTITY VERIFICATION
+# =========================================================
+
+class UserKYCVerification(Base):
+    __tablename__ = "user_kyc_verifications"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    status = Column(
+        String,
+        default="not_submitted",
+        nullable=False,
+        index=True
+    )
+
+    document_type = Column(
+        String,
+        nullable=False
+    )
+
+    document_public_id = Column(
+        String,
+        nullable=False
+    )
+
+    original_filename = Column(
+        String,
+        nullable=True
+    )
+
+    content_type = Column(
+        String,
+        nullable=True
+    )
+
+    masked_document_number = Column(
+        String,
+        nullable=True
+    )
+
+    rejection_reason = Column(
+        Text,
+        nullable=True
+    )
+
+    reviewed_by_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
+    submitted_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+
+    reviewed_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+
+    user = relationship(
+        "User",
+        foreign_keys=[user_id],
+        back_populates="kyc_verification"
+    )
+
+    reviewed_by = relationship(
+        "User",
+        foreign_keys=[reviewed_by_id]
     )
 
 
@@ -455,6 +563,29 @@ class Land(Base):
         back_populates="lands"
     )
 
+    # -----------------------------------------------------
+    # STEP 69 - LAND OWNERSHIP / PATTADHAR PASSBOOK
+    # -----------------------------------------------------
+    ownership_verification = relationship(
+        "LandOwnershipVerification",
+        back_populates="land",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    @property
+    def is_land_verified(self):
+        return bool(
+            self.ownership_verification
+            and self.ownership_verification.status == "verified"
+        )
+
+    @property
+    def ownership_verification_status(self):
+        if not self.ownership_verification:
+            return "not_submitted"
+        return self.ownership_verification.status
+
     images = relationship(
         "LandImage",
         back_populates="land",
@@ -555,6 +686,108 @@ class Land(Base):
         "LandReport",
         back_populates="land",
         cascade="all, delete-orphan"
+    )
+
+
+# =========================================================
+# STEP 69 - LAND OWNERSHIP / PATTADHAR PASSBOOK VERIFICATION
+# =========================================================
+
+class LandOwnershipVerification(Base):
+    __tablename__ = "land_ownership_verifications"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    land_id = Column(
+        Integer,
+        ForeignKey("lands.id"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    status = Column(
+        String,
+        default="not_submitted",
+        nullable=False,
+        index=True
+    )
+
+    # Private Cloudinary authenticated/raw document identifier.
+    document_public_id = Column(
+        String,
+        nullable=False
+    )
+
+    original_filename = Column(
+        String,
+        nullable=True
+    )
+
+    content_type = Column(
+        String,
+        nullable=True
+    )
+
+    # Optional masked passbook/document reference.
+    masked_document_number = Column(
+        String,
+        nullable=True
+    )
+
+    # Snapshot of key land details at the time of document submission.
+    survey_number_snapshot = Column(
+        String,
+        nullable=True
+    )
+
+    owner_name_snapshot = Column(
+        String,
+        nullable=True
+    )
+
+    rejection_reason = Column(
+        Text,
+        nullable=True
+    )
+
+    reviewed_by_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True
+    )
+
+    submitted_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+
+    reviewed_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+
+    land = relationship(
+        "Land",
+        back_populates="ownership_verification"
+    )
+
+    reviewed_by = relationship(
+        "User",
+        foreign_keys=[reviewed_by_id]
     )
 
 

@@ -24,6 +24,7 @@ from app.models import (
     UserReport,
     SavedSearch,
     UserAccountStatus,
+    LandOwnershipVerification,
 )
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
@@ -985,6 +986,41 @@ def approve_land(
     admin: int = Depends(get_current_admin)
 ):
     land = _get_land_for_moderation(land_id, db)
+
+    # =====================================================
+    # STEP 69 - LAND OWNERSHIP VERIFICATION GATE
+    #
+    # A Pattadhar Passbook must be privately submitted and
+    # verified before an admin can approve the listing.
+    # This is enforced on the backend so the rule cannot be
+    # bypassed by calling the approval API directly.
+    # =====================================================
+    ownership_verification = (
+        db.query(LandOwnershipVerification)
+        .filter(
+            LandOwnershipVerification.land_id == land.id
+        )
+        .first()
+    )
+
+    if not ownership_verification:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Pattadhar Passbook is required before this land "
+                "can be approved."
+            ),
+        )
+
+    if ownership_verification.status != "verified":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Land ownership is not verified yet. "
+                f"Current verification status: "
+                f"{ownership_verification.status}."
+            ),
+        )
 
     land.status = "approved"
     land.rejection_reason = None
