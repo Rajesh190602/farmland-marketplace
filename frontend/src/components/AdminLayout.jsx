@@ -75,6 +75,17 @@ function AdminLayout() {
             🟡 Pending Approvals
           </Link>
 
+          {/* Land Ownership Verification - Step 69 */}
+          <Link
+            to="/admin/land-ownership"
+            style={{
+              color: "white",
+              textDecoration: "none",
+            }}
+          >
+            📜 Land Ownership Verification
+          </Link>
+
           {/* Reports */}
           <Link
             to="/admin/reports"
