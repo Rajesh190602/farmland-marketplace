@@ -4,8 +4,6 @@ import Navbar from "../components/Navbar";
 import api from "../services/api";
 
 function LandOwnershipVerification() {
-  // Get landId directly from:
-  // /land-ownership/:landId
   const { landId } = useParams();
 
   const [status, setStatus] = useState(null);
@@ -60,14 +58,14 @@ function LandOwnershipVerification() {
   };
 
   // =========================================================
-  // Load status when landId is available
+  // Load status when landId changes
   // =========================================================
   useEffect(() => {
     loadStatus();
   }, [landId]);
 
   // =========================================================
-  // Select file
+  // File selection
   // =========================================================
   const handleFileChange = (event) => {
     const file = event.target.files?.[0] || null;
@@ -90,6 +88,7 @@ function LandOwnershipVerification() {
       setErrorMessage(
         "Only PDF, JPG, PNG or WEBP files are allowed."
       );
+
       setSelectedFile(null);
 
       if (fileRef.current) {
@@ -101,6 +100,7 @@ function LandOwnershipVerification() {
 
     if (file.size > 10 * 1024 * 1024) {
       setErrorMessage("Maximum file size is 10 MB.");
+
       setSelectedFile(null);
 
       if (fileRef.current) {
@@ -112,7 +112,7 @@ function LandOwnershipVerification() {
   };
 
   // =========================================================
-  // Upload Pattadhar Passbook
+  // Submit Pattadhar Passbook
   // =========================================================
   const handleUpload = async () => {
     if (!landId) {
@@ -148,7 +148,13 @@ function LandOwnershipVerification() {
 
       const formData = new FormData();
 
-      formData.append("file", selectedFile);
+      // IMPORTANT:
+      // Backend expects:
+      // document: UploadFile = File(...)
+      //
+      // Therefore the multipart field MUST be "document",
+      // not "file".
+      formData.append("document", selectedFile);
 
       await api.post(
         `/land-ownership/lands/${landId}/document`,
@@ -174,17 +180,32 @@ function LandOwnershipVerification() {
     } catch (error) {
       console.error("Passbook upload error:", error);
 
+      const statusCode = error.response?.status;
       const detail = error.response?.data?.detail;
 
+      let message = "Failed to submit Pattadhar Passbook.";
+
       if (typeof detail === "string") {
-        setErrorMessage(detail);
-        alert(detail);
-      } else {
-        const message =
-          "Failed to submit Pattadhar Passbook.";
-        setErrorMessage(message);
-        alert(message);
+        message = detail;
+      } else if (Array.isArray(detail)) {
+        message = detail
+          .map((item) => item?.msg || item?.message || String(item))
+          .join("\n");
+      } else if (statusCode === 422) {
+        message =
+          "The upload request was invalid. Please select a valid Pattadhar Passbook and try again.";
+      } else if (statusCode === 401) {
+        message =
+          "Your login session has expired. Please login again.";
+      } else if (statusCode === 403) {
+        message =
+          "You are not allowed to submit ownership documents for this land.";
+      } else if (statusCode === 413) {
+        message = "The Pattadhar Passbook must be 10 MB or smaller.";
       }
+
+      setErrorMessage(message);
+      alert(message);
     } finally {
       setUploading(false);
     }
@@ -197,9 +218,6 @@ function LandOwnershipVerification() {
     status?.status || "not_submitted"
   ).toLowerCase();
 
-  // =========================================================
-  // Status styles
-  // =========================================================
   const statusStyleMap = {
     pending: {
       background: "#fff3cd",
@@ -236,9 +254,6 @@ function LandOwnershipVerification() {
     statusStyleMap[statusText] ||
     statusStyleMap.not_submitted;
 
-  // =========================================================
-  // Status label
-  // =========================================================
   const getStatusLabel = () => {
     switch (statusText) {
       case "pending":
@@ -258,9 +273,6 @@ function LandOwnershipVerification() {
     }
   };
 
-  // =========================================================
-  // Can upload/resubmit?
-  // =========================================================
   const canSubmit =
     statusText === "not_submitted" ||
     statusText === "rejected" ||
@@ -286,9 +298,6 @@ function LandOwnershipVerification() {
             border: "1px solid #e5e7eb",
           }}
         >
-          {/* =================================================
-              Header
-          ================================================= */}
           <h2
             style={{
               marginTop: 0,
@@ -309,7 +318,6 @@ function LandOwnershipVerification() {
             and is not displayed to buyers.
           </p>
 
-          {/* Land ID */}
           <div
             style={{
               marginBottom: 20,
@@ -322,9 +330,6 @@ function LandOwnershipVerification() {
             <strong>Land ID:</strong> {landId || "-"}
           </div>
 
-          {/* =================================================
-              Error
-          ================================================= */}
           {errorMessage && (
             <div
               style={{
@@ -341,9 +346,6 @@ function LandOwnershipVerification() {
             </div>
           )}
 
-          {/* =================================================
-              Loading
-          ================================================= */}
           {loading ? (
             <div
               style={{
@@ -363,9 +365,6 @@ function LandOwnershipVerification() {
             </div>
           ) : (
             <>
-              {/* =================================================
-                  Status
-              ================================================= */}
               <div
                 style={{
                   display: "inline-block",
@@ -378,9 +377,6 @@ function LandOwnershipVerification() {
                 {getStatusLabel()}
               </div>
 
-              {/* =================================================
-                  Submitted Document
-              ================================================= */}
               {status?.original_filename && (
                 <div
                   style={{
@@ -395,9 +391,6 @@ function LandOwnershipVerification() {
                 </div>
               )}
 
-              {/* =================================================
-                  Survey Number
-              ================================================= */}
               {status?.survey_number_snapshot && (
                 <p style={{ marginTop: 15 }}>
                   <strong>
@@ -407,9 +400,6 @@ function LandOwnershipVerification() {
                 </p>
               )}
 
-              {/* =================================================
-                  Owner Name
-              ================================================= */}
               {status?.owner_name_snapshot && (
                 <p>
                   <strong>
@@ -419,9 +409,6 @@ function LandOwnershipVerification() {
                 </p>
               )}
 
-              {/* =================================================
-                  Rejection / Admin Feedback
-              ================================================= */}
               {status?.rejection_reason && (
                 <div
                   style={{
@@ -439,9 +426,6 @@ function LandOwnershipVerification() {
                 </div>
               )}
 
-              {/* =================================================
-                  Upload / Resubmit
-              ================================================= */}
               {canSubmit && (
                 <div
                   style={{
@@ -491,7 +475,6 @@ function LandOwnershipVerification() {
                     onChange={handleFileChange}
                   />
 
-                  {/* Selected file */}
                   {selectedFile && (
                     <div
                       style={{
@@ -504,7 +487,9 @@ function LandOwnershipVerification() {
                     >
                       <strong>Selected:</strong>{" "}
                       {selectedFile.name}
+
                       <br />
+
                       <small>
                         Size:{" "}
                         {(
@@ -516,7 +501,6 @@ function LandOwnershipVerification() {
                     </div>
                   )}
 
-                  {/* Upload button */}
                   <button
                     type="button"
                     onClick={handleUpload}
@@ -547,9 +531,6 @@ function LandOwnershipVerification() {
                 </div>
               )}
 
-              {/* =================================================
-                  Pending
-              ================================================= */}
               {statusText === "pending" && (
                 <div
                   style={{
@@ -565,11 +546,7 @@ function LandOwnershipVerification() {
                     ⏳ Your passbook is under review.
                   </strong>
 
-                  <p
-                    style={{
-                      marginBottom: 0,
-                    }}
-                  >
+                  <p style={{ marginBottom: 0 }}>
                     An administrator will check your
                     Pattadhar Passbook before the land can
                     be approved.
@@ -577,9 +554,6 @@ function LandOwnershipVerification() {
                 </div>
               )}
 
-              {/* =================================================
-                  Verified
-              ================================================= */}
               {statusText === "verified" && (
                 <div
                   style={{
@@ -595,11 +569,7 @@ function LandOwnershipVerification() {
                     ✓ Land ownership has been verified.
                   </strong>
 
-                  <p
-                    style={{
-                      marginBottom: 0,
-                    }}
-                  >
+                  <p style={{ marginBottom: 0 }}>
                     The land can now proceed through the
                     normal admin approval process. Ownership
                     verification does not automatically
@@ -608,9 +578,6 @@ function LandOwnershipVerification() {
                 </div>
               )}
 
-              {/* =================================================
-                  Rejected
-              ================================================= */}
               {statusText === "rejected" && (
                 <div
                   style={{
@@ -626,20 +593,13 @@ function LandOwnershipVerification() {
                     ❌ Your passbook was rejected.
                   </strong>
 
-                  <p
-                    style={{
-                      marginBottom: 0,
-                    }}
-                  >
+                  <p style={{ marginBottom: 0 }}>
                     Please review the admin feedback and
                     submit a corrected document.
                   </p>
                 </div>
               )}
 
-              {/* =================================================
-                  Changes Requested
-              ================================================= */}
               {statusText === "changes_requested" && (
                 <div
                   style={{
@@ -655,11 +615,7 @@ function LandOwnershipVerification() {
                     ⚠️ Changes are required.
                   </strong>
 
-                  <p
-                    style={{
-                      marginBottom: 0,
-                    }}
-                  >
+                  <p style={{ marginBottom: 0 }}>
                     Please correct the passbook/document
                     according to the administrator's feedback
                     and resubmit it.
@@ -667,9 +623,6 @@ function LandOwnershipVerification() {
                 </div>
               )}
 
-              {/* =================================================
-                  Not submitted
-              ================================================= */}
               {statusText === "not_submitted" && (
                 <div
                   style={{
@@ -685,11 +638,7 @@ function LandOwnershipVerification() {
                     📄 Pattadhar Passbook not submitted yet.
                   </strong>
 
-                  <p
-                    style={{
-                      marginBottom: 0,
-                    }}
-                  >
+                  <p style={{ marginBottom: 0 }}>
                     Submit your passbook above so an
                     administrator can verify land ownership.
                   </p>
