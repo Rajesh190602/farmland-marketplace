@@ -22,6 +22,7 @@ from app.models import (
     LandReport,
     UserReport,
     TransactionDocument,
+    UserKYCVerification,
 )
 from app.schemas import (
     LandAvailabilityResponse,
@@ -126,6 +127,62 @@ def require_farmer(
         )
 
     return user
+
+
+# =========================================================
+# STEP 74C-1 - VERIFICATION-AWARE MARKETPLACE RESPONSES
+# =========================================================
+# Verification is always read from the authoritative KYC record.
+# These fields are response-only and are NOT persisted in marketplace rows.
+
+def _is_user_kyc_verified(user) -> bool:
+    return bool(
+        user
+        and user.kyc_verification
+        and user.kyc_verification.status == "verified"
+    )
+
+
+def _decorate_marketplace_item(db: Session, item, land=None, buyer=None, farmer=None):
+    """Attach server-authoritative verification flags to an activity item."""
+    if land is None:
+        land = db.query(Land).filter(Land.id == item.land_id).first()
+
+    if buyer is None and getattr(item, "buyer_id", None):
+        buyer = db.query(User).filter(User.id == item.buyer_id).first()
+
+    if farmer is None:
+        farmer_id = getattr(item, "farmer_id", None)
+        if farmer_id:
+            farmer = db.query(User).filter(User.id == farmer_id).first()
+        elif land and land.owner_id:
+            farmer = db.query(User).filter(User.id == land.owner_id).first()
+
+    item.is_land_verified = bool(
+        land and (
+            land.is_land_verified is True
+            or land.ownership_verification_status == "verified"
+        )
+    )
+    item.ownership_verification_status = (
+        land.ownership_verification_status if land else "not_submitted"
+    )
+    item.is_verified_farmer = bool(
+        farmer and farmer.role == "farmer" and _is_user_kyc_verified(farmer)
+    )
+    item.is_verified_buyer = bool(
+        buyer and buyer.role == "buyer" and _is_user_kyc_verified(buyer)
+    )
+    return item
+
+
+def _decorate_offer_history(db: Session, entries):
+    for entry in entries or []:
+        sender = getattr(entry, "sender", None)
+        if sender is None and getattr(entry, "sender_id", None):
+            sender = db.query(User).filter(User.id == entry.sender_id).first()
+        entry.is_verified_sender = _is_user_kyc_verified(sender)
+    return entries
 
 
 def get_or_create_availability(
@@ -668,6 +725,8 @@ def get_received_inquiries(
         .all()
     )
 
+    for inquiry in inquiries:
+        _decorate_marketplace_item(db, inquiry)
     return inquiries
 
 
@@ -688,7 +747,7 @@ def get_my_inquiries(
         current_user,
     )
 
-    return (
+    inquiries = (
         db.query(LandInquiry)
         .filter(
             LandInquiry.buyer_id == buyer.id
@@ -699,6 +758,9 @@ def get_my_inquiries(
         .limit(100)
         .all()
     )
+    for inquiry in inquiries:
+        _decorate_marketplace_item(db, inquiry)
+    return inquiries
 
 
 # =========================================================
@@ -1021,6 +1083,7 @@ def create_offer(
 
     db.commit()
     db.refresh(offer)
+    _decorate_marketplace_item(db, offer)
     return offer
 
 
@@ -1033,7 +1096,7 @@ def get_received_offers(
     current_user: int = Depends(get_current_user),
 ):
     farmer = require_farmer(db, current_user)
-    return (
+    offers = (
         db.query(LandOffer)
         .join(Land, Land.id == LandOffer.land_id)
         .filter(Land.owner_id == farmer.id)
@@ -1041,6 +1104,9 @@ def get_received_offers(
         .limit(100)
         .all()
     )
+    for offer in offers:
+        _decorate_marketplace_item(db, offer)
+    return offers
 
 
 @router.get(
@@ -1052,13 +1118,16 @@ def get_my_offers(
     current_user: int = Depends(get_current_user),
 ):
     buyer = require_buyer(db, current_user)
-    return (
+    offers = (
         db.query(LandOffer)
         .filter(LandOffer.buyer_id == buyer.id)
         .order_by(LandOffer.updated_at.desc(), LandOffer.created_at.desc())
         .limit(100)
         .all()
     )
+    for offer in offers:
+        _decorate_marketplace_item(db, offer)
+    return offers
 
 
 @router.get(
@@ -1105,7 +1174,7 @@ def get_offer_history(
             )
         ]
 
-    return history
+    return _decorate_offer_history(db, history)
 
 
 def get_active_reservation_for_land(
@@ -1328,13 +1397,16 @@ def get_my_reservations(
     current_user: int = Depends(get_current_user),
 ):
     buyer = require_buyer(db, current_user)
-    return (
+    reservations = (
         db.query(Reservation)
         .filter(Reservation.buyer_id == buyer.id)
         .order_by(Reservation.updated_at.desc(), Reservation.created_at.desc())
         .limit(100)
         .all()
     )
+    for reservation in reservations:
+        _decorate_marketplace_item(db, reservation)
+    return reservations
 
 
 @router.get(
@@ -1346,13 +1418,16 @@ def get_received_reservations(
     current_user: int = Depends(get_current_user),
 ):
     farmer = require_farmer(db, current_user)
-    return (
+    reservations = (
         db.query(Reservation)
         .filter(Reservation.farmer_id == farmer.id)
         .order_by(Reservation.updated_at.desc(), Reservation.created_at.desc())
         .limit(100)
         .all()
     )
+    for reservation in reservations:
+        _decorate_marketplace_item(db, reservation)
+    return reservations
 
 
 def _update_reservation_status(
@@ -2054,6 +2129,21 @@ def get_my_transaction_history(
             "buyer_name": buyer.full_name if buyer else None,
             "farmer_id": sale.farmer_id,
             "farmer_name": farmer.full_name if farmer else None,
+            "is_land_verified": bool(
+                land and (
+                    land.is_land_verified is True
+                    or land.ownership_verification_status == "verified"
+                )
+            ),
+            "ownership_verification_status": (
+                land.ownership_verification_status if land else "not_submitted"
+            ),
+            "is_verified_farmer": bool(
+                farmer and farmer.role == "farmer" and _is_user_kyc_verified(farmer)
+            ),
+            "is_verified_buyer": bool(
+                buyer and buyer.role == "buyer" and _is_user_kyc_verified(buyer)
+            ),
             "amount": sale.amount,
             "status": sale.status,
             "message": sale.message,
@@ -2436,7 +2526,7 @@ def get_received_site_visits(
         current_user,
     )
 
-    return (
+    visits = (
         db.query(SiteVisit)
         .join(
             Land,
@@ -2451,6 +2541,9 @@ def get_received_site_visits(
         .limit(100)
         .all()
     )
+    for visit in visits:
+        _decorate_marketplace_item(db, visit)
+    return visits
 
 
 # =========================================================
@@ -2470,7 +2563,7 @@ def get_my_site_visits(
         current_user,
     )
 
-    return (
+    visits = (
         db.query(SiteVisit)
         .filter(
             SiteVisit.buyer_id == buyer.id
@@ -2481,6 +2574,9 @@ def get_my_site_visits(
         .limit(100)
         .all()
     )
+    for visit in visits:
+        _decorate_marketplace_item(db, visit)
+    return visits
 
 # =========================================================
 # FARMER - UPDATE SITE VISIT

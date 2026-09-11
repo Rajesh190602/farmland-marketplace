@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function MarketplaceActivity() {
   const navigate = useNavigate();
@@ -1122,15 +1123,35 @@ function MarketplaceActivity() {
                           }}
                         >
                           Land ID: {item.land_id}
-                        </p>
+                        </p>                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                          {item.is_land_verified === true && (
+                            <VerifiedBadge type="land" verified compact />
+                          )}
+                          {userRole === "farmer" && item.is_verified_buyer === true && (
+                            <VerifiedBadge type="buyer" verified compact />
+                          )}
+                          {userRole === "buyer" && item.is_verified_farmer === true && (
+                            <VerifiedBadge type="farmer" verified compact />
+                          )}
+                        </div>                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                          {item.is_land_verified === true && (
+                            <VerifiedBadge type="land" verified compact />
+                          )}
+                          {userRole === "farmer" && item.is_verified_buyer === true && (
+                            <VerifiedBadge type="buyer" verified compact />
+                          )}
+                          {userRole === "buyer" && item.is_verified_farmer === true && (
+                            <VerifiedBadge type="farmer" verified compact />
+                          )}
+                        </div>
 
                         {/* CHAT WITH BUYER */}
 
                         <button
                           onClick={() =>
                             startChat(item)
-                            
-                            
+
+
                           }
                           disabled={
                             actionLoading ===
@@ -1296,7 +1317,17 @@ function MarketplaceActivity() {
 
                           <p style={{ fontSize: "13px", color: "#888" }}>
                             Land ID: {item.land_id}
-                          </p>
+                          </p>                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                            {item.is_land_verified === true && (
+                              <VerifiedBadge type="land" verified compact />
+                            )}
+                            {userRole === "farmer" && item.is_verified_buyer === true && (
+                              <VerifiedBadge type="buyer" verified compact />
+                            )}
+                            {userRole === "buyer" && item.is_verified_farmer === true && (
+                              <VerifiedBadge type="farmer" verified compact />
+                            )}
+                          </div>
 
                           <div
                             style={{
@@ -1343,7 +1374,7 @@ function MarketplaceActivity() {
                                       fontSize: "13px",
                                     }}
                                   >
-                                    <div style={{ fontWeight: "700" }}>
+                                    <div style={{ fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                       {entry.action === "offer"
                                         ? "💰 Offer"
                                         : entry.action === "counter"
@@ -1353,6 +1384,13 @@ function MarketplaceActivity() {
                                         : "❌ Rejected"}
                                       {" · "}
                                       {entry.sender_role === "farmer" ? "Farmer" : "Buyer"}
+                                      {entry.is_verified_sender === true && (
+                                        <VerifiedBadge
+                                          type={entry.sender_role === "farmer" ? "farmer" : "buyer"}
+                                          verified
+                                          compact
+                                        />
+                                      )}
                                     </div>
                                     <div style={{ marginTop: "3px" }}>
                                       ₹{Number(entry.amount || 0).toLocaleString("en-IN")}
@@ -1560,7 +1598,17 @@ function MarketplaceActivity() {
                         </p>
                         <p>
                           <strong>Amount:</strong> ₹{Number(item.amount || 0).toLocaleString("en-IN")}
-                        </p>
+                        </p>                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                          {item.is_land_verified === true && (
+                            <VerifiedBadge type="land" verified compact />
+                          )}
+                          {userRole === "farmer" && item.is_verified_buyer === true && (
+                            <VerifiedBadge type="buyer" verified compact />
+                          )}
+                          {userRole === "buyer" && item.is_verified_farmer === true && (
+                            <VerifiedBadge type="farmer" verified compact />
+                          )}
+                        </div>
                         {item.offer_id && (
                           <p>
                             <strong>Linked Offer:</strong> #{item.offer_id}
@@ -1820,6 +1868,17 @@ function MarketplaceActivity() {
                         <p>
                           <strong>Farmer:</strong> {item.farmer_name || `User #${item.farmer_id}`}
                         </p>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px", marginBottom: "8px" }}>
+                          {item.is_land_verified === true && (
+                            <VerifiedBadge type="land" verified compact />
+                          )}
+                          {item.is_verified_buyer === true && (
+                            <VerifiedBadge type="buyer" verified compact />
+                          )}
+                          {item.is_verified_farmer === true && (
+                            <VerifiedBadge type="farmer" verified compact />
+                          )}
+                        </div>
 
                         <p
                           style={{
@@ -2092,7 +2151,7 @@ function MarketplaceActivity() {
                         <button
                           onClick={() =>
                             startChat(item)
-                      
+
                           }
                           disabled={
                             actionLoading ===

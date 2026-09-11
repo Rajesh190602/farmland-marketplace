@@ -182,6 +182,7 @@ class LandResponse(BaseModel):
     is_land_verified: bool = False
     ownership_verification_status: str = "not_submitted"
     is_verified_farmer: bool = False
+
     class Config:
         from_attributes = True
 
@@ -261,6 +262,12 @@ class LandInquiryResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
+    # STEP 74C-1 - server-authoritative marketplace trust flags
+    is_land_verified: bool = False
+    ownership_verification_status: str = "not_submitted"
+    is_verified_farmer: bool = False
+    is_verified_buyer: bool = False
+
     class Config:
         from_attributes = True
 
@@ -301,6 +308,12 @@ class LandOfferResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
+    # STEP 74C-1 - server-authoritative marketplace trust flags
+    is_land_verified: bool = False
+    ownership_verification_status: str = "not_submitted"
+    is_verified_farmer: bool = False
+    is_verified_buyer: bool = False
+
     class Config:
         from_attributes = True
 
@@ -335,6 +348,8 @@ class OfferNegotiationHistoryResponse(BaseModel):
     message: Optional[str] = None
     created_at: datetime
 
+    is_verified_sender: bool = False
+
     class Config:
         from_attributes = True
 
@@ -367,6 +382,12 @@ class ReservationResponse(BaseModel):
     updated_at: Optional[datetime] = None
     confirmed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
+
+    # STEP 74C-1 - server-authoritative marketplace trust flags
+    is_land_verified: bool = False
+    ownership_verification_status: str = "not_submitted"
+    is_verified_farmer: bool = False
+    is_verified_buyer: bool = False
 
     class Config:
         from_attributes = True
@@ -403,6 +424,12 @@ class SaleResponse(BaseModel):
     completed_at: datetime
     created_at: datetime
 
+    # STEP 74C-1 - server-authoritative marketplace trust flags
+    is_land_verified: bool = False
+    ownership_verification_status: str = "not_submitted"
+    is_verified_farmer: bool = False
+    is_verified_buyer: bool = False
+
     class Config:
         from_attributes = True
 
@@ -421,6 +448,12 @@ class TransactionHistoryResponse(BaseModel):
     message: Optional[str] = None
     completed_at: datetime
     created_at: datetime
+
+    # STEP 74C-1 - server-authoritative marketplace trust flags
+    is_land_verified: bool = False
+    ownership_verification_status: str = "not_submitted"
+    is_verified_farmer: bool = False
+    is_verified_buyer: bool = False
 
 
 # =========================================================
@@ -447,6 +480,12 @@ class SiteVisitResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    # STEP 74C-1 - server-authoritative marketplace trust flags
+    is_land_verified: bool = False
+    ownership_verification_status: str = "not_submitted"
+    is_verified_farmer: bool = False
+    is_verified_buyer: bool = False
 
     class Config:
         from_attributes = True

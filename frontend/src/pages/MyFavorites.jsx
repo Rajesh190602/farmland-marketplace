@@ -12,6 +12,7 @@ import {
 
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function MyFavorites() {
   const [loading, setLoading] = useState(true);
@@ -324,15 +325,34 @@ function MyFavorites() {
                     padding: "20px",
                   }}
                 >
-                  <h2
+                  <div
                     style={{
-                      marginTop: 0,
-                      color: "#2E7D32",
+                      display: "flex",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "8px",
                       marginBottom: "15px",
                     }}
                   >
-                    {land.title}
-                  </h2>
+                    <h2
+                      style={{
+                        marginTop: 0,
+                        marginBottom: 0,
+                        color: "#2E7D32",
+                      }}
+                    >
+                      {land.title}
+                    </h2>
+
+                    {(land?.is_land_verified === true ||
+                      land?.ownership_verification_status === "verified") && (
+                      <VerifiedBadge
+                        type="land"
+                        verified
+                        compact
+                      />
+                    )}
+                  </div>
 
                   <p
                     style={{

@@ -22,6 +22,7 @@ import {
 
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function Home() {
   const navigate = useNavigate();
@@ -1222,7 +1223,33 @@ function Home() {
                     </div>
 
                     <div className="home-land-details" style={{ padding: "18px" }}>
-                      <h3 style={{ margin: "0 0 8px", color: "#174D1C" }}>{land.title || `Land #${land.id}`}</h3>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        <h3
+                          style={{
+                            margin: 0,
+                            color: "#174D1C",
+                          }}
+                        >
+                          {land.title || `Land #${land.id}`}
+                        </h3>
+
+                        {(land?.is_land_verified === true ||
+                          land?.ownership_verification_status === "verified") && (
+                          <VerifiedBadge
+                            type="land"
+                            verified
+                            compact
+                          />
+                        )}
+                      </div>
                       <p>📍 {land.village}, {land.district}</p>
                       <p>🌱 Soil: <strong>{land.soil_type || "-"}</strong></p>
                       <p>📐 Area: <strong>{land.area || 0} Acres</strong></p>
@@ -1772,17 +1799,35 @@ function Home() {
                       padding: "20px 20px 22px",
                     }}
                   >
-                    <h3
+                    <div
                       style={{
-                        marginBottom:
-                          "10px",
-                        color: "#1B5E20",
-                        fontSize: "20px",
-                        lineHeight: "1.3",
+                        display: "flex",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                        marginBottom: "10px",
                       }}
                     >
-                      {land.title}
-                    </h3>
+                      <h3
+                        style={{
+                          margin: 0,
+                          color: "#1B5E20",
+                          fontSize: "20px",
+                          lineHeight: "1.3",
+                        }}
+                      >
+                        {land.title}
+                      </h3>
+
+                      {(land?.is_land_verified === true ||
+                        land?.ownership_verification_status === "verified") && (
+                        <VerifiedBadge
+                          type="land"
+                          verified
+                          compact
+                        />
+                      )}
+                    </div>
 
                     <p>
                       <strong>📍</strong>{" "}
@@ -1917,16 +1962,35 @@ function Home() {
                       padding: "20px 20px 22px",
                     }}
                   >
-                    <h3
+                    <div
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "8px",
                         marginBottom: "10px",
-                        color: "#1B5E20",
-                        fontSize: "20px",
-                        lineHeight: "1.3",
                       }}
                     >
-                      {land.title}
-                    </h3>
+                      <h3
+                        style={{
+                          margin: 0,
+                          color: "#1B5E20",
+                          fontSize: "20px",
+                          lineHeight: "1.3",
+                        }}
+                      >
+                        {land.title}
+                      </h3>
+
+                      {(land?.is_land_verified === true ||
+                        land?.ownership_verification_status === "verified") && (
+                        <VerifiedBadge
+                          type="land"
+                          verified
+                          compact
+                        />
+                      )}
+                    </div>
 
                     <p>
                       <strong>📍</strong>{" "}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import FarmlandDiscoveryMap from "../components/FarmlandDiscoveryMap.jsx";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 const EMPTY_FILTERS = {
   district: "",
@@ -708,7 +709,6 @@ function SearchLands() {
         </h4>
       )}
 
-
       {/* =====================================================
           STEP 63 — MAP-BASED FARMLAND DISCOVERY
       ===================================================== */}
@@ -802,9 +802,23 @@ function SearchLands() {
                 />
               )}
 
-              <h4>
-                {land.title}
-              </h4>
+              <div
+                className="d-flex align-items-center flex-wrap gap-2"
+                style={{ marginBottom: "8px" }}
+              >
+                <h4 className="mb-0">
+                  {land.title}
+                </h4>
+
+                {(land?.is_land_verified === true ||
+                  land?.ownership_verification_status === "verified") && (
+                  <VerifiedBadge
+                    type="land"
+                    verified
+                    compact
+                  />
+                )}
+              </div>
 
               <p>
                 {land.description}

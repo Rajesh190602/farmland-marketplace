@@ -14,6 +14,7 @@ import {
 } from "react-icons/fa";
 
 import Navbar from "../components/Navbar";
+import VerifiedBadge from "../components/VerifiedBadge";
 import api from "../services/api";
 
 
@@ -397,14 +398,35 @@ function AllLands() {
                 >
                   {/* Title */}
 
-                  <h2
+                  <div
                     style={{
-                      marginTop: 0,
-                      color: "#2E7D32",
+                      display: "flex",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                      marginBottom: "8px",
                     }}
                   >
-                    {land.title}
-                  </h2>
+                    <h2
+                      style={{
+                        margin: 0,
+                        color: "#2E7D32",
+                      }}
+                    >
+                      {land.title}
+                    </h2>
+
+                    {(
+                      land?.is_land_verified === true ||
+                      land?.ownership_verification_status === "verified"
+                    ) && (
+                      <VerifiedBadge
+                        type="land"
+                        verified
+                        compact
+                      />
+                    )}
+                  </div>
 
                   {/* Badges */}
 
@@ -441,6 +463,30 @@ function AllLands() {
                     <strong>🏛 District:</strong>{" "}
                     {land.district}
                   </p>
+
+                  {land?.owner_name && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                        margin: "4px 0 12px",
+                        color: "#444",
+                      }}
+                    >
+                      <strong>👤 Farmer:</strong>
+                      <span>{land.owner_name}</span>
+
+                      {land?.is_verified_farmer === true && (
+                        <VerifiedBadge
+                          type="farmer"
+                          verified
+                          compact
+                        />
+                      )}
+                    </div>
+                  )}
 
                   <p>
                     <strong>Description:</strong>
