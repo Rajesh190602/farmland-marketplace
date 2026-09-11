@@ -37,6 +37,7 @@ from app.schemas import (
     KYCVerificationResponse,
 )
 from app.utils.activity_log import create_activity_log
+from app.utils.email import send_notification_email
 
 
 router = APIRouter(
@@ -801,6 +802,27 @@ def review_kyc(
     )
 
     db.commit()
+
+    # Send a verification email only after the KYC approval has been
+    # successfully committed. Email delivery must not undo the approval.
+    if action == "verify" and user:
+        email_sent = send_notification_email(
+            receiver_email=user.email,
+            receiver_name=user.full_name,
+            title="Your account has been verified",
+            message=(
+                "Your KYC verification has been successfully approved "
+                "by our admin team.\n\n"
+                "Your Farmland Marketplace account is now verified and active.\n\n"
+                "Please continue to login to access the marketplace."
+            ),
+        )
+
+        print(
+            f"KYC verification email for user {user.id}: "
+            f"{'sent' if email_sent else 'failed'}"
+        )
+
     db.refresh(verification)
 
     return {
