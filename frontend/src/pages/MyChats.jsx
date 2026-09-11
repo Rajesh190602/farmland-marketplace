@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function MyChats() {
   const [conversations, setConversations] = useState([]);
@@ -505,14 +506,55 @@ function MyChats() {
               }}
             >
               {/* User */}
-              <h3
+              <div
                 style={{
-                  marginTop: 0,
-                  color: "#2E7D32",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  flexWrap: "wrap",
                 }}
               >
-                👤 {chat.other_user}
-              </h3>
+                <h3
+                  style={{
+                    marginTop: 0,
+                    marginBottom: 0,
+                    color: "#2E7D32",
+                  }}
+                >
+                  👤 {chat.other_user}
+                </h3>
+
+                {chat.is_verified_farmer === true && (
+                  <VerifiedBadge type="farmer" verified compact />
+                )}
+                {chat.is_verified_buyer === true && (
+                  <VerifiedBadge type="buyer" verified compact />
+                )}
+                {chat.is_land_verified === true && (
+                  <VerifiedBadge type="land" verified compact />
+                )}
+              </div>
+
+              {!chat.is_land_verified && (
+                <div
+                  style={{
+                    marginTop: "7px",
+                    display: "inline-block",
+                    fontSize: "11px",
+                    color: "#8A4B00",
+                    background: "#FFF3E0",
+                    border: "1px solid #FFE0B2",
+                    borderRadius: "7px",
+                    padding: "5px 8px",
+                  }}
+                >
+                  ⚠ Ownership verification {
+                    String(chat.ownership_verification_status || "not_submitted").toLowerCase() === "pending"
+                      ? "pending"
+                      : "not approved"
+                  }
+                </div>
+              )}
 
               {/* Last message + unread count */}
               <div

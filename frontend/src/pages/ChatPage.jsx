@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 export default function ChatPage() {
   const { conversationId } = useParams();
@@ -22,6 +23,10 @@ export default function ChatPage() {
 
   const [otherUserId, setOtherUserId] = useState(null);
   const [otherUserName, setOtherUserName] = useState("User");
+  const [otherUserRole, setOtherUserRole] = useState("");
+  const [otherUserVerified, setOtherUserVerified] = useState(false);
+  const [isLandVerified, setIsLandVerified] = useState(false);
+  const [ownershipVerificationStatus, setOwnershipVerificationStatus] = useState("not_submitted");
 
   // =====================================================
   // PHASE 4 - CONVERSATION TIED TO LAND
@@ -254,6 +259,23 @@ export default function ChatPage() {
 
       setOtherUserName(
         resolvedOtherUserName
+      );
+      setOtherUserRole(
+        String(data.other_user_role || data.otherUserRole || "").toLowerCase()
+      );
+      setOtherUserVerified(
+        data.other_user_verified === true ||
+          data.otherUserVerified === true ||
+          (data.other_user_role === "farmer" && data.is_verified_farmer === true) ||
+          (data.other_user_role === "buyer" && data.is_verified_buyer === true)
+      );
+
+      // Server-authoritative verification state.
+      setIsLandVerified(
+        data.is_land_verified === true
+      );
+      setOwnershipVerificationStatus(
+        String(data.ownership_verification_status || "not_submitted").toLowerCase()
       );
 
       // The backend already ties each conversation to its land and
@@ -1715,17 +1737,38 @@ export default function ChatPage() {
             >
               <div
                 style={{
-                  fontSize: "16px",
-                  fontWeight: "600",
-                  overflow: "hidden",
-                  textOverflow:
-                    "ellipsis",
-                  whiteSpace:
-                    "nowrap",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  flexWrap: "wrap",
                 }}
               >
-                {otherUserName}
+                <div
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {otherUserName}
+                </div>
+
+                {otherUserVerified && (otherUserRole === "farmer" || otherUserRole === "buyer") && (
+                  <VerifiedBadge
+                    type={otherUserRole}
+                    verified
+                    compact
+                  />
+                )}
               </div>
+
+              {isLandVerified && (
+                <div style={{ marginTop: "4px" }}>
+                  <VerifiedBadge type="land" verified compact />
+                </div>
+              )}
 
               <div
                 style={{
@@ -1898,6 +1941,24 @@ export default function ChatPage() {
                     {conversationLandTitle || `Land #${conversationLandId}`}
                   </div>
                 </div>
+
+                {!isLandVerified && (
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#8A4B00",
+                      background: "#FFF3E0",
+                      border: "1px solid #FFE0B2",
+                      borderRadius: "7px",
+                      padding: "6px 8px",
+                      lineHeight: "1.3",
+                      maxWidth: "180px",
+                    }}
+                    title="Ownership verification has not been approved for this land."
+                  >
+                    ⚠ Ownership verification {ownershipVerificationStatus === "pending" ? "pending" : "not approved"}
+                  </div>
+                )}
 
                 <button
                   type="button"

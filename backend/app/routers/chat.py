@@ -181,6 +181,46 @@ def unmute_conversation(
 
 
 # =========================================================
+# VERIFICATION TRUST HELPERS (74D-2A)
+# Public-safe, server-authoritative verification flags only.
+# Never expose KYC documents, document numbers, rejection reasons,
+# or admin review details through chat APIs.
+# =========================================================
+
+def _chat_verification_flags(user):
+    """Return server-authoritative farmer/buyer verification flags."""
+    kyc_verified = bool(
+        user
+        and getattr(user, "kyc_verification", None)
+        and user.kyc_verification.status == "verified"
+    )
+    role = (
+        str(getattr(user, "role", "") or "").strip().lower()
+        if user
+        else ""
+    )
+    return {
+        "is_verified_farmer": bool(kyc_verified and role == "farmer"),
+        "is_verified_buyer": bool(kyc_verified and role == "buyer"),
+    }
+
+
+def _chat_land_verification_flags(land):
+    """Return public-safe land ownership verification state."""
+    status = (
+        str(getattr(land, "ownership_verification_status", "") or "")
+        .strip()
+        .lower()
+        if land
+        else ""
+    )
+    return {
+        "is_land_verified": status == "verified",
+        "ownership_verification_status": status or "not_submitted",
+    }
+
+
+# =========================================================
 # START CHAT
 # =========================================================
 
@@ -1431,7 +1471,9 @@ def my_archived_conversations(
                 if last_message
                 else None
             ),
-            "archived_at": archive.archived_at
+            "archived_at": archive.archived_at,
+            **_chat_verification_flags(other_user),
+            **_chat_land_verification_flags(land)
         })
 
     return result
@@ -1692,7 +1734,10 @@ def my_conversations(
                     else None,
 
                 "unread_count":
-                    unread_count
+                    unread_count,
+
+                **_chat_verification_flags(other_user),
+                **_chat_land_verification_flags(land)
             }
         )
 
@@ -1795,7 +1840,10 @@ def get_conversation_details(
             land.title
             if land
             else ""
-        )
+        ),
+
+        **_chat_verification_flags(other_user),
+        **_chat_land_verification_flags(land)
     }
 # =========================================================
 # UPDATE ONLINE PRESENCE
