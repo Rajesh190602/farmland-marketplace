@@ -52,8 +52,7 @@ function Login() {
       console.log("Login response:", response.data);
 
       // =====================================================
-      // Store authentication in SESSION storage
-      // This keeps each browser tab independent.
+      // Store normal marketplace authentication
       // =====================================================
 
       sessionStorage.setItem(
@@ -75,9 +74,11 @@ function Login() {
         "role",
         response.data.role
       );
-      // Buyer KYC session is finished after normal login.
+
+      // A successful normal login is no longer a KYC-only session.
       sessionStorage.removeItem("kyc_required");
       sessionStorage.removeItem("account_status");
+      sessionStorage.removeItem("user_role");
 
       // =====================================================
       // Remember Me
@@ -101,10 +102,76 @@ function Login() {
     } catch (error) {
       console.error("Login error:", error);
 
+      const detail = error.response?.data?.detail;
+
+      // =====================================================
+      // Buyer KYC gate
+      // The password was correct, but the buyer's account is
+      // still pending admin KYC approval. Keep a restricted
+      // KYC-only token and send the buyer directly to KYC.
+      // =====================================================
+
+      if (
+        error.response?.status === 403 &&
+        detail?.code === "KYC_REQUIRED" &&
+        detail?.kyc_token
+      ) {
+        sessionStorage.setItem(
+          "token",
+          detail.kyc_token
+        );
+
+        sessionStorage.setItem(
+          "user_id",
+          String(detail.user_id || "")
+        );
+
+        sessionStorage.setItem(
+          "full_name",
+          detail.full_name || ""
+        );
+
+        sessionStorage.setItem(
+          "role",
+          "buyer"
+        );
+
+        sessionStorage.setItem(
+          "user_role",
+          "buyer"
+        );
+
+        sessionStorage.setItem(
+          "account_status",
+          "pending_kyc"
+        );
+
+        sessionStorage.setItem(
+          "kyc_required",
+          "true"
+        );
+
+        // Never persist the restricted KYC token.
+        localStorage.removeItem("token");
+        localStorage.removeItem("user_id");
+        localStorage.removeItem("role");
+        localStorage.removeItem("user_role");
+        localStorage.removeItem("user");
+
+        alert(
+          "Login successful. KYC verification is required before you can view farmland listings."
+        );
+
+        navigate("/kyc", { replace: true });
+        return;
+      }
+
       if (error.response) {
         alert(
-          error.response.data.detail ||
-            "Invalid email or password."
+          typeof detail === "string"
+            ? detail
+            : detail?.message ||
+              "Invalid email or password."
         );
       } else {
         alert("Unable to connect to server.");

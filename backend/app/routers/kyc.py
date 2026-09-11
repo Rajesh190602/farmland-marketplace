@@ -18,8 +18,17 @@ import cloudinary.utils
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from jose import JWTError, jwt
 
-from app.auth import get_current_admin, get_current_user, get_current_kyc_user
+from app.auth import (
+    get_current_admin,
+    get_current_user,
+    get_current_kyc_user,
+    create_access_token,
+    oauth2_scheme,
+    SECRET_KEY,
+    ALGORITHM,
+)
 from app.database import get_db
 from app.models import User, UserKYCVerification, UserAccountStatus
 from app.schemas import (
@@ -433,6 +442,129 @@ def get_my_kyc(
 
 
 # =========================================================
+# BUYER - ACTIVATE MARKETPLACE AFTER KYC APPROVAL
+# =========================================================
+
+def _get_verified_buyer_from_kyc_token(
+    token: str,
+    db: Session,
+) -> User:
+    """
+    Validate the temporary buyer KYC token for the one-time
+    marketplace-session handoff.
+
+    The restricted token is never accepted by normal marketplace
+    endpoints. It can only be exchanged here after the database
+    confirms that admin-approved KYC is complete.
+    """
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate KYC session.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+        )
+    except JWTError:
+        raise credentials_exception
+
+    if payload.get("scope") != "kyc":
+        raise HTTPException(
+            status_code=403,
+            detail="A KYC-only session is required for this action.",
+        )
+
+    user_id = payload.get("user_id")
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise credentials_exception
+
+    user = _get_user(db, user_id)
+
+    if user.role != "buyer":
+        raise HTTPException(
+            status_code=403,
+            detail="Only buyers can activate a marketplace session through KYC.",
+        )
+
+    if user.is_suspended:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been suspended. Please contact the administrator.",
+        )
+
+    account_status = (
+        db.query(UserAccountStatus)
+        .filter(UserAccountStatus.user_id == user.id)
+        .first()
+    )
+
+    verification = (
+        db.query(UserKYCVerification)
+        .filter(UserKYCVerification.user_id == user.id)
+        .first()
+    )
+
+    if not (
+        account_status
+        and account_status.status == "active"
+        and verification
+        and verification.status == "verified"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Your KYC has not been approved yet.",
+        )
+
+    return user
+
+
+@router.post("/continue")
+def continue_to_marketplace(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    """
+    Securely exchange an approved buyer's temporary KYC token
+    for a normal marketplace token.
+
+    This endpoint is intentionally available only through a
+    scope=kyc token and only after admin approval.
+    """
+    user = _get_verified_buyer_from_kyc_token(token, db)
+
+    access_token = create_access_token(
+        {"user_id": user.id}
+    )
+
+    create_activity_log(
+        db=db,
+        user_id=user.id,
+        action="KYC_MARKETPLACE_ACTIVATED",
+        description="Buyer entered the marketplace after admin-approved KYC.",
+        target_type="USER_KYC",
+        target_id=user.id,
+    )
+
+    db.commit()
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "full_name": user.full_name,
+        "role": user.role,
+        "account_status": "active",
+        "kyc_verified": True,
+    }
+
+
+# =========================================================
 # ADMIN - KYC QUEUE
 # =========================================================
 
@@ -615,7 +747,7 @@ def review_kyc(
             detail="A reason is required when rejecting or requesting changes.",
         )
 
-    verification.status = "verified" if action == "verify" else action
+    verification.status = action
     verification.rejection_reason = (
         reason if action != "verify" else None
     )

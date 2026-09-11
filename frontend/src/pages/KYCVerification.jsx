@@ -104,6 +104,59 @@ function KYCVerification() {
 
   const maskedNumber = verification?.masked_document_number || "";
 
+  const activateMarketplaceSession = async () => {
+    setError("");
+
+    try {
+      setLoading(true);
+
+      const response = await api.post("/kyc/continue");
+
+      if (!response.data?.access_token) {
+        throw new Error("Marketplace session was not issued by the server.");
+      }
+
+      sessionStorage.setItem(
+        "token",
+        response.data.access_token
+      );
+
+      if (response.data.user_id) {
+        sessionStorage.setItem(
+          "user_id",
+          String(response.data.user_id)
+        );
+      }
+
+      if (response.data.full_name) {
+        sessionStorage.setItem(
+          "full_name",
+          response.data.full_name
+        );
+      }
+
+      sessionStorage.setItem("role", "buyer");
+      sessionStorage.setItem("user_role", "buyer");
+
+      // The restricted KYC session is finished.
+      sessionStorage.removeItem("kyc_required");
+      sessionStorage.removeItem("account_status");
+
+      navigate("/home", { replace: true });
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+
+      setError(
+        typeof detail === "string"
+          ? detail
+          : detail?.message ||
+            "KYC is approved, but we could not activate your marketplace session. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadKyc = async () => {
     setLoading(true);
     setError("");
@@ -111,6 +164,16 @@ function KYCVerification() {
     try {
       const response = await api.get("/kyc/me");
       setVerification(response.data);
+
+      // When a buyer is using the temporary KYC session and admin has
+      // approved the KYC, exchange the restricted session for a normal
+      // marketplace session and take the buyer to Home automatically.
+      if (
+        isKycOnlySession &&
+        String(response.data?.status || "").toLowerCase() === "verified"
+      ) {
+        await activateMarketplaceSession();
+      }
     } catch (err) {
       const detail = err.response?.data?.detail;
 
@@ -120,8 +183,13 @@ function KYCVerification() {
           account_status: "active",
           kyc_approved: true,
         });
+
         setSuccess("");
         setError("");
+
+        if (isKycOnlySession) {
+          await activateMarketplaceSession();
+        }
       } else if (err.response?.status === 404) {
         setVerification(null);
       } else {
@@ -137,25 +205,6 @@ function KYCVerification() {
     }
   };
 
-  const handleLoginAfterKyc = () => {
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user_id");
-    sessionStorage.removeItem("role");
-    sessionStorage.removeItem("user_role");
-    sessionStorage.removeItem("account_status");
-    sessionStorage.removeItem("kyc_required");
-
-    localStorage.removeItem("token");
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("role");
-    localStorage.removeItem("user_role");
-    localStorage.removeItem("user");
-
-    // Full navigation prevents a ProtectedRoute render race while the
-    // temporary KYC token is being removed.
-    window.location.replace("/");
-  };
-
   useEffect(() => {
     if (!isFarmer && !isBuyer) {
       setLoading(false);
@@ -165,6 +214,20 @@ function KYCVerification() {
 
     loadKyc();
   }, [isFarmer, isBuyer]);
+
+  // Buyers who are waiting on admin approval do not need to keep refreshing
+  // the page. Check periodically while the temporary KYC session is active.
+  useEffect(() => {
+    if (!isKycOnlySession || status !== "pending") {
+      return undefined;
+    }
+
+    const intervalId = setInterval(() => {
+      loadKyc();
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [isKycOnlySession, status]);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0] || null;
@@ -344,14 +407,14 @@ function KYCVerification() {
               <p style={{ margin: "10px 0 0", color: "#455A64", lineHeight: 1.6 }}>
                 Your {roleLabel.toLowerCase()} account is now active.
                 {isKycOnlySession
-                  ? " Please log in with your credentials to continue to the Farmland Marketplace."
+                  ? " Your KYC has been approved. You can now access the Farmland Marketplace."
                   : " You can continue using the Farmland Marketplace."}
               </p>
 
               {isKycOnlySession ? (
                 <button
                   type="button"
-                  onClick={handleLoginAfterKyc}
+                  onClick={activateMarketplaceSession}
                   style={{
                     ...primaryButton,
                     marginTop: "18px",
@@ -359,7 +422,7 @@ function KYCVerification() {
                     cursor: "pointer",
                   }}
                 >
-                  🔐 Login with your credentials
+                  🌾 Continue to Marketplace
                 </button>
               ) : (
                 <button
