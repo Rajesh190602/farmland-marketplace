@@ -829,7 +829,6 @@ const securityBoxStyle = {
   lineHeight: 1.5,
   marginBottom: "20px",
 };
-
 const primaryButton = {
   width: "100%",
   border: "none",
@@ -840,7 +839,6 @@ const primaryButton = {
   fontSize: "15px",
   fontWeight: "800",
 };
-
 const secondaryButton = {
   border: "none",
   borderRadius: "10px",
@@ -850,7 +848,6 @@ const secondaryButton = {
   fontWeight: "700",
   cursor: "pointer",
 };
-
 const alertSuccess = {
   background: "#E8F5E9",
   border: "1px solid #A5D6A7",
@@ -859,7 +856,6 @@ const alertSuccess = {
   padding: "13px 15px",
   marginBottom: "18px",
 };
-
 const alertError = {
   background: "#FFEBEE",
   border: "1px solid #EF9A9A",
@@ -868,12 +864,10 @@ const alertError = {
   padding: "13px 15px",
   marginBottom: "18px",
 };
-
 const loadingStyle = {
   textAlign: "center",
   color: "#2E7D32",
   fontWeight: "700",
   padding: "40px",
 };
-
 export default KYCVerification;
