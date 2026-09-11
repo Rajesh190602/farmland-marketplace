@@ -15,6 +15,7 @@ from app.models import (
     LandOffer,
     SiteVisit,
     ListingExpiry,
+    UserKYCVerification,
 )
 from app.schemas import LandCreate
 from app.utils.activity_log import create_activity_log
@@ -32,6 +33,21 @@ router = APIRouter(
     prefix="/lands",
     tags=["Lands"]
 )
+
+
+def is_verified_farmer(db: Session, owner_id: int) -> bool:
+    """Return the server-authoritative KYC verification state of a land owner."""
+    return (
+        db.query(UserKYCVerification.id)
+        .join(User, User.id == UserKYCVerification.user_id)
+        .filter(
+            UserKYCVerification.user_id == owner_id,
+            UserKYCVerification.status == "verified",
+            User.role == "farmer",
+        )
+        .first()
+        is not None
+    )
 
 
 # ==========================
@@ -386,6 +402,7 @@ def get_buyer_recommendations(
             "status": land.status,
             "is_published": land.is_published,
             "owner_id": land.owner_id,
+            "is_verified_farmer": is_verified_farmer(db, land.owner_id),
             "recommendation_score": item["score"],
             "recommendation_reasons": item["reasons"],
             "view_count": item["view_count"],
@@ -500,11 +517,17 @@ def get_all_lands(
             models.Land.price <= max_price
         )
 
-    return (
+    lands = (
         query.order_by(models.Land.id.desc())
         .limit(limit)
         .all()
     )
+
+    # Expose only the public verification flag; never expose KYC documents.
+    for land in lands:
+        land.is_verified_farmer = is_verified_farmer(db, land.owner_id)
+
+    return lands
 
 
 # ==========================
@@ -641,11 +664,17 @@ def search_lands(
             Land.area <= max_area
         )
 
-    return (
+    lands = (
         query.order_by(Land.id.desc())
         .limit(limit)
         .all()
     )
+
+    # Expose only the public verification flag; never expose KYC documents.
+    for land in lands:
+        land.is_verified_farmer = is_verified_farmer(db, land.owner_id)
+
+    return lands
 
 
 # ==========================
@@ -719,6 +748,7 @@ def get_my_lands(
             "status": land.status,
             "rejection_reason": land.rejection_reason,
             "owner_id": land.owner_id,
+            "is_verified_farmer": is_verified_farmer(db, land.owner_id),
             "is_published": bool(land.is_published),
             "expiry_status": expiry_status,
             "published_at": expiry.published_at if expiry else None,
@@ -1131,6 +1161,7 @@ def get_my_land_by_id(
         ],
 
         "owner_id": land.owner_id,
+        "is_verified_farmer": is_verified_farmer(db, land.owner_id),
         "owner_name": owner.full_name if owner else "",
         "owner_email": owner.email if owner else "",
         "owner_mobile": owner.mobile if owner else ""
@@ -1420,6 +1451,7 @@ def get_recently_viewed_lands(
             "latitude": land.latitude,
             "longitude": land.longitude,
             "owner_id": land.owner_id,
+            "is_verified_farmer": is_verified_farmer(db, land.owner_id),
             "viewed_at": view.viewed_at
         })
 
@@ -1628,6 +1660,7 @@ def get_similar_lands(
             "status": candidate.status,
             "is_published": candidate.is_published,
             "owner_id": candidate.owner_id,
+            "is_verified_farmer": is_verified_farmer(db, candidate.owner_id),
             "view_count": item["view_count"],
             "availability": item["availability"],
             "similarity_score": item["score"],
@@ -1727,6 +1760,7 @@ def get_land(
         "status": land.status,
         "rejection_reason": land.rejection_reason,
         "owner_id": land.owner_id,
+        "is_verified_farmer": is_verified_farmer(db, land.owner_id),
 
         # Multiple land images
         "images": [

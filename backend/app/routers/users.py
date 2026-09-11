@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.models import User, EmailVerification, UserBlock, UserAccountStatus
+from app.models import User, EmailVerification, UserBlock, UserAccountStatus, UserKYCVerification
 import cloudinary.uploader
 from app.database import get_db
 from app.auth import get_current_user
@@ -140,10 +140,29 @@ from app.auth import (
     create_access_token
 )
 
+
 router = APIRouter(
     prefix="/users",
     tags=["Users"]
 )
+
+
+def get_verification_flags(db: Session, user_id: int, role: str):
+    """Return server-authoritative farmer/buyer verification flags."""
+    verified = (
+        db.query(UserKYCVerification.id)
+        .filter(
+            UserKYCVerification.user_id == user_id,
+            UserKYCVerification.status == "verified",
+        )
+        .first()
+        is not None
+    )
+
+    return {
+        "is_verified_farmer": bool(verified and role == "farmer"),
+        "is_verified_buyer": bool(verified and role == "buyer"),
+    }
 
 # ==========================
 # Register User
@@ -352,12 +371,19 @@ def login(
     # Save activity log
     db.commit()
 
+    verification_flags = get_verification_flags(
+        db=db,
+        user_id=db_user.id,
+        role=db_user.role,
+    )
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_id": db_user.id,
         "full_name": db_user.full_name,
         "role": db_user.role,
+        **verification_flags,
     }
 
 @router.get("/me")
@@ -370,10 +396,17 @@ def get_me(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    verification_flags = get_verification_flags(
+        db=db,
+        user_id=user.id,
+        role=user.role,
+    )
+
     return {
         "id": user.id,
         "email": user.email,
-        "role": user.role
+        "role": user.role,
+        **verification_flags,
     }
 @router.post("/send-otp")
 def send_otp(
@@ -632,13 +665,20 @@ def get_profile(
             detail="User not found"
         )
 
+    verification_flags = get_verification_flags(
+        db=db,
+        user_id=user.id,
+        role=user.role,
+    )
+
     return {
         "id": user.id,
         "full_name": user.full_name,
         "email": user.email,
         "mobile": user.mobile,
         "role": user.role,
-        "profile_image": user.profile_image
+        "profile_image": user.profile_image,
+        **verification_flags,
     }
 # =========================================================
 # UPLOAD PROFILE PHOTO
@@ -883,6 +923,12 @@ def update_profile(
     db.commit()
     db.refresh(user)
 
+    verification_flags = get_verification_flags(
+        db=db,
+        user_id=user.id,
+        role=user.role,
+    )
+
     return {
         "message": "Profile updated successfully",
         "user": {
@@ -890,7 +936,8 @@ def update_profile(
             "full_name": user.full_name,
             "email": user.email,
             "mobile": user.mobile,
-            "role": user.role
+            "role": user.role,
+            **verification_flags,
         }
     }
 # =========================================================

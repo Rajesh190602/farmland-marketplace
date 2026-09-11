@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../services/api";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function Profile() {
   const navigate = useNavigate();
@@ -477,9 +478,19 @@ function Profile() {
 
               <div style={styles.userSummary}>
 
-                <h2 style={styles.userName}>
-                  {user.full_name}
-                </h2>
+                <div style={styles.nameRow}>
+                  <h2 style={styles.userName}>
+                    {user.full_name}
+                  </h2>
+
+                  {user.role === "farmer" && user.is_verified_farmer === true && (
+                    <VerifiedBadge type="farmer" verified />
+                  )}
+
+                  {user.role === "buyer" && user.is_verified_buyer === true && (
+                    <VerifiedBadge type="buyer" verified />
+                  )}
+                </div>
 
                 <div style={styles.roleBadge}>
                   {user.role === "buyer"
@@ -1050,6 +1061,13 @@ const styles = {
 
   userSummary: {
     flex: 1,
+  },
+
+  nameRow: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "10px",
   },
 
   userName: {

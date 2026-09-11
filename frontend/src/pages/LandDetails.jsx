@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import LandMap from "../components/LandMap";
 import api from "../services/api";
+import VerifiedBadge from "../components/VerifiedBadge";
 
 function LandDetails() {
   const { id } = useParams();
@@ -1308,15 +1309,29 @@ function LandDetails() {
               LAND TITLE
           ====================================================== */}
 
-          <h1
+          <div
             style={{
-              margin: 0,
-              fontSize: "40px",
-              color: "#2E7D32",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              flexWrap: "wrap",
             }}
           >
-            🌾 {land.title}
-          </h1>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: "40px",
+                color: "#2E7D32",
+              }}
+            >
+              🌾 {land.title}
+            </h1>
+
+            {(land?.is_land_verified === true ||
+              land?.ownership_verification_status === "verified") && (
+              <VerifiedBadge type="land" verified />
+            )}
+          </div>
 
           {/* =====================================================
               PHASE 6 - LISTING VIEWS
@@ -2209,7 +2224,23 @@ function LandDetails() {
                   Seller Name
                 </strong>
                 <br />
-                {land.owner_name}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span>{land.owner_name}</span>
+                  {land?.is_verified_farmer === true && (
+                    <VerifiedBadge
+                      type="farmer"
+                      verified
+                      compact
+                    />
+                  )}
+                </span>
               </div>
 
               <div>
@@ -2965,16 +2996,35 @@ function LandDetails() {
                           padding: "18px",
                         }}
                       >
-                        <h3
+                        <div
                           style={{
-                            marginTop: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            flexWrap: "wrap",
                             marginBottom: "10px",
-                            color: "#2E7D32",
-                            fontSize: "20px",
                           }}
                         >
-                          {similarLand.title}
-                        </h3>
+                          <h3
+                            style={{
+                              marginTop: 0,
+                              marginBottom: 0,
+                              color: "#2E7D32",
+                              fontSize: "20px",
+                            }}
+                          >
+                            {similarLand.title}
+                          </h3>
+
+                          {(similarLand?.is_land_verified === true ||
+                            similarLand?.ownership_verification_status === "verified") && (
+                            <VerifiedBadge
+                              type="land"
+                              verified
+                              compact
+                            />
+                          )}
+                        </div>
 
                         <div
                           style={{
@@ -3415,6 +3465,4 @@ const availabilityBadgeStyle = (
     fontWeight: "bold",
   };
 };
-
-
 export default LandDetails;

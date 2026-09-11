@@ -181,7 +181,7 @@ class LandResponse(BaseModel):
     # Public-safe field. Never expose the private passbook/document URL.
     is_land_verified: bool = False
     ownership_verification_status: str = "not_submitted"
-
+    is_verified_farmer: bool = False
     class Config:
         from_attributes = True
 
