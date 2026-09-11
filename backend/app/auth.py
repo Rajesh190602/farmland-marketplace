@@ -214,11 +214,12 @@ def get_current_kyc_user(
     Validate a KYC-capable session.
 
     - Normal application tokens may access KYC for active farmers/buyers.
-    - A restricted `scope=kyc` token is accepted only for a buyer whose
-      account is currently pending KYC.
-    - If a restricted buyer KYC token is still valid but the admin has
-      already approved KYC, return a machine-readable KYC_APPROVED response
-      so the frontend can tell the user to log in normally.
+    - A restricted `scope=kyc` token is accepted for a buyer while KYC is
+      pending.
+    - Once the buyer's KYC record is admin-verified, the same restricted
+      token receives a machine-readable KYC_APPROVED response so the
+      frontend can exchange it for a normal marketplace token.
+    - A restricted KYC token is NEVER accepted by normal marketplace APIs.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -271,32 +272,38 @@ def get_current_kyc_user(
                     detail="This KYC session is no longer valid.",
                 )
 
-            # The temporary KYC token must NEVER become a normal
-            # marketplace token. Once the admin approves KYC, tell the
-            # frontend to clear this token and make the user log in normally.
-            if account_status and account_status.status == "active":
-                kyc_verification = (
-                    db.query(UserKYCVerification)
-                    .filter(UserKYCVerification.user_id == user_id)
-                    .first()
-                )
+            # IMPORTANT:
+            # Check the KYC record FIRST. The temporary token may still be
+            # valid after admin approval even if the account-status row was
+            # not updated correctly. Approval is the authoritative signal
+            # for the handoff endpoint; deactivated accounts remain blocked.
+            kyc_verification = (
+                db.query(UserKYCVerification)
+                .filter(UserKYCVerification.user_id == user_id)
+                .first()
+            )
 
-                if (
-                    kyc_verification
-                    and kyc_verification.status == "verified"
-                ):
+            if kyc_verification and kyc_verification.status == "verified":
+                if account_status and account_status.status == "deactivated":
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
-                            "code": "KYC_APPROVED",
-                            "message": (
-                                "Your KYC has been approved. "
-                                "Please log in with your credentials to continue."
-                            ),
-                            "account_status": "active",
-                        },
+                        detail="Your account has been deactivated.",
                     )
 
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "KYC_APPROVED",
+                        "message": (
+                            "Your KYC has been approved. "
+                            "Your marketplace session can now be activated."
+                        ),
+                        "account_status": "active",
+                    },
+                )
+
+            # Before approval, the temporary token is valid only while the
+            # buyer remains in the pending_kyc state.
             if not account_status or account_status.status != "pending_kyc":
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,

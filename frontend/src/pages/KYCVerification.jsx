@@ -305,9 +305,12 @@ function KYCVerification() {
 
       await loadKyc();
     } catch (err) {
+      const detail = err.response?.data?.detail;
       setError(
-        err.response?.data?.detail ||
-          "KYC submission failed. Please try again."
+        typeof detail === "string"
+          ? detail
+          : detail?.message ||
+            "KYC submission failed. Please try again."
       );
     } finally {
       setSubmitting(false);

@@ -451,7 +451,7 @@ def _get_verified_buyer_from_kyc_token(
 ) -> User:
     """
     Validate the temporary buyer KYC token for the one-time
-    marketplace-session handoff.
+    marketplace-session handoff and activate the approved buyer account.
 
     The restricted token is never accepted by normal marketplace
     endpoints. It can only be exchanged here after the database
@@ -510,16 +510,30 @@ def _get_verified_buyer_from_kyc_token(
         .first()
     )
 
-    if not (
-        account_status
-        and account_status.status == "active"
-        and verification
-        and verification.status == "verified"
-    ):
+    if not verification or verification.status != "verified":
         raise HTTPException(
             status_code=403,
             detail="Your KYC has not been approved yet.",
         )
+
+    # Admin approval is the authority for buyer KYC activation. If the
+    # account-status row is missing or still pending due to an earlier
+    # deployment/state mismatch, repair it here before issuing the normal
+    # marketplace token. Never override an explicit deactivation.
+    if account_status and account_status.status == "deactivated":
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been deactivated.",
+        )
+
+    if not account_status:
+        account_status = UserAccountStatus(user_id=user.id)
+        db.add(account_status)
+
+    if account_status.status != "active":
+        account_status.status = "active"
+        account_status.reactivated_at = datetime.utcnow()
+        db.flush()
 
     return user
 
