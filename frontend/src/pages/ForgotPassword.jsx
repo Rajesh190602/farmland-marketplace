@@ -15,7 +15,7 @@ function ForgotPassword() {
   const [loading, setLoading] = useState(false);
 
   // ==========================
-  // Send OTP
+  // Send / Resend OTP
   // ==========================
   const sendOTP = async () => {
     if (!email.trim()) {
@@ -27,41 +27,52 @@ function ForgotPassword() {
       setLoading(true);
 
       const response = await api.post("/users/forgot-password", {
-        email,
+        email: email.trim(),
       });
 
       alert(response.data.message);
+
       setOtpSent(true);
+      setOtpVerified(false);
+      setOtp("");
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (error) {
       alert(error.response?.data?.detail || "Unable to send OTP");
     } finally {
       setLoading(false);
     }
   };
+
+  // ==========================
+  // Verify OTP
+  // ==========================
   const verifyOTP = async () => {
-  if (otp.length !== 6) {
-    alert("Please enter the 6-digit OTP.");
-    return;
-  }
+    if (otp.length !== 6) {
+      alert("Please enter the 6-digit OTP.");
+      return;
+    }
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const response = await api.post("/users/verify-forgot-otp", {
-      email,
-      otp,
-    });
+      const response = await api.post("/users/verify-forgot-otp", {
+        email: email.trim(),
+        otp,
+      });
 
-    alert(response.data.message);
+      alert(response.data.message);
 
-    setOtpVerified(true);
-
-  } catch (error) {
-    alert(error.response?.data?.detail || "OTP Verification Failed");
-  } finally {
-    setLoading(false);
-  }
-};
+      // Successful verification reveals the password reset section.
+      setOtpVerified(true);
+    } catch (error) {
+      alert(
+        error.response?.data?.detail || "OTP Verification Failed"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ==========================
   // Reset Password
@@ -69,8 +80,8 @@ function ForgotPassword() {
   const resetPassword = async (e) => {
     e.preventDefault();
 
-    if (!otp.trim()) {
-      alert("Please enter OTP.");
+    if (!otpVerified) {
+      alert("Please verify OTP first.");
       return;
     }
 
@@ -88,16 +99,17 @@ function ForgotPassword() {
       setLoading(true);
 
       const response = await api.post("/users/reset-password", {
-        email,
+        email: email.trim(),
         new_password: newPassword,
         confirm_password: confirmPassword,
       });
 
       alert(response.data.message);
-
       navigate("/");
     } catch (error) {
-      alert(error.response?.data?.detail || "Password reset failed");
+      alert(
+        error.response?.data?.detail || "Password reset failed"
+      );
     } finally {
       setLoading(false);
     }
@@ -125,7 +137,9 @@ function ForgotPassword() {
       </h2>
 
       <form onSubmit={resetPassword}>
-        {/* Email */}
+        {/* ==========================
+            Email
+        =========================== */}
         <input
           type="email"
           placeholder="Email Address"
@@ -142,35 +156,48 @@ function ForgotPassword() {
           }}
         />
 
-        {/* Send OTP */}
-        <button
-          type="button"
-          onClick={sendOTP}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px",
-            backgroundColor: "#1976D2",
-            color: "#fff",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-            marginBottom: "15px",
-          }}
-        >
-          {loading ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
-        </button>
+        {/* ==========================
+            Send / Resend OTP
+        =========================== */}
+        {!otpVerified && (
+          <button
+            type="button"
+            onClick={sendOTP}
+            disabled={loading}
+            style={{
+              width: "100%",
+              padding: "12px",
+              backgroundColor: "#1976D2",
+              color: "#fff",
+              border: "none",
+              borderRadius: "5px",
+              cursor: loading ? "not-allowed" : "pointer",
+              marginBottom: "15px",
+            }}
+          >
+            {loading
+              ? "Sending..."
+              : otpSent
+              ? "Resend OTP"
+              : "Send OTP"}
+          </button>
+        )}
 
-        {/* OTP Section */}
+        {/* ==========================
+            OTP Verification Section
+        =========================== */}
         {otpSent && !otpVerified && (
           <>
             <input
               type="text"
+              inputMode="numeric"
               placeholder="Enter 6-digit OTP"
               value={otp}
               maxLength={6}
               onChange={(e) =>
-                setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                setOtp(
+                  e.target.value.replace(/\D/g, "").slice(0, 6)
+                )
               }
               required
               style={{
@@ -180,8 +207,8 @@ function ForgotPassword() {
                 boxSizing: "border-box",
               }}
             />
-            <button
 
+            <button
               type="button"
               onClick={verifyOTP}
               disabled={loading}
@@ -192,13 +219,33 @@ function ForgotPassword() {
                 color: "#fff",
                 border: "none",
                 borderRadius: "5px",
-                cursor: "pointer",
+                cursor: loading ? "not-allowed" : "pointer",
                 marginBottom: "20px",
               }}
             >
               {loading ? "Verifying..." : "Verify OTP"}
             </button>
+          </>
+        )}
 
+        {/* ==========================
+            Password Reset Section
+        =========================== */}
+        {otpSent && otpVerified && (
+          <>
+            <div
+              style={{
+                padding: "12px",
+                marginBottom: "15px",
+                backgroundColor: "#E8F5E9",
+                color: "#2E7D32",
+                borderRadius: "5px",
+                textAlign: "center",
+                fontWeight: "bold",
+              }}
+            >
+              ✅ OTP Verified Successfully
+            </div>
 
             <input
               type="password"
@@ -206,6 +253,7 @@ function ForgotPassword() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
+              minLength={8}
               style={{
                 width: "100%",
                 padding: "10px",
@@ -218,8 +266,11 @@ function ForgotPassword() {
               type="password"
               placeholder="Confirm Password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) =>
+                setConfirmPassword(e.target.value)
+              }
               required
+              minLength={8}
               style={{
                 width: "100%",
                 padding: "10px",
@@ -238,7 +289,7 @@ function ForgotPassword() {
                 color: "#fff",
                 border: "none",
                 borderRadius: "5px",
-                cursor: "pointer",
+                cursor: loading ? "not-allowed" : "pointer",
               }}
             >
               {loading ? "Updating..." : "Reset Password"}
