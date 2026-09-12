@@ -81,6 +81,50 @@ function Login() {
       sessionStorage.removeItem("user_role");
 
       // =====================================================
+      // STEP 75 - Load admin permission
+      // The backend remains the source of truth.
+      // We store the permission in sessionStorage only so the
+      // frontend can control admin navigation and route UX.
+      // =====================================================
+
+      if (response.data.role === "admin") {
+        try {
+          const meResponse = await api.get("/users/me", {
+            headers: {
+              Authorization: `Bearer ${response.data.access_token}`,
+            },
+          });
+
+          sessionStorage.setItem(
+            "admin_permission_role",
+            meResponse.data.admin_permission_role || "NONE"
+          );
+
+          console.log(
+            "Admin permission:",
+            meResponse.data.admin_permission_role
+          );
+        } catch (permissionError) {
+          console.error(
+            "Failed to load admin permission:",
+            permissionError
+          );
+
+          // Fail closed on the frontend.
+          sessionStorage.setItem(
+            "admin_permission_role",
+            "NONE"
+          );
+        }
+      } else {
+        // Normal farmer/buyer accounts must not retain
+        // an old admin permission from a previous session.
+        sessionStorage.removeItem(
+          "admin_permission_role"
+        );
+      }
+
+      // =====================================================
       // Remember Me
       // Only email is stored permanently.
       // Authentication is NOT stored in localStorage.
@@ -157,6 +201,11 @@ function Login() {
         localStorage.removeItem("role");
         localStorage.removeItem("user_role");
         localStorage.removeItem("user");
+
+        // Prevent any stale admin permission from remaining.
+        sessionStorage.removeItem(
+          "admin_permission_role"
+        );
 
         alert(
           "Login successful. KYC verification is required before you can view farmland listings."

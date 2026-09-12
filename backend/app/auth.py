@@ -1,6 +1,11 @@
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, UserAccountStatus, UserKYCVerification
+from app.admin_permissions import (
+    ADMIN_PERMISSION_ROLES,
+    normalize_admin_permission,
+    normalize_requested_permission,
+)
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -330,18 +335,11 @@ def get_current_kyc_user(
 
 
 # ==========================
-# Current Admin
+# Step 75 - Advanced Admin Permissions
 # ==========================
 
-def get_current_admin(
-    current_user: int = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    user = (
-        db.query(User)
-        .filter(User.id == current_user)
-        .first()
-    )
+def _get_admin_user(current_user: int, db: Session) -> User:
+    user = db.query(User).filter(User.id == current_user).first()
 
     if not user:
         raise HTTPException(
@@ -349,10 +347,74 @@ def get_current_admin(
             detail="User not found"
         )
 
-    if user.role != "admin":
+    if str(user.role or "").strip().lower() != "admin":
         raise HTTPException(
             status_code=403,
             detail="Admin access required"
+        )
+
+    return user
+
+
+def get_current_admin(
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user = _get_admin_user(current_user, db)
+
+    # General admin guard now fails closed when no permission is configured.
+    if normalize_admin_permission(
+        getattr(user, "admin_permission_role", None)
+    ) == "NONE":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin permission is not configured."
+        )
+
+    return user.id
+
+
+def require_admin_permission(permission: str):
+    """Return a FastAPI dependency enforcing one admin permission.
+
+    SUPER_ADMIN is an explicit full-access role. Permission is read from
+    the database on every request; it is never trusted from the client/JWT.
+    """
+    normalized = normalize_requested_permission(permission)
+
+    def dependency(
+        current_user: int = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        user = _get_admin_user(current_user, db)
+
+        assigned = normalize_admin_permission(
+            getattr(user, "admin_permission_role", None)
+        )
+
+        if assigned == "SUPER_ADMIN" or assigned == normalized:
+            return user.id
+
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient admin permission for this action."
+        )
+
+    return dependency
+
+
+def require_super_admin(
+    current_user: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = _get_admin_user(current_user, db)
+
+    if normalize_admin_permission(
+        getattr(user, "admin_permission_role", None)
+    ) != "SUPER_ADMIN":
+        raise HTTPException(
+            status_code=403,
+            detail="Super Admin access required."
         )
 
     return user.id

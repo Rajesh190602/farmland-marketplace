@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
 from app.auth import (
+    require_admin_permission,
     get_current_admin,
     get_current_user,
     get_current_kyc_user,
@@ -588,7 +589,7 @@ def continue_to_marketplace(
 )
 def get_pending_kyc(
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     records = (
         db.query(UserKYCVerification)
@@ -649,7 +650,7 @@ def get_pending_kyc(
 def get_kyc_detail(
     verification_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     verification = (
         db.query(UserKYCVerification)
@@ -678,7 +679,7 @@ def get_kyc_detail(
 def get_kyc_document(
     verification_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     verification = (
         db.query(UserKYCVerification)
@@ -725,7 +726,7 @@ def review_kyc(
     verification_id: int,
     data: KYCReviewRequest,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     verification = (
         db.query(UserKYCVerification)

@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 import cloudinary
 import cloudinary.uploader
 import cloudinary.utils
-
-from app.auth import get_current_admin, get_current_user
+from app.auth import get_current_user, require_admin_permission
 from app.database import get_db
 from app.models import (
     Land,
@@ -211,7 +210,7 @@ def get_ownership_status(
 @router.get("/admin/pending")
 def get_pending_ownership_verifications(
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     rows = (
         db.query(LandOwnershipVerification, Land, User)
@@ -244,7 +243,7 @@ def get_pending_ownership_verifications(
 def get_ownership_verification_detail(
     verification_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     row = (
         db.query(LandOwnershipVerification, Land, User)
@@ -304,7 +303,7 @@ def get_ownership_verification_detail(
 def get_private_passbook(
     verification_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     verification = (
         db.query(LandOwnershipVerification)
@@ -345,7 +344,7 @@ def review_ownership_verification(
     verification_id: int,
     payload: LandOwnershipReviewRequest,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("verification")),
 ):
     verification = (
         db.query(LandOwnershipVerification)

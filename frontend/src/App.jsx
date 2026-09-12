@@ -111,6 +111,10 @@ const AdminDashboard = lazy(() =>
   import("./pages/admin/AdminDashboard")
 );
 
+const AdminPermissions = lazy(() =>
+  import("./pages/admin/AdminPermissions")
+);
+
 const AdminLands = lazy(() =>
   import("./pages/admin/AdminLands")
 );
@@ -394,88 +398,151 @@ function App() {
               </AdminRoute>
             }
           >
-
-            {/* /admin */}
+            {/* Dashboard - Analytics Admin + Super Admin */}
             <Route
               index
-              element={<AdminDashboard />}
+              element={
+                <AdminRoute requiredPermission="ANALYTICS_ADMIN">
+                  <AdminDashboard />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/users */}
+            {/* Users - Support Admin + Super Admin */}
             <Route
               path="users"
-              element={<Users />}
+              element={
+                <AdminRoute requiredPermission="SUPPORT_ADMIN">
+                  <Users />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/users/:id */}
+            {/* User Details - Support Admin + Super Admin */}
             <Route
               path="users/:id"
-              element={<UserDetails />}
+              element={
+                <AdminRoute requiredPermission="SUPPORT_ADMIN">
+                  <UserDetails />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/users/edit/:id */}
+            {/* Edit User - Moderation Admin + Super Admin */}
             <Route
               path="users/edit/:id"
-              element={<EditUser />}
+              element={
+                <AdminRoute requiredPermission="MODERATION_ADMIN">
+                  <EditUser />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/lands */}
+            {/* Lands - Moderation Admin + Super Admin */}
             <Route
               path="lands"
-              element={<AdminLands />}
+              element={
+                <AdminRoute requiredPermission="MODERATION_ADMIN">
+                  <AdminLands />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/lands/:id */}
+            {/* Land Details - Support Admin + Super Admin */}
             <Route
               path="lands/:id"
-              element={<AdminLandDetails />}
+              element={
+                <AdminRoute requiredPermission="SUPPORT_ADMIN">
+                  <AdminLandDetails />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/pending-lands */}
+            {/* Pending Lands - Moderation Admin + Super Admin */}
             <Route
               path="pending-lands"
-              element={<PendingLands />}
+              element={
+                <AdminRoute requiredPermission="MODERATION_ADMIN">
+                  <PendingLands />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/edit-land/:id */}
+            {/* Edit Land - Moderation Admin + Super Admin */}
             <Route
               path="edit-land/:id"
-              element={<AdminEditLand />}
+              element={
+                <AdminRoute requiredPermission="MODERATION_ADMIN">
+                  <AdminEditLand />
+                </AdminRoute>
+              }
             />
 
-            {/* /admin/activity-logs */}
+            {/* Activity Logs - Support Admin + Super Admin */}
             <Route
               path="activity-logs"
-              element={<ActivityLogs />}
+              element={
+                <AdminRoute requiredPermission="SUPPORT_ADMIN">
+                  <ActivityLogs />
+                </AdminRoute>
+              }
             />
 
             {/* =================================================
                 PHASE 2 #10 - ADMIN REPORTS
             ================================================= */}
 
+            {/* Reports - Moderation Admin + Super Admin */}
             <Route
               path="reports"
-              element={<AdminReports />}
+              element={
+                <AdminRoute requiredPermission="MODERATION_ADMIN">
+                  <AdminReports />
+                </AdminRoute>
+              }
             />
 
             {/* =================================================
                 STEP 69 - ADMIN LAND OWNERSHIP VERIFICATION
             ================================================= */}
 
+            {/* Pattadhar verification - Verification Admin + Super Admin */}
             <Route
               path="land-ownership"
-              element={<LandOwnershipVerificationAdmin />}
+              element={
+                <AdminRoute requiredPermission="VERIFICATION_ADMIN">
+                  <LandOwnershipVerificationAdmin />
+                </AdminRoute>
+              }
             />
 
             {/* =================================================
                 STEP 68 - ADMIN KYC / IDENTITY VERIFICATION
             ================================================= */}
 
+            {/* KYC verification - Verification Admin + Super Admin */}
             <Route
               path="kyc"
-              element={<KYCVerificationAdmin />}
+              element={
+                <AdminRoute requiredPermission="VERIFICATION_ADMIN">
+                  <KYCVerificationAdmin />
+                </AdminRoute>
+              }
             />
 
+            {/* =================================================
+                STEP 75 - SUPER ADMIN PERMISSION MANAGEMENT
+            ================================================= */}
+
+            {/* Admin Permissions - Super Admin only */}
+            <Route
+              path="permissions"
+              element={
+                <AdminRoute requiredPermission="SUPER_ADMIN">
+                  <AdminPermissions />
+                </AdminRoute>
+              }
+            />
           </Route>
 
         </Routes>

@@ -49,6 +49,21 @@ class User(Base):
         String,
         default="farmer"
     )
+
+    # -----------------------------------------------------
+    # Step 75 - Admin Permission Architecture
+    # Only users with role="admin" may use this field.
+    # Non-admin users always fail admin authorization regardless
+    # of this value. The database migration promotes existing
+    # admins to SUPER_ADMIN for backward compatibility.
+    # -----------------------------------------------------
+    admin_permission_role = Column(
+        String,
+        default="NONE",
+        server_default="NONE",
+        nullable=False,
+        index=True
+    )
     is_suspended = Column(
         Boolean,
         default=False,

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends,HTTPException,Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, String
-from app.auth import get_current_admin
+from app.auth import get_current_admin, require_admin_permission, require_super_admin, ADMIN_PERMISSION_ROLES
 from app.database import get_db
 from app.models import (
     User,
@@ -90,7 +90,7 @@ def get_admin_reports(
     status: str = Query(default=""),
     report_type: str = Query(default=""),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     """Return land and user reports for the admin Reports page."""
 
@@ -199,7 +199,7 @@ def get_admin_reports(
 def get_admin_land_reports(
     status: str = Query(default=""),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     """Return land reports for the admin Reports page."""
 
@@ -250,7 +250,7 @@ def get_admin_land_reports(
 def get_admin_user_reports(
     status: str = Query(default=""),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     """Return user reports for the admin Reports page."""
 
@@ -305,7 +305,7 @@ def get_admin_user_reports(
 @router.get("/dashboard")
 def admin_dashboard(
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("analytics"))
 ):
     total_users = db.query(User).count()
     total_lands = db.query(Land).count()
@@ -337,7 +337,7 @@ def admin_dashboard(
 @router.get("/analytics")
 def admin_analytics(
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("analytics"))
 ):
     total_chats = db.query(Conversation).count()
 
@@ -390,7 +390,7 @@ def get_recent_activity(
         le=50
     ),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("support")),
 ):
     logs = (
         db.query(ActivityLog)
@@ -418,7 +418,6 @@ def get_recent_activity(
                 )
                 .first()
             )
-
         result.append({
             "id": log.id,
 
@@ -466,7 +465,7 @@ def get_activity_logs(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("support")),
 ):
     """Return activity logs for the admin Audit / Activity Log viewer."""
     status = status.strip().lower()
@@ -570,7 +569,7 @@ def export_activity_logs(
     role: str = Query(default=""),
     status: str = Query(default="active"),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("support")),
 ):
     """Export matching activity logs to Excel and archive the exported active logs."""
     status = status.strip().lower()
@@ -690,7 +689,7 @@ def get_all_users(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("support")),
 ):
     query = db.query(User)
 
@@ -750,7 +749,7 @@ def get_all_users(
 def get_user_by_id(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("support"))
 ):
     user = (
         db.query(User)
@@ -810,7 +809,7 @@ def get_all_lands(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     query = db.query(Land)
 
@@ -905,7 +904,7 @@ def get_pending_lands(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     query = (
         db.query(Land)
@@ -983,7 +982,7 @@ def get_pending_lands(
 def approve_land(
     land_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     land = _get_land_for_moderation(land_id, db)
 
@@ -1094,7 +1093,7 @@ def request_changes(
     land_id: int,
     review: LandReview,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     land = _get_land_for_moderation(land_id, db)
 
@@ -1157,7 +1156,7 @@ def reject_land(
     land_id: int,
     review: LandReview,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     land = _get_land_for_moderation(land_id, db)
 
@@ -1219,7 +1218,7 @@ def reject_land(
 def publish_land(
     land_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     land = (
         db.query(Land)
@@ -1435,7 +1434,7 @@ def publish_land(
 def unpublish_land(
     land_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     land = (
         db.query(Land)
@@ -1478,7 +1477,7 @@ def unpublish_land(
 def delete_land_admin(
     land_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     land = (
         db.query(Land)
@@ -1585,7 +1584,7 @@ def update_land_admin(
     land_id: int,
     updated_land: LandUpdate,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     land = (
         db.query(Land)
@@ -1629,7 +1628,7 @@ def update_land_admin(
 def get_land_by_id(
     land_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("support"))
 ):
     land = (
         db.query(Land)
@@ -1697,7 +1696,7 @@ def update_user_admin(
     user_id: int,
     updated_user: UserUpdate,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("moderation"))
 ):
     # -----------------------------------------------------
     # Find target user
@@ -1732,7 +1731,7 @@ def update_user_admin(
                 detail="You cannot change your own admin role"
             )
 
-    # -----------------------------------------------------
+        # -----------------------------------------------------
     # Validate role
     # -----------------------------------------------------
 
@@ -1753,8 +1752,39 @@ def update_user_admin(
                 detail="Invalid user role"
             )
 
-        updated_user.role = requested_role
+        # -------------------------------------------------
+        # ADMIN ROLE CHANGES ARE SUPER ADMIN ONLY
+        # -------------------------------------------------
+        # A Moderation Admin can manage normal farmer/buyer
+        # users, but cannot create, remove, or change an
+        # administrator account.
+        current_role = (
+            str(user.role or "")
+            .strip()
+            .lower()
+        )
 
+        if current_role == "admin" or requested_role == "admin":
+            super_admin = (
+                db.query(User)
+                .filter(
+                    User.id == admin,
+                    User.role == "admin",
+                    User.admin_permission_role == "SUPER_ADMIN",
+                )
+                .first()
+            )
+
+            if not super_admin:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Only a Super Admin can create, remove, "
+                        "or change an administrator role."
+                    ),
+                )
+
+        updated_user.role = requested_role
     # -----------------------------------------------------
     # Save old values for activity log
     # -----------------------------------------------------
@@ -1851,7 +1881,7 @@ def update_user_admin(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     try:
         # -------------------------------------------------
@@ -2090,7 +2120,7 @@ def delete_user(
 @router.get("/district-analytics")
 def district_analytics(
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("analytics"))
 ):
     results = (
         db.query(
@@ -2113,7 +2143,7 @@ def district_analytics(
 @router.get("/monthly-growth")
 def monthly_growth(
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin)
+    admin: int = Depends(require_admin_permission("analytics"))
 ):
     results = (
         db.query(
@@ -2158,7 +2188,7 @@ def export_admin_report(
     report_type: str,
     format: str = Query(default="xlsx"),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("analytics")),
 ):
     """
     Export admin data as Excel or CSV.
@@ -2467,7 +2497,7 @@ def update_report_status(
     report_id: int,
     status: str = Query(...),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     """
     Admin can resolve or dismiss a marketplace report.
@@ -2649,7 +2679,7 @@ def update_report_status(
 def suspend_user(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     """
     Suspend a user account.
@@ -2750,7 +2780,7 @@ def suspend_user(
 def reactivate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     """
     Reactivate a user who voluntarily deactivated their account.
@@ -2828,7 +2858,7 @@ def reactivate_user(
 def restore_user(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("moderation")),
 ):
     """
     Restore a suspended user account.
@@ -2914,7 +2944,7 @@ def marketplace_records(
     category: str = Query(default=""),
     status: str = Query(default=""),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("analytics")),
 ):
     """
     Return marketplace records for the Admin Dashboard statistic cards.
@@ -3102,7 +3132,7 @@ def marketplace_records(
 @router.get("/marketplace-statistics")
 def marketplace_statistics(
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("analytics")),
 ):
     """
     Return marketplace statistics for the Admin Dashboard.
@@ -3269,7 +3299,7 @@ def marketplace_funnel(
     from_date: str = Query(default=""),
     to_date: str = Query(default=""),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("analytics")),
 ):
     """
     Return marketplace funnel analytics for the Admin Dashboard.
@@ -3443,3 +3473,93 @@ def marketplace_funnel(
         },
     }
 
+# =========================================================
+# STEP 75 - SUPER ADMIN PERMISSION MANAGEMENT
+# =========================================================
+
+@router.get("/admin-permissions")
+def get_admin_permissions(
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_super_admin),
+):
+    """List administrative accounts and their permission roles.
+
+    This endpoint is Super Admin only. It intentionally exposes only
+    permission metadata, never passwords, tokens, or KYC documents.
+    """
+    admins = (
+        db.query(User)
+        .filter(User.role == "admin")
+        .order_by(User.id.asc())
+        .all()
+    )
+    return {
+        "admins": [
+            {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "is_suspended": bool(user.is_suspended),
+                "admin_permission_role": user.admin_permission_role,
+            }
+            for user in admins
+        ]
+    }
+
+
+@router.put("/admin-permissions/{user_id}")
+def update_admin_permission(
+    user_id: int,
+    permission_role: str,
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_super_admin),
+):
+    """Change another administrator's permission role.
+
+    Only Super Admin can perform this action. Self-demotion is blocked to
+    prevent accidentally locking the sole Super Admin out of the system.
+    """
+    normalized = (permission_role or "").strip().upper()
+    if normalized not in ADMIN_PERMISSION_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid admin permission role. Allowed: "
+                + ", ".join(sorted(ADMIN_PERMISSION_ROLES))
+            ),
+        )
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Administrator not found")
+    if str(target.role or "").strip().lower() != "admin":
+        raise HTTPException(status_code=400, detail="Target user is not an administrator")
+    if target.id == admin:
+        raise HTTPException(
+            status_code=409,
+            detail="The active Super Admin cannot change their own permission role.",
+        )
+
+    previous = target.admin_permission_role
+    target.admin_permission_role = normalized
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="ADMIN_PERMISSION_CHANGED",
+        description=(
+            f"Admin {admin} changed administrator {target.id} permission "
+            f"from {previous} to {normalized}."
+        ),
+        target_type="USER",
+        target_id=target.id,
+    )
+
+    db.commit()
+    db.refresh(target)
+
+    return {
+        "message": "Administrator permission updated successfully.",
+        "user_id": target.id,
+        "admin_permission_role": target.admin_permission_role,
+    }

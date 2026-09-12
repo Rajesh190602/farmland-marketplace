@@ -406,6 +406,11 @@ def get_me(
         "id": user.id,
         "email": user.email,
         "role": user.role,
+        "admin_permission_role": (
+            getattr(user, "admin_permission_role", "NONE")
+            if user.role == "admin"
+            else "NONE"
+        ),
         **verification_flags,
     }
 @router.post("/send-otp")

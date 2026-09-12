@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app import models
-from app.auth import get_current_admin
+from app.auth import require_admin_permission
 from app.database import get_db
 
 from datetime import datetime, timezone
@@ -36,7 +36,7 @@ def get_activity_logs(
     limit: int = Query(default=20, ge=1, le=100),
     action: str = Query(default=""),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("support")),
 ):
     query = (
         db.query(models.ActivityLog)
@@ -115,7 +115,7 @@ def export_activity_logs(
     to_date: str = Query(default=""),
     action: str = Query(default=""),
     db: Session = Depends(get_db),
-    admin: int = Depends(get_current_admin),
+    admin: int = Depends(require_admin_permission("support")),
 ):
 
     # =====================================================

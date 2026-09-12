@@ -1,6 +1,29 @@
 import { Link, Outlet } from "react-router-dom";
+import {
+  ADMIN_PERMISSIONS,
+  hasAdminPermission,
+  getAdminPermission,
+} from "../utils/adminPermissions";
 
 function AdminLayout() {
+  const permission = getAdminPermission();
+
+  const can = (requiredPermission) =>
+    hasAdminPermission(requiredPermission);
+
+  const permissionLabel = {
+    SUPER_ADMIN: "Super Admin",
+    VERIFICATION_ADMIN: "Verification Admin",
+    MODERATION_ADMIN: "Moderation Admin",
+    SUPPORT_ADMIN: "Support Admin",
+    ANALYTICS_ADMIN: "Analytics Admin",
+  }[permission] || "Admin";
+
+  const linkStyle = {
+    color: "white",
+    textDecoration: "none",
+  };
+
   return (
     <div
       style={{
@@ -21,6 +44,20 @@ function AdminLayout() {
       >
         <h2>👑 Admin Panel</h2>
 
+        <div
+          style={{
+            display: "inline-block",
+            padding: "6px 10px",
+            marginBottom: "12px",
+            borderRadius: "14px",
+            background: "rgba(255,255,255,0.16)",
+            fontSize: "12px",
+            fontWeight: "700",
+          }}
+        >
+          {permissionLabel}
+        </div>
+
         <hr />
 
         <div
@@ -31,102 +68,72 @@ function AdminLayout() {
             marginTop: "20px",
           }}
         >
-          {/* Dashboard */}
-          <Link
-            to="/admin"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            📊 Dashboard
-          </Link>
+          {/* Dashboard - Analytics + Super Admin */}
+          {can(ADMIN_PERMISSIONS.ANALYTICS_ADMIN) && (
+            <Link to="/admin" style={linkStyle}>
+              📊 Dashboard
+            </Link>
+          )}
 
-          {/* Users */}
-          <Link
-            to="/admin/users"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            👥 Users
-          </Link>
+          {/* Users - Support + Super Admin */}
+          {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
+            <Link to="/admin/users" style={linkStyle}>
+              👥 Users
+            </Link>
+          )}
 
-          {/* Lands */}
-          <Link
-            to="/admin/lands"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            🌾 Lands
-          </Link>
+          {/* Lands - Moderation + Super Admin */}
+          {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
+            <>
+              <Link to="/admin/lands" style={linkStyle}>
+                🌾 Lands
+              </Link>
 
-          {/* Pending Approvals */}
-          <Link
-            to="/admin/pending-lands"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            🟡 Pending Approvals
-          </Link>
+              <Link to="/admin/pending-lands" style={linkStyle}>
+                🟡 Pending Approvals
+              </Link>
+            </>
+          )}
 
-          {/* Land Ownership Verification - Step 69 */}
-          <Link
-            to="/admin/land-ownership"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            📜 Land Ownership Verification
-          </Link>
+          {/* Land Ownership - Verification + Super Admin */}
+          {can(ADMIN_PERMISSIONS.VERIFICATION_ADMIN) && (
+            <>
+              <Link
+                to="/admin/land-ownership"
+                style={linkStyle}
+              >
+                📜 Land Ownership Verification
+              </Link>
 
-          {/* KYC / Identity Verification - Step 68 */}
-          <Link
-            to="/admin/kyc"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            🪪 KYC Verification
-          </Link>
+              <Link to="/admin/kyc" style={linkStyle}>
+                🪪 KYC Verification
+              </Link>
+            </>
+          )}
 
-          {/* Reports */}
-          <Link
-            to="/admin/reports"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            🚩 Reports
-          </Link>
+          {/* Reports - Moderation + Super Admin */}
+          {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
+            <Link to="/admin/reports" style={linkStyle}>
+              🚩 Reports
+            </Link>
+          )}
 
-          {/* Activity Logs */}
-          <Link
-            to="/admin/activity-logs"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            📋 Activity Logs
-          </Link>
+          {/* Activity Logs - Support + Super Admin */}
+          {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
+            <Link to="/admin/activity-logs" style={linkStyle}>
+              📋 Activity Logs
+            </Link>
+          )}
 
-          {/* Home */}
-          <Link
-            to="/home"
-            style={{
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
+          {/* Step 75 - Admin Permission Management - Super Admin only */}
+          {permission === ADMIN_PERMISSIONS.SUPER_ADMIN && (
+            <Link to="/admin/permissions" style={linkStyle}>
+              🔐 Admin Permissions
+            </Link>
+          )}
+
+          {/* Home - available to every admin */}
+          <Link to="/home" style={linkStyle}>
             🏠 Home
           </Link>
         </div>
