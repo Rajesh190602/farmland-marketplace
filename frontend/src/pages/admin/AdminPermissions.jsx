@@ -1,8 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "";
+import api from "../../services/api";
 
 const PERMISSION_OPTIONS = [
   {
@@ -39,7 +36,9 @@ function getPermissionLabel(value) {
 
 function getPermissionDescription(value) {
   const option = PERMISSION_OPTIONS.find((item) => item.value === value);
-  return option ? option.description : "No administrative permission assigned";
+  return option
+    ? option.description
+    : "No administrative permission assigned";
 }
 
 function AdminPermissions() {
@@ -49,15 +48,7 @@ function AdminPermissions() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const token = sessionStorage.getItem("token");
   const currentUserId = Number(sessionStorage.getItem("user_id"));
-
-  const api = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
 
   const loadAdmins = async () => {
     setLoading(true);
@@ -65,14 +56,26 @@ function AdminPermissions() {
 
     try {
       const response = await api.get("/admin/admin-permissions");
-      setAdmins(
-        Array.isArray(response.data?.admins) ? response.data.admins : []
-      );
+
+      const administratorAccounts = Array.isArray(response.data?.admins)
+        ? response.data.admins
+        : [];
+
+      setAdmins(administratorAccounts);
     } catch (err) {
+      console.error("Failed to load administrator permissions:", err);
+
+      const status = err?.response?.status;
       const message =
         err?.response?.data?.detail ||
-        "Failed to load administrator permissions.";
+        (status === 401
+          ? "Your session has expired. Please log in again."
+          : status === 403
+            ? "You must be a Super Admin to manage administrator permissions."
+            : "Failed to load administrator permissions. Please try again.");
+
       setError(message);
+      setAdmins([]);
     } finally {
       setLoading(false);
     }
@@ -80,8 +83,6 @@ function AdminPermissions() {
 
   useEffect(() => {
     loadAdmins();
-    // The page intentionally loads once when opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updatePermission = async (userId, permissionRole) => {
@@ -109,9 +110,12 @@ function AdminPermissions() {
 
       setSuccess("Administrator permission updated successfully.");
     } catch (err) {
+      console.error("Failed to update administrator permission:", err);
+
       const message =
         err?.response?.data?.detail ||
         "Failed to update administrator permission.";
+
       setError(message);
     } finally {
       setSavingId(null);
@@ -132,6 +136,7 @@ function AdminPermissions() {
         <h1 style={{ marginTop: 0, marginBottom: "8px" }}>
           🔐 Admin Permission Management
         </h1>
+
         <p style={{ margin: 0, color: "#555", lineHeight: 1.5 }}>
           Assign administrative permissions to administrator accounts. This
           page is available to Super Admins only.
@@ -203,7 +208,9 @@ function AdminPermissions() {
             textAlign: "center",
           }}
         >
-          No administrator accounts found.
+          {error
+            ? "Unable to load administrator accounts."
+            : "No administrator accounts found."}
         </div>
       ) : (
         <div
