@@ -1,4 +1,4 @@
-export const ADMIN_PERMISSIONS = {
+﻿export const ADMIN_PERMISSIONS = {
   SUPER_ADMIN: "SUPER_ADMIN",
   VERIFICATION_ADMIN: "VERIFICATION_ADMIN",
   MODERATION_ADMIN: "MODERATION_ADMIN",
@@ -8,12 +8,16 @@ export const ADMIN_PERMISSIONS = {
 
 const PERMISSION_ALIASES = {
   SUPER_ADMIN: "SUPER_ADMIN",
+
   VERIFICATION: "VERIFICATION_ADMIN",
   VERIFICATION_ADMIN: "VERIFICATION_ADMIN",
+
   MODERATION: "MODERATION_ADMIN",
   MODERATION_ADMIN: "MODERATION_ADMIN",
+
   SUPPORT: "SUPPORT_ADMIN",
   SUPPORT_ADMIN: "SUPPORT_ADMIN",
+
   ANALYTICS: "ANALYTICS_ADMIN",
   ANALYTICS_ADMIN: "ANALYTICS_ADMIN",
 };
@@ -40,6 +44,7 @@ export function hasAdminPermission(requiredPermission) {
     return false;
   }
 
+  // Super Admin has access to everything.
   if (currentPermission === ADMIN_PERMISSIONS.SUPER_ADMIN) {
     return true;
   }

@@ -1,4 +1,4 @@
-import { Link, Outlet } from "react-router-dom";
+﻿import { Link, Outlet } from "react-router-dom";
 import {
   ADMIN_PERMISSIONS,
   hasAdminPermission,
@@ -25,13 +25,7 @@ function AdminLayout() {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-      }}
-    >
-      {/* Sidebar */}
+    <div style={{ display: "flex", minHeight: "100vh" }}>
       <div
         style={{
           width: "250px",
@@ -42,7 +36,7 @@ function AdminLayout() {
           flexShrink: 0,
         }}
       >
-        <h2>👑 Admin Panel</h2>
+        <h2>Admin Panel</h2>
 
         <div
           style={{
@@ -68,78 +62,66 @@ function AdminLayout() {
             marginTop: "20px",
           }}
         >
-          {/* Dashboard - Analytics + Super Admin */}
           {can(ADMIN_PERMISSIONS.ANALYTICS_ADMIN) && (
             <Link to="/admin" style={linkStyle}>
-              📊 Dashboard
+              Dashboard
             </Link>
           )}
 
-          {/* Users - Support + Super Admin */}
           {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
             <Link to="/admin/users" style={linkStyle}>
-              👥 Users
+              Users
             </Link>
           )}
 
-          {/* Lands - Moderation + Super Admin */}
           {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
             <>
               <Link to="/admin/lands" style={linkStyle}>
-                🌾 Lands
+                Lands
               </Link>
 
               <Link to="/admin/pending-lands" style={linkStyle}>
-                🟡 Pending Approvals
+                Pending Approvals
               </Link>
             </>
           )}
 
-          {/* Land Ownership - Verification + Super Admin */}
           {can(ADMIN_PERMISSIONS.VERIFICATION_ADMIN) && (
             <>
-              <Link
-                to="/admin/land-ownership"
-                style={linkStyle}
-              >
-                📜 Land Ownership Verification
+              <Link to="/admin/land-ownership" style={linkStyle}>
+                Land Ownership Verification
               </Link>
 
               <Link to="/admin/kyc" style={linkStyle}>
-                🪪 KYC Verification
+                KYC Verification
               </Link>
             </>
           )}
 
-          {/* Reports - Moderation + Super Admin */}
           {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
             <Link to="/admin/reports" style={linkStyle}>
-              🚩 Reports
+              Reports
             </Link>
           )}
 
-          {/* Activity Logs - Support + Super Admin */}
           {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
             <Link to="/admin/activity-logs" style={linkStyle}>
-              📋 Activity Logs
+              Activity Logs
             </Link>
           )}
 
-          {/* Step 75 - Admin Permission Management - Super Admin only */}
           {permission === ADMIN_PERMISSIONS.SUPER_ADMIN && (
             <Link to="/admin/permissions" style={linkStyle}>
-              🔐 Admin Permissions
+              Admin Permissions
             </Link>
           )}
 
-          {/* Home - available to every admin */}
           <Link to="/home" style={linkStyle}>
-            🏠 Home
+            Home
           </Link>
         </div>
       </div>
 
-      {/* Main Content */}
       <div
         style={{
           flex: 1,

@@ -1,151 +1,86 @@
-import { Link, Outlet } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import {
-  ADMIN_PERMISSIONS,
   hasAdminPermission,
   getAdminPermission,
 } from "../utils/adminPermissions";
 
-function AdminLayout() {
-  const permission = getAdminPermission();
+const PERMISSION_ALIASES = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  VERIFICATION: "VERIFICATION_ADMIN",
+  VERIFICATION_ADMIN: "VERIFICATION_ADMIN",
+  MODERATION: "MODERATION_ADMIN",
+  MODERATION_ADMIN: "MODERATION_ADMIN",
+  SUPPORT: "SUPPORT_ADMIN",
+  SUPPORT_ADMIN: "SUPPORT_ADMIN",
+  ANALYTICS: "ANALYTICS_ADMIN",
+  ANALYTICS_ADMIN: "ANALYTICS_ADMIN",
+};
 
-  const can = (requiredPermission) =>
-    hasAdminPermission(requiredPermission);
+function normalizePermission(permission) {
+  const normalized = String(permission || "")
+    .trim()
+    .toUpperCase();
 
-  const permissionLabel = {
-    SUPER_ADMIN: "Super Admin",
-    VERIFICATION_ADMIN: "Verification Admin",
-    MODERATION_ADMIN: "Moderation Admin",
-    SUPPORT_ADMIN: "Support Admin",
-    ANALYTICS_ADMIN: "Analytics Admin",
-  }[permission] || "Admin";
-
-  const linkStyle = {
-    color: "white",
-    textDecoration: "none",
-  };
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-      }}
-    >
-      {/* Sidebar */}
-      <div
-        style={{
-          width: "250px",
-          background: "#1B5E20",
-          color: "white",
-          padding: "20px",
-          boxSizing: "border-box",
-          flexShrink: 0,
-        }}
-      >
-        <h2>👑 Admin Panel</h2>
-
-        <div
-          style={{
-            display: "inline-block",
-            padding: "6px 10px",
-            marginBottom: "12px",
-            borderRadius: "14px",
-            background: "rgba(255,255,255,0.16)",
-            fontSize: "12px",
-            fontWeight: "700",
-          }}
-        >
-          {permissionLabel}
-        </div>
-
-        <hr />
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "15px",
-            marginTop: "20px",
-          }}
-        >
-          {/* Dashboard - Analytics + Super Admin */}
-          {can(ADMIN_PERMISSIONS.ANALYTICS_ADMIN) && (
-            <Link to="/admin" style={linkStyle}>
-              📊 Dashboard
-            </Link>
-          )}
-
-          {/* Users - Support + Super Admin */}
-          {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
-            <Link to="/admin/users" style={linkStyle}>
-              👥 Users
-            </Link>
-          )}
-
-          {/* Lands - Moderation + Super Admin */}
-          {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
-            <>
-              <Link to="/admin/lands" style={linkStyle}>
-                🌾 Lands
-              </Link>
-
-              <Link to="/admin/pending-lands" style={linkStyle}>
-                🟡 Pending Approvals
-              </Link>
-            </>
-          )}
-
-          {/* Land Ownership - Verification + Super Admin */}
-          {can(ADMIN_PERMISSIONS.VERIFICATION_ADMIN) && (
-            <>
-              <Link
-                to="/admin/land-ownership"
-                style={linkStyle}
-              >
-                📜 Land Ownership Verification
-              </Link>
-
-              <Link to="/admin/kyc" style={linkStyle}>
-                🪪 KYC Verification
-              </Link>
-            </>
-          )}
-
-          {/* Reports - Moderation + Super Admin */}
-          {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
-            <Link to="/admin/reports" style={linkStyle}>
-              🚩 Reports
-            </Link>
-          )}
-
-          {/* Activity Logs - Support + Super Admin */}
-          {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
-            <Link to="/admin/activity-logs" style={linkStyle}>
-              📋 Activity Logs
-            </Link>
-          )}
-
-          {/* Home - available to every admin */}
-          <Link to="/home" style={linkStyle}>
-            🏠 Home
-          </Link>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div
-        style={{
-          flex: 1,
-          padding: "30px",
-          background: "#f5f5f5",
-          minWidth: 0,
-          boxSizing: "border-box",
-        }}
-      >
-        <Outlet />
-      </div>
-    </div>
-  );
+  return PERMISSION_ALIASES[normalized] || normalized;
 }
 
-export default AdminLayout;
+function getDefaultAdminPath() {
+  const permission = normalizePermission(getAdminPermission());
+
+  switch (permission) {
+    case "SUPER_ADMIN":
+      return "/admin";
+
+    case "VERIFICATION_ADMIN":
+      return "/admin/kyc";
+
+    case "MODERATION_ADMIN":
+      return "/admin/lands";
+
+    case "SUPPORT_ADMIN":
+      return "/admin/users";
+
+    case "ANALYTICS_ADMIN":
+      return "/admin";
+
+    default:
+      return "/home";
+  }
+}
+
+function AdminRoute({ children, requiredPermission }) {
+  const location = useLocation();
+
+  const token = sessionStorage.getItem("token");
+  const role = String(sessionStorage.getItem("role") || "")
+    .trim()
+    .toLowerCase();
+
+  // Not logged in
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Logged-in user is not an admin
+  if (role !== "admin") {
+    return <Navigate to="/home" replace />;
+  }
+
+  // Permission-specific protection
+  if (
+    requiredPermission &&
+    !hasAdminPermission(requiredPermission)
+  ) {
+    const fallback = getDefaultAdminPath();
+
+    if (location.pathname !== fallback) {
+      return <Navigate to={fallback} replace />;
+    }
+
+    return <Navigate to="/home" replace />;
+  }
+
+  return children;
+}
+
+export default AdminRoute;
