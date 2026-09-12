@@ -25,6 +25,7 @@ from app.models import (
     SavedSearch,
     UserAccountStatus,
     LandOwnershipVerification,
+    RiskEvent,
 )
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
@@ -3562,4 +3563,446 @@ def update_admin_permission(
         "message": "Administrator permission updated successfully.",
         "user_id": target.id,
         "admin_permission_role": target.admin_permission_role,
+    }
+# =========================================================
+# STEP 76C - RISK MONITORING ADMIN API
+# =========================================================
+
+@router.get("/risk/events")
+def get_risk_events(
+    status: str = Query(default=""),
+    risk_level: str = Query(default=""),
+    event_type: str = Query(default=""),
+    user_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_admin_permission("moderation")),
+):
+    """Return fraud/risk events for Moderation and Super Admins."""
+
+    query = db.query(RiskEvent)
+
+    if status:
+        normalized_status = status.strip().upper()
+        allowed_statuses = {
+            "OPEN",
+            "REVIEWING",
+            "RESOLVED",
+            "DISMISSED",
+        }
+        if normalized_status not in allowed_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid risk event status. Allowed: "
+                    + ", ".join(sorted(allowed_statuses))
+                ),
+            )
+        query = query.filter(RiskEvent.status == normalized_status)
+
+    if risk_level:
+        normalized_level = risk_level.strip().upper()
+        allowed_levels = {
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL",
+        }
+        if normalized_level not in allowed_levels:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid risk level. Allowed: "
+                    + ", ".join(sorted(allowed_levels))
+                ),
+            )
+        query = query.filter(RiskEvent.risk_level == normalized_level)
+
+    if event_type:
+        query = query.filter(
+            RiskEvent.event_type == event_type.strip().upper()
+        )
+
+    if user_id is not None:
+        query = query.filter(RiskEvent.user_id == user_id)
+
+    total = query.count()
+
+    events = (
+        query
+        .order_by(RiskEvent.created_at.desc(), RiskEvent.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "events": [
+            {
+                "id": event.id,
+                "user_id": event.user_id,
+                "event_type": event.event_type,
+                "risk_score": event.risk_score,
+                "risk_level": event.risk_level,
+                "description": event.description,
+                "target_type": event.target_type,
+                "target_id": event.target_id,
+                "status": event.status,
+                "created_at": event.created_at,
+                "resolved_at": event.resolved_at,
+                "resolved_by": event.resolved_by,
+                "resolution_note": event.resolution_note,
+            }
+            for event in events
+        ],
+        "total": total,
+        "limit": limit,
+    }
+
+
+@router.get("/risk/summary")
+def get_risk_summary(
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_admin_permission("moderation")),
+):
+    """Return risk-event counts for the admin risk dashboard."""
+
+    status_counts = {
+        "OPEN": 0,
+        "REVIEWING": 0,
+        "RESOLVED": 0,
+        "DISMISSED": 0,
+    }
+
+    level_counts = {
+        "LOW": 0,
+        "MEDIUM": 0,
+        "HIGH": 0,
+        "CRITICAL": 0,
+    }
+
+    rows = (
+        db.query(
+            RiskEvent.status,
+            func.count(RiskEvent.id),
+        )
+        .group_by(RiskEvent.status)
+        .all()
+    )
+
+    for status_value, count in rows:
+        if status_value in status_counts:
+            status_counts[status_value] = count
+
+    rows = (
+        db.query(
+            RiskEvent.risk_level,
+            func.count(RiskEvent.id),
+        )
+        .group_by(RiskEvent.risk_level)
+        .all()
+    )
+
+    for level_value, count in rows:
+        if level_value in level_counts:
+            level_counts[level_value] = count
+
+    return {
+        "status": status_counts,
+        "risk_level": level_counts,
+        "total": sum(status_counts.values()),
+        "open_high_or_critical": (
+            db.query(RiskEvent)
+            .filter(
+                RiskEvent.status.in_(["OPEN", "REVIEWING"]),
+                RiskEvent.risk_level.in_(["HIGH", "CRITICAL"]),
+            )
+            .count()
+        ),
+    }
+
+
+@router.get("/risk/users/{user_id}")
+def get_user_risk_events(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_admin_permission("moderation")),
+):
+    """Return risk events associated with a specific user."""
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    events = (
+        db.query(RiskEvent)
+        .filter(RiskEvent.user_id == user_id)
+        .order_by(RiskEvent.created_at.desc(), RiskEvent.id.desc())
+        .all()
+    )
+
+    return {
+        "user": {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "role": user.role,
+        },
+        "events": [
+            {
+                "id": event.id,
+                "event_type": event.event_type,
+                "risk_score": event.risk_score,
+                "risk_level": event.risk_level,
+                "description": event.description,
+                "target_type": event.target_type,
+                "target_id": event.target_id,
+                "status": event.status,
+                "created_at": event.created_at,
+                "resolved_at": event.resolved_at,
+                "resolved_by": event.resolved_by,
+                "resolution_note": event.resolution_note,
+            }
+            for event in events
+        ],
+        "total": len(events),
+    }
+
+
+@router.get("/risk/lands/{land_id}")
+def get_land_risk_events(
+    land_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_admin_permission("moderation")),
+):
+    """Return risk events associated with a specific land listing."""
+
+    land = db.query(Land).filter(Land.id == land_id).first()
+
+    if not land:
+        raise HTTPException(
+            status_code=404,
+            detail="Land not found",
+        )
+
+    events = (
+        db.query(RiskEvent)
+        .filter(
+            RiskEvent.target_type == "LAND",
+            RiskEvent.target_id == land_id,
+        )
+        .order_by(RiskEvent.created_at.desc(), RiskEvent.id.desc())
+        .all()
+    )
+
+    return {
+        "land": {
+            "id": land.id,
+            "title": land.title,
+            "owner_id": land.owner_id,
+        },
+        "events": [
+            {
+                "id": event.id,
+                "user_id": event.user_id,
+                "event_type": event.event_type,
+                "risk_score": event.risk_score,
+                "risk_level": event.risk_level,
+                "description": event.description,
+                "status": event.status,
+                "created_at": event.created_at,
+                "resolved_at": event.resolved_at,
+                "resolved_by": event.resolved_by,
+                "resolution_note": event.resolution_note,
+            }
+            for event in events
+        ],
+        "total": len(events),
+    }
+
+
+def _get_risk_event_or_404(
+    event_id: int,
+    db: Session,
+) -> RiskEvent:
+    event = (
+        db.query(RiskEvent)
+        .filter(RiskEvent.id == event_id)
+        .first()
+    )
+
+    if not event:
+        raise HTTPException(
+            status_code=404,
+            detail="Risk event not found",
+        )
+
+    return event
+
+
+@router.put("/risk/events/{event_id}/review")
+def review_risk_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_admin_permission("moderation")),
+):
+    """Move an open risk event into review."""
+
+    event = _get_risk_event_or_404(event_id, db)
+
+    if event.status != "OPEN":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Risk event cannot be reviewed from status "
+                f"{event.status}."
+            ),
+        )
+
+    event.status = "REVIEWING"
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="RISK_EVENT_REVIEWED",
+        description=(
+            f"Admin {admin} started reviewing risk event "
+            f"{event.id} ({event.event_type})."
+        ),
+        target_type="RISK_EVENT",
+        target_id=event.id,
+    )
+
+    db.commit()
+    db.refresh(event)
+
+    return {
+        "message": "Risk event marked as reviewing.",
+        "event": {
+            "id": event.id,
+            "status": event.status,
+        },
+    }
+
+
+@router.put("/risk/events/{event_id}/resolve")
+def resolve_risk_event(
+    event_id: int,
+    resolution_note: str = Query(...),
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_admin_permission("moderation")),
+):
+    """Resolve a risk event after administrative review."""
+
+    event = _get_risk_event_or_404(event_id, db)
+
+    note = (resolution_note or "").strip()
+
+    if not note:
+        raise HTTPException(
+            status_code=400,
+            detail="Resolution note is required.",
+        )
+
+    if event.status not in {"OPEN", "REVIEWING"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Risk event cannot be resolved from status "
+                f"{event.status}."
+            ),
+        )
+
+    event.status = "RESOLVED"
+    event.resolved_at = datetime.utcnow()
+    event.resolved_by = admin
+    event.resolution_note = note
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="RISK_EVENT_RESOLVED",
+        description=(
+            f"Admin {admin} resolved risk event {event.id} "
+            f"({event.event_type}). Reason: {note}"
+        ),
+        target_type="RISK_EVENT",
+        target_id=event.id,
+    )
+
+    db.commit()
+    db.refresh(event)
+
+    return {
+        "message": "Risk event resolved successfully.",
+        "event": {
+            "id": event.id,
+            "status": event.status,
+            "resolved_at": event.resolved_at,
+            "resolved_by": event.resolved_by,
+            "resolution_note": event.resolution_note,
+        },
+    }
+
+
+@router.put("/risk/events/{event_id}/dismiss")
+def dismiss_risk_event(
+    event_id: int,
+    resolution_note: str = Query(...),
+    db: Session = Depends(get_db),
+    admin: int = Depends(require_admin_permission("moderation")),
+):
+    """Dismiss a risk event determined to be non-actionable."""
+
+    event = _get_risk_event_or_404(event_id, db)
+
+    note = (resolution_note or "").strip()
+
+    if not note:
+        raise HTTPException(
+            status_code=400,
+            detail="Dismissal note is required.",
+        )
+
+    if event.status not in {"OPEN", "REVIEWING"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Risk event cannot be dismissed from status "
+                f"{event.status}."
+            ),
+        )
+
+    event.status = "DISMISSED"
+    event.resolved_at = datetime.utcnow()
+    event.resolved_by = admin
+    event.resolution_note = note
+
+    create_activity_log(
+        db=db,
+        user_id=admin,
+        action="RISK_EVENT_DISMISSED",
+        description=(
+            f"Admin {admin} dismissed risk event {event.id} "
+            f"({event.event_type}). Reason: {note}"
+        ),
+        target_type="RISK_EVENT",
+        target_id=event.id,
+    )
+
+    db.commit()
+    db.refresh(event)
+
+    return {
+        "message": "Risk event dismissed successfully.",
+        "event": {
+            "id": event.id,
+            "status": event.status,
+            "resolved_at": event.resolved_at,
+            "resolved_by": event.resolved_by,
+            "resolution_note": event.resolution_note,
+        },
     }

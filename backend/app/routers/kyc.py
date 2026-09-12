@@ -39,7 +39,7 @@ from app.schemas import (
 )
 from app.utils.activity_log import create_activity_log
 from app.utils.email import send_notification_email
-
+from app.utils.risk_monitor import check_repeated_kyc_failure_risk
 
 router = APIRouter(
     prefix="/kyc",
@@ -801,6 +801,18 @@ def review_kyc(
         target_type="USER_KYC",
         target_id=verification.id,
     )
+
+    if action in {"reject", "changes_requested"}:
+        try:
+            check_repeated_kyc_failure_risk(
+                db=db,
+                user_id=verification.user_id,
+            )
+        except Exception as exc:
+            print(
+                f"Risk monitoring failed for KYC verification "
+                f"{verification.id}: {exc}"
+            )
 
     db.commit()
 

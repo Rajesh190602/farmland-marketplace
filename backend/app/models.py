@@ -120,6 +120,12 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
+    risk_events = relationship(
+        "RiskEvent",
+        foreign_keys="RiskEvent.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
 
     # -----------------------------------------------------
     # Phase 2 - Land Reports
@@ -1407,6 +1413,104 @@ class ActivityLog(Base):
     user = relationship(
         "User",
         back_populates="activity_logs"
+    )
+# =========================================================
+# STEP 76 - FRAUD / RISK MONITORING
+# =========================================================
+
+class RiskEvent(Base):
+    __tablename__ = "risk_events"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True
+    )
+
+    event_type = Column(
+        String,
+        nullable=False,
+        index=True
+    )
+
+    risk_score = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        index=True
+    )
+
+    risk_level = Column(
+        String,
+        nullable=False,
+        default="LOW",
+        index=True
+    )
+
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    target_type = Column(
+        String,
+        nullable=True,
+        index=True
+    )
+
+    target_id = Column(
+        Integer,
+        nullable=True,
+        index=True
+    )
+
+    status = Column(
+        String,
+        nullable=False,
+        default="OPEN",
+        index=True
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True
+    )
+
+    resolved_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    resolved_by = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True
+    )
+
+    resolution_note = Column(
+        Text,
+        nullable=True
+    )
+
+    user = relationship(
+        "User",
+        foreign_keys=[user_id],
+        back_populates="risk_events"
+    )
+
+    resolver = relationship(
+        "User",
+        foreign_keys=[resolved_by]
     )
 
 

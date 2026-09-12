@@ -8,6 +8,11 @@ from app.auth import get_current_user
 from app.database import get_db
 from app import cloudinary_config
 from app.utils.activity_log import create_activity_log
+from app.utils.risk_monitor import (
+    check_land_report_risk,
+    check_user_report_risk,
+    check_rapid_offer_risk,
+)
 from app.models import (
     User,
     Land,
@@ -1047,6 +1052,13 @@ def create_offer(
     )
     db.add(offer)
     db.flush()
+    try:
+        check_rapid_offer_risk(
+            db=db,
+            buyer_id=buyer.id,
+        )
+    except Exception as exc:
+        print(f"Risk monitoring failed for offer {offer.id}: {exc}")
 
     add_offer_history(
         db=db,
@@ -2920,6 +2932,17 @@ def report_land(
     )
 
     db.add(report)
+    db.flush()
+    try:    
+        check_land_report_risk(
+            db=db,
+            land_id=land.id,
+        )
+    except Exception as exc:
+        print(
+            f"Risk monitoring failed for land report "
+            f"{report.id}: {exc}"
+        )
     db.commit()
     db.refresh(report)
 
@@ -3094,6 +3117,17 @@ def report_user(
     )
 
     db.add(report)
+    db.flush()
+    try:
+        check_user_report_risk(
+            db=db,
+            reported_user_id=reported_user.id,
+        )
+    except Exception as exc:
+        print(
+            f"Risk monitoring failed for user report "
+            f"{report.id}: {exc}"
+        )
     db.commit()
     db.refresh(report)
 
