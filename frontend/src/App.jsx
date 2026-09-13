@@ -4,6 +4,7 @@ import {
   Route,
 } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import RiskMonitoring from "./pages/admin/RiskMonitoring";
 
 // =====================================================
 // Public Pages
@@ -498,6 +499,15 @@ function App() {
               element={
                 <AdminRoute requiredPermission="MODERATION_ADMIN">
                   <AdminReports />
+                </AdminRoute>
+              }
+            />
+            {/* Step 76 - Risk Monitoring - Moderation Admin + Super Admin */}
+            <Route
+              path="risk"
+              element={
+                <AdminRoute requiredPermission="MODERATION_ADMIN">
+                  <RiskMonitoring />
                 </AdminRoute>
               }
             />

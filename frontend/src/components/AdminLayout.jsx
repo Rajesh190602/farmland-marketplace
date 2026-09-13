@@ -103,6 +103,11 @@ function AdminLayout() {
               Reports
             </Link>
           )}
+          {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
+            <Link to="/admin/risk" style={linkStyle}>
+              Risk Monitoring
+            </Link>
+          )}
 
           {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
             <Link to="/admin/activity-logs" style={linkStyle}>
