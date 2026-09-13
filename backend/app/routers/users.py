@@ -19,6 +19,7 @@ import io
 import cloudinary.uploader
 from PIL import Image, UnidentifiedImageError
 from app.utils.activity_log import create_activity_log
+from app.utils.risk_monitor import create_risk_event
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -49,6 +50,10 @@ OTP_EXPIRY_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
 OTP_RESEND_COOLDOWN_SECONDS = 60
 MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+# STEP 77B - Login abuse protection
+LOGIN_MAX_FAILED_ATTEMPTS = 5
+LOGIN_LOCK_MINUTES = 15
 def check_otp_resend_allowed(verification):
     if not verification or not verification.last_sent_at:
         return
@@ -308,6 +313,30 @@ def login(
             )
         )
 
+    # =====================================================
+    # STEP 77B - LOGIN ABUSE PROTECTION
+    # =====================================================
+    now = datetime.utcnow()
+
+    # If a previous temporary lock is still active, reject the login
+    # before checking the password.
+    if db_user.locked_until and db_user.locked_until > now:
+        remaining_seconds = int((db_user.locked_until - now).total_seconds())
+        remaining_minutes = max(1, (remaining_seconds + 59) // 60)
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Too many failed login attempts. "
+                f"Please try again in {remaining_minutes} minute(s)."
+            )
+        )
+
+    # A previous lock has expired. Start a fresh failure window.
+    if db_user.locked_until and db_user.locked_until <= now:
+        db_user.failed_login_attempts = 0
+        db_user.locked_until = None
+        db_user.last_failed_login_at = None
+
     # Verify password
     password_ok = verify_password(
         form_data.password,
@@ -315,10 +344,60 @@ def login(
     )
 
     if not password_ok:
+        db_user.failed_login_attempts = (db_user.failed_login_attempts or 0) + 1
+        db_user.last_failed_login_at = now
+
+        if db_user.failed_login_attempts >= LOGIN_MAX_FAILED_ATTEMPTS:
+            db_user.locked_until = now + timedelta(minutes=LOGIN_LOCK_MINUTES)
+
+            # Create a security risk event when the threshold is reached.
+            # Do not allow risk logging failure to break account protection.
+            try:
+                create_risk_event(
+                    db=db,
+                    event_type="FAILED_LOGIN_PATTERN",
+                    risk_score=50,
+                    user_id=db_user.id,
+                    target_type="USER",
+                    target_id=db_user.id,
+                    description=(
+                        f"User reached {db_user.failed_login_attempts} failed "
+                        "login attempts and was temporarily locked."
+                    ),
+                )
+            except Exception:
+                pass
+
+            db.commit()
+
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many failed login attempts. "
+                    f"Your account is temporarily locked for {LOGIN_LOCK_MINUTES} minutes."
+                )
+            )
+
+        db.commit()
+
+        remaining_attempts = LOGIN_MAX_FAILED_ATTEMPTS - db_user.failed_login_attempts
         raise HTTPException(
             status_code=400,
-            detail="Invalid email or password"
+            detail=(
+                "Invalid email or password"
+                + (f". {remaining_attempts} attempt(s) remaining." if remaining_attempts > 0 else "")
+            )
         )
+
+    # Successful login resets the failure state.
+    if (
+        db_user.failed_login_attempts
+        or db_user.locked_until
+        or db_user.last_failed_login_at
+    ):
+        db_user.failed_login_attempts = 0
+        db_user.locked_until = None
+        db_user.last_failed_login_at = None
 
     # Buyer accounts remain blocked from the marketplace until KYC is verified.
     # Password verification happens first so account status is not exposed for
@@ -643,6 +722,11 @@ def reset_password(
         )
 
     user.password = hash_password(data.new_password)
+
+    # STEP 77B - A successful password reset restores normal login state.
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_failed_login_at = None
 
     # Consume the verified OTP authorization so it cannot be reused.
     verification.verified = False

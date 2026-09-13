@@ -1,28 +1,56 @@
 import os
+
 from app.routers.marketplace import router as marketplace_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
 from app.routers import favorites
 from app import cloudinary_config
 from app import models
 from app.database import Base, engine
-from app.routers import admin, chat, dashboard, lands, upload, users,notifications, reports,land_images,activity_logs
+from app.routers import (
+    admin,
+    chat,
+    dashboard,
+    lands,
+    upload,
+    users,
+    notifications,
+    reports,
+    land_images,
+    activity_logs,
+)
 from app.routers import saved_searches
 from app.routers import reviews
 from app.routers import kyc
 from app.routers import land_ownership
+from app.rate_limiter import check_rate_limit
+
+
+# =========================================================
+# DATABASE
+# =========================================================
+
 # Create all database tables
 Base.metadata.create_all(bind=engine)
 
-# Create FastAPI application
+
+# =========================================================
+# FASTAPI APPLICATION
+# =========================================================
+
 app = FastAPI(
     title="Farmland Marketplace API",
     description="Backend API for Farmland Marketplace",
-    version="1.0.0"
+    version="1.0.0",
 )
 
-# Enable CORS
+
+# =========================================================
+# CORS
+# =========================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -35,7 +63,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# Security headers
+
+
+# =========================================================
+# STEP 77A - SENSITIVE API RATE LIMITING
+# =========================================================
+
+@app.middleware("http")
+async def rate_limit_sensitive_endpoints(request, call_next):
+    rate_limit_response = check_rate_limit(request)
+
+    if rate_limit_response is not None:
+        return rate_limit_response
+
+    return await call_next(request)
+
+
+# =========================================================
+# SECURITY HEADERS
+# =========================================================
+
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     response = await call_next(request)
@@ -43,14 +90,23 @@ async def add_security_headers(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=()"
+    )
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
 
     return response
 
 
+# =========================================================
+# UPLOADS
+# =========================================================
+
 # Create uploads folder
 os.makedirs("uploads/lands", exist_ok=True)
+
 
 # Serve uploaded files
 app.mount(
@@ -59,7 +115,11 @@ app.mount(
     name="uploads",
 )
 
-# Register routers
+
+# =========================================================
+# REGISTER ROUTERS
+# =========================================================
+
 app.include_router(users.router)
 app.include_router(lands.router)
 app.include_router(marketplace_router)
@@ -75,6 +135,8 @@ app.include_router(activity_logs.router)
 app.include_router(saved_searches.router)
 app.include_router(reviews.router)
 app.include_router(land_ownership.router)
+
+
 # =========================================================
 # STEP 68 - KYC / IDENTITY VERIFICATION
 # =========================================================
@@ -82,6 +144,12 @@ app.include_router(land_ownership.router)
 app.include_router(
     kyc.router
 )
+
+
+# =========================================================
+# ROOT ENDPOINT
+# =========================================================
+
 @app.get("/")
 def root():
     return {

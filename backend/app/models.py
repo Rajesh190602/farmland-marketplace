@@ -64,11 +64,34 @@ class User(Base):
         nullable=False,
         index=True
     )
+
     is_suspended = Column(
         Boolean,
         default=False,
         nullable=False,
         index=True
+    )
+
+    # -----------------------------------------------------
+    # STEP 77B - LOGIN / ACCOUNT ABUSE PROTECTION
+    # -----------------------------------------------------
+
+    failed_login_attempts = Column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False
+    )
+
+    locked_until = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True
+    )
+
+    last_failed_login_at = Column(
+        DateTime(timezone=True),
+        nullable=True
     )
 
     created_at = Column(
