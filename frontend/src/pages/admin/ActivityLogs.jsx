@@ -11,6 +11,7 @@ function ActivityLogs() {
   const [total, setTotal] = useState(0);
 
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [role, setRole] = useState("");
   const [status, setStatus] = useState("active");
   const [action, setAction] = useState("");
@@ -35,7 +36,7 @@ function ActivityLogs() {
       params.append("page", page);
       params.append("limit", limit);
 
-      if (search) params.append("search", search);
+      if (appliedSearch) params.append("search", appliedSearch);
       if (role) params.append("role", role);
       if (status) params.append("status", status);
       if (action) params.append("action", action);
@@ -65,7 +66,7 @@ function ActivityLogs() {
 
   useEffect(() => {
     fetchLogs();
-  }, [page, search, role, status, action, appliedFromDate, appliedToDate]);
+  }, [page, appliedSearch, role, status, action, appliedFromDate, appliedToDate]);
 
   // =====================================================
   // APPLY FILTER
@@ -76,6 +77,7 @@ function ActivityLogs() {
       alert("From Date cannot be later than To Date.");
       return;
     }
+    setAppliedSearch(search);
     setAppliedFromDate(fromDate);
     setAppliedToDate(toDate);
     setPage(1);
@@ -87,6 +89,7 @@ function ActivityLogs() {
 
   const clearFilters = () => {
     setSearch("");
+    setAppliedSearch("");
     setRole("");
     setStatus("active");
     setAction("");
@@ -458,7 +461,12 @@ function ActivityLogs() {
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      applyFilters();
+                    }
+                  }}
                   placeholder="Search user, email, action, description, target..."
                   style={inputStyle}
                 />
