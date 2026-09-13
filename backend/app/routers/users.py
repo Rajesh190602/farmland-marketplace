@@ -54,6 +54,10 @@ MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 # STEP 77B - Login abuse protection
 LOGIN_MAX_FAILED_ATTEMPTS = 5
 LOGIN_LOCK_MINUTES = 15
+
+# STEP 77C - OTP abuse protection
+OTP_REQUEST_MAX_PER_HOUR = 5
+OTP_REQUEST_WINDOW_MINUTES = 60
 def check_otp_resend_allowed(verification):
     if not verification or not verification.last_sent_at:
         return
@@ -70,6 +74,76 @@ def check_otp_resend_allowed(verification):
             status_code=429,
             detail=f"Please wait {remaining} seconds before requesting another OTP."
         )
+
+
+def check_otp_request_limit(verification, user=None, db=None, purpose="OTP"):
+    """Enforce a per-email OTP request limit over a rolling one-hour window."""
+    if verification is None:
+        return
+
+    now = datetime.utcnow()
+    window_started_at = verification.otp_request_window_started_at
+
+    # Start a new one-hour window when none exists or the previous window expired.
+    if (
+        window_started_at is None
+        or (now - window_started_at).total_seconds() >= OTP_REQUEST_WINDOW_MINUTES * 60
+    ):
+        verification.otp_request_window_started_at = now
+        verification.otp_request_count = 0
+        return
+
+    if (verification.otp_request_count or 0) >= OTP_REQUEST_MAX_PER_HOUR:
+        if user is not None and db is not None:
+            try:
+                create_risk_event(
+                    db=db,
+                    event_type="EXCESSIVE_OTP_REQUESTS",
+                    risk_score=50,
+                    user_id=user.id,
+                    target_type="USER",
+                    target_id=user.id,
+                    description=(
+                        f"User exceeded {OTP_REQUEST_MAX_PER_HOUR} {purpose.lower()} requests "
+                        f"within the {OTP_REQUEST_WINDOW_MINUTES}-minute window."
+                    ),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+
+        remaining_seconds = max(
+            1,
+            int(
+                OTP_REQUEST_WINDOW_MINUTES * 60
+                - (now - window_started_at).total_seconds()
+            ),
+        )
+        remaining_minutes = max(1, (remaining_seconds + 59) // 60)
+
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Too many OTP requests. Please try again in "
+                f"{remaining_minutes} minute(s)."
+            ),
+        )
+
+
+def record_otp_request(verification):
+    """Record one successful OTP generation in the current request window."""
+    now = datetime.utcnow()
+    window_started_at = verification.otp_request_window_started_at
+
+    if (
+        window_started_at is None
+        or (now - window_started_at).total_seconds() >= OTP_REQUEST_WINDOW_MINUTES * 60
+    ):
+        verification.otp_request_window_started_at = now
+        verification.otp_request_count = 1
+        return
+
+    verification.otp_request_count = (verification.otp_request_count or 0) + 1
 
 
 def create_otp_verification(verification, otp):
@@ -511,6 +585,8 @@ def send_otp(
         EmailVerification.email == data.email
     ).first()
 
+    # STEP 77C - Per-email hourly OTP request limit.
+    check_otp_request_limit(verification, user=None, db=db, purpose="registration OTP")
     check_otp_resend_allowed(verification)
 
     otp = generate_otp()
@@ -527,6 +603,9 @@ def send_otp(
             last_sent_at=datetime.utcnow(),
         )
         db.add(verification)
+
+    # Count this OTP generation only after the request limit check passes.
+    record_otp_request(verification)
 
     try:
         if not send_email_otp(data.email, otp):
@@ -607,6 +686,8 @@ def forgot_password(
         EmailVerification.email == data.email
     ).first()
 
+    # STEP 77C - Per-email hourly OTP request limit.
+    check_otp_request_limit(verification, user=user, db=db, purpose="password recovery OTP")
     check_otp_resend_allowed(verification)
 
     otp = generate_otp()
@@ -623,6 +704,9 @@ def forgot_password(
             last_sent_at=datetime.utcnow(),
         )
         db.add(verification)
+
+    # Count this OTP generation only after the request limit check passes.
+    record_otp_request(verification)
 
     try:
         if not send_email_otp(data.email, otp):

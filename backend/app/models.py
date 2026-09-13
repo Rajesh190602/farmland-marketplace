@@ -953,8 +953,26 @@ class EmailVerification(Base):
         nullable=False
     )
 
-    # Used to enforce the OTP resend cooldown.
+        # Used to enforce the OTP resend cooldown.
     last_sent_at = Column(
+        DateTime,
+        nullable=True
+    )
+
+    # -----------------------------------------------------
+    # STEP 77C - OTP ABUSE PROTECTION
+    # -----------------------------------------------------
+
+    # Number of OTP requests in the current hourly window.
+    otp_request_count = Column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False
+    )
+
+    # Start time of the current hourly OTP request window.
+    otp_request_window_started_at = Column(
         DateTime,
         nullable=True
     )
