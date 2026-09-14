@@ -1,15 +1,25 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.models import User, EmailVerification, UserBlock, UserAccountStatus, UserKYCVerification
+from app.models import (
+    User,
+    EmailVerification,
+    UserBlock,
+    UserAccountStatus,
+    UserKYCVerification,
+    MFAChallenge,
+    AdminReauthChallenge,
+)
 import cloudinary.uploader
 from app.database import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, get_current_admin
 from app.models import User
 from app.models import User,EmailVerification
 from app.schemas import UserCreate
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
 import secrets
+import hashlib
+import pyotp
 from app.schemas import ChangePassword
 from app.auth import verify_password, get_password_hash
 from app.models import User, EmailVerification
@@ -33,6 +43,18 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     new_password: str
     confirm_password: str
+class MFAConfirmRequest(BaseModel):
+    code: str
+
+
+class MFALoginVerifyRequest(BaseModel):
+    challenge_token: str
+    code: str
+
+
+class AdminReauthRequest(BaseModel):
+    password: str
+    code: str
 from app.schemas import (
     ForgotPasswordRequest,
     VerifyForgotOTPRequest,
@@ -58,6 +80,13 @@ LOGIN_LOCK_MINUTES = 15
 # STEP 77C - OTP abuse protection
 OTP_REQUEST_MAX_PER_HOUR = 5
 OTP_REQUEST_WINDOW_MINUTES = 60
+
+# STEP 77D-2 - Admin MFA login challenge
+MFA_LOGIN_CHALLENGE_MINUTES = 5
+MFA_LOGIN_MAX_ATTEMPTS = 5
+
+# STEP 77D-3 - Sensitive-action re-authentication
+ADMIN_REAUTH_CHALLENGE_MINUTES = 5
 def check_otp_resend_allowed(verification):
     if not verification or not verification.last_sent_at:
         return
@@ -492,12 +521,84 @@ def login(
             },
         )
 
-    # Create JWT access token
-    access_token = create_access_token(
-        {
-            "user_id": db_user.id
+    # =====================================================
+    # STEP 77D-2 - ADMIN MFA LOGIN ENFORCEMENT
+    # =====================================================
+
+    if db_user.role == "admin" and bool(db_user.mfa_enabled):
+
+        # Invalidate older unused MFA challenges for this admin.
+        db.query(MFAChallenge).filter(
+            MFAChallenge.user_id == db_user.id,
+            MFAChallenge.consumed_at.is_(None),
+        ).update(
+            {
+                MFAChallenge.consumed_at: now,
+            },
+            synchronize_session=False,
+        )
+
+        # Generate a secure one-time challenge token.
+        raw_challenge_token = secrets.token_urlsafe(32)
+
+        # Store only the SHA-256 hash in the database.
+        challenge_hash = hashlib.sha256(
+            raw_challenge_token.encode("utf-8")
+        ).hexdigest()
+
+        current_session_version = (
+            getattr(db_user, "admin_session_version", 0) or 0
+        )
+
+        mfa_challenge = MFAChallenge(
+            user_id=db_user.id,
+            admin_session_version=current_session_version,
+            token_hash=challenge_hash,
+            expires_at=now + timedelta(
+                minutes=MFA_LOGIN_CHALLENGE_MINUTES
+            ),
+            failed_attempts=0,
+        )
+
+        db.add(mfa_challenge)
+
+        create_activity_log(
+            db=db,
+            user_id=db_user.id,
+            action="ADMIN_MFA_CHALLENGE_CREATED",
+            description="Admin password authentication succeeded and an MFA challenge was created.",
+            target_type="USER",
+            target_id=db_user.id,
+        )
+
+        db.commit()
+
+        return {
+            "mfa_required": True,
+            "challenge_token": raw_challenge_token,
+            "expires_in": MFA_LOGIN_CHALLENGE_MINUTES * 60,
+            "user_id": db_user.id,
+            "full_name": db_user.full_name,
+            "role": "admin",
         }
-    )
+
+    # =====================================================
+    # Normal JWT login
+    # =====================================================
+
+    token_payload = {
+        "user_id": db_user.id
+    }
+
+    # STEP 77D-1 - Admin sessions carry a server-side
+    # session version so privileged sessions can be
+    # invalidated immediately.
+    if db_user.role == "admin":
+        token_payload["admin_session_version"] = (
+            getattr(db_user, "admin_session_version", 0) or 0
+        )
+
+    access_token = create_access_token(token_payload)
 
     # =====================================================
     # Activity Log
@@ -538,6 +639,484 @@ def login(
         "role": db_user.role,
         **verification_flags,
     }
+# =========================================================
+# STEP 77D-2 - ADMIN MFA / TOTP
+# =========================================================
+
+@router.post("/admin/mfa/setup")
+def setup_admin_mfa(
+    current_user: int = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Start TOTP MFA enrollment for the currently authenticated admin.
+
+    MFA is not enabled until the administrator successfully
+    confirms a valid authenticator code.
+    """
+
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    # Generate a secret only if one does not already exist.
+    if not user.mfa_secret:
+        user.mfa_secret = pyotp.random_base32()
+        db.commit()
+        db.refresh(user)
+
+    totp = pyotp.TOTP(user.mfa_secret)
+
+    provisioning_uri = totp.provisioning_uri(
+        name=user.email,
+        issuer_name="Farmland Marketplace",
+    )
+
+    return {
+        "mfa_enabled": bool(user.mfa_enabled),
+        "provisioning_uri": provisioning_uri,
+    }
+
+
+class MFAConfirmRequest(BaseModel):
+    code: str
+
+
+@router.post("/admin/mfa/confirm")
+def confirm_admin_mfa(
+    payload: MFAConfirmRequest,
+    current_user: int = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Confirm possession of the authenticator app and enable TOTP MFA.
+    """
+
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if not user.mfa_secret:
+        raise HTTPException(
+            status_code=400,
+            detail="MFA setup has not been started.",
+        )
+
+    code = str(payload.code or "").strip()
+
+    if not code.isdigit() or len(code) != 6:
+        raise HTTPException(
+            status_code=400,
+            detail="MFA code must be exactly 6 digits.",
+        )
+
+    totp = pyotp.TOTP(user.mfa_secret)
+
+    if not totp.verify(code, valid_window=1):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid MFA code.",
+        )
+
+    if not user.mfa_enabled:
+        user.mfa_enabled = True
+
+        # Invalidate all previously issued admin sessions.
+        user.admin_session_version = (
+            getattr(user, "admin_session_version", 0) or 0
+        ) + 1
+
+        create_activity_log(
+            db=db,
+            user_id=user.id,
+            action="ADMIN_MFA_ENABLED",
+            description="Admin enabled TOTP multi-factor authentication.",
+            target_type="USER",
+            target_id=user.id,
+        )
+
+        db.commit()
+
+    return {
+        "message": "MFA enabled successfully.",
+        "mfa_enabled": True,
+    }
+
+
+@router.post("/admin/mfa/verify-login")
+def verify_admin_mfa_login(
+    payload: MFALoginVerifyRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Verify the MFA challenge created after successful admin password login.
+    """
+
+    raw_challenge_token = str(
+        payload.challenge_token or ""
+    ).strip()
+
+    code = str(payload.code or "").strip()
+
+    if not raw_challenge_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    if not code.isdigit() or len(code) != 6:
+        raise HTTPException(
+            status_code=400,
+            detail="MFA code must be exactly 6 digits.",
+        )
+
+    challenge_hash = hashlib.sha256(
+        raw_challenge_token.encode("utf-8")
+    ).hexdigest()
+
+    challenge = (
+        db.query(MFAChallenge)
+        .filter(MFAChallenge.token_hash == challenge_hash)
+        .first()
+    )
+
+    if not challenge:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    if challenge.expires_at <= now:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    if challenge.expires_at <= now:
+        challenge.consumed_at = now
+        db.commit()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    if challenge.failed_attempts >= MFA_LOGIN_MAX_ATTEMPTS:
+        challenge.consumed_at = now
+        db.commit()
+
+        raise HTTPException(
+            status_code=429,
+            detail="Too many incorrect MFA attempts. Please log in again.",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == challenge.user_id)
+        .first()
+    )
+
+    if not user or user.role != "admin":
+        challenge.consumed_at = now
+        db.commit()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    if not user.mfa_enabled or not user.mfa_secret:
+        challenge.consumed_at = now
+        db.commit()
+
+        raise HTTPException(
+            status_code=401,
+            detail="MFA is no longer enabled for this account.",
+        )
+
+    current_session_version = (
+        getattr(user, "admin_session_version", 0) or 0
+    )
+
+    if challenge.admin_session_version != current_session_version:
+        challenge.consumed_at = now
+        db.commit()
+
+        raise HTTPException(
+            status_code=401,
+            detail="MFA challenge is no longer valid. Please log in again.",
+        )
+
+    totp = pyotp.TOTP(user.mfa_secret)
+
+    if not totp.verify(code, valid_window=1):
+        challenge.failed_attempts = (
+            challenge.failed_attempts or 0
+        ) + 1
+
+        if challenge.failed_attempts >= MFA_LOGIN_MAX_ATTEMPTS:
+            challenge.consumed_at = now
+
+            try:
+                create_risk_event(
+                    db=db,
+                    event_type="FAILED_MFA_PATTERN",
+                    risk_score=50,
+                    user_id=user.id,
+                    target_type="USER",
+                    target_id=user.id,
+                    description=(
+                        f"Admin reached {challenge.failed_attempts} "
+                        "failed MFA login attempts."
+                    ),
+                )
+            except Exception:
+                pass
+
+            db.commit()
+
+            raise HTTPException(
+                status_code=429,
+                detail="Too many incorrect MFA attempts. Please log in again.",
+            )
+
+        remaining = (
+            MFA_LOGIN_MAX_ATTEMPTS
+            - challenge.failed_attempts
+        )
+
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid MFA code. "
+                f"{remaining} attempt(s) remaining."
+            ),
+        )
+
+    challenge.consumed_at = now
+
+    token_payload = {
+        "user_id": user.id,
+        "admin_session_version": current_session_version,
+    }
+
+    access_token = create_access_token(token_payload)
+
+    create_activity_log(
+        db=db,
+        user_id=user.id,
+        action="ADMIN_MFA_LOGIN_SUCCESS",
+        description="Admin successfully completed TOTP MFA during login.",
+        target_type="USER",
+        target_id=user.id,
+    )
+
+    db.commit()
+
+    verification_flags = get_verification_flags(
+        db=db,
+        user_id=user.id,
+        role=user.role,
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "full_name": user.full_name,
+        "role": user.role,
+        **verification_flags,
+    }
+
+
+# =========================================================
+# STEP 77D-3 - ADMIN SENSITIVE-ACTION RE-AUTHENTICATION
+# =========================================================
+
+@router.post("/admin/reauth")
+def create_admin_reauth_challenge(
+    payload: AdminReauthRequest,
+    current_user: int = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Re-authenticate an admin with password + TOTP before a sensitive action."""
+
+    user = db.query(User).filter(User.id == current_user).first()
+
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    if not user.mfa_enabled or not user.mfa_secret:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin MFA must be enabled before sensitive actions.",
+        )
+
+    if not verify_password(payload.password, user.password):
+        create_activity_log(
+            db=db,
+            user_id=user.id,
+            action="ADMIN_REAUTH_FAILED",
+            description="Admin sensitive-action re-authentication failed: invalid password.",
+            target_type="USER",
+            target_id=user.id,
+        )
+        db.commit()
+        raise HTTPException(status_code=401, detail="Re-authentication failed.")
+
+    code = str(payload.code or "").strip()
+    if not code.isdigit() or len(code) != 6:
+        raise HTTPException(
+            status_code=400,
+            detail="MFA code must be exactly 6 digits.",
+        )
+
+    if not pyotp.TOTP(user.mfa_secret).verify(code, valid_window=1):
+        create_activity_log(
+            db=db,
+            user_id=user.id,
+            action="ADMIN_REAUTH_FAILED",
+            description="Admin sensitive-action re-authentication failed: invalid MFA code.",
+            target_type="USER",
+            target_id=user.id,
+        )
+        db.commit()
+        raise HTTPException(status_code=401, detail="Re-authentication failed.")
+
+    now = datetime.now(timezone.utc)
+    current_session_version = getattr(user, "admin_session_version", 0) or 0
+
+    # Invalidate any older unused re-auth tokens for this admin.
+    db.query(AdminReauthChallenge).filter(
+        AdminReauthChallenge.user_id == user.id,
+        AdminReauthChallenge.consumed_at.is_(None),
+    ).update(
+        {AdminReauthChallenge.consumed_at: now},
+        synchronize_session=False,
+    )
+
+    raw_reauth_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_reauth_token.encode("utf-8")).hexdigest()
+
+    challenge = AdminReauthChallenge(
+        user_id=user.id,
+        admin_session_version=current_session_version,
+        token_hash=token_hash,
+        expires_at=now + timedelta(minutes=ADMIN_REAUTH_CHALLENGE_MINUTES),
+        failed_attempts=0,
+    )
+    db.add(challenge)
+
+    create_activity_log(
+        db=db,
+        user_id=user.id,
+        action="ADMIN_REAUTH_SUCCESS",
+        description="Admin completed password and TOTP re-authentication for a sensitive action.",
+        target_type="USER",
+        target_id=user.id,
+    )
+
+    db.commit()
+
+    return {
+        "message": "Re-authentication successful.",
+        "reauth_token": raw_reauth_token,
+        "expires_in": ADMIN_REAUTH_CHALLENGE_MINUTES * 60,
+    }
+
+
+@router.post("/admin/mfa/disable")
+def disable_admin_mfa(
+    payload: MFAConfirmRequest,
+    current_user: int = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Disable TOTP MFA after verifying the current authenticator code.
+    """
+
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if not user.mfa_enabled or not user.mfa_secret:
+        raise HTTPException(
+            status_code=400,
+            detail="MFA is not enabled.",
+        )
+
+    code = str(payload.code or "").strip()
+
+    if not code.isdigit() or len(code) != 6:
+        raise HTTPException(
+            status_code=400,
+            detail="MFA code must be exactly 6 digits.",
+        )
+
+    totp = pyotp.TOTP(user.mfa_secret)
+
+    if not totp.verify(code, valid_window=1):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid MFA code.",
+        )
+
+    user.mfa_enabled = False
+    user.mfa_secret = None
+
+    # Invalidate all previously issued admin sessions.
+    user.admin_session_version = (
+        getattr(user, "admin_session_version", 0) or 0
+    ) + 1
+
+    create_activity_log(
+        db=db,
+        user_id=user.id,
+        action="ADMIN_MFA_DISABLED",
+        description="Admin disabled TOTP multi-factor authentication.",
+        target_type="USER",
+        target_id=user.id,
+    )
+
+    db.commit()
+
+    return {
+        "message": "MFA disabled successfully.",
+        "mfa_enabled": False,
+    }
+
+
+# =========================================================
+# END STEP 77D-2
+# =========================================================
 
 @router.get("/me")
 def get_me(

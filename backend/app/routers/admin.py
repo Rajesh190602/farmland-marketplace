@@ -2,8 +2,14 @@ from fastapi import APIRouter, Depends,HTTPException,Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, String
-from app.auth import get_current_admin, require_admin_permission, require_super_admin, ADMIN_PERMISSION_ROLES
 from app.database import get_db
+from app.auth import (
+    get_current_admin,
+    require_admin_permission,
+    require_super_admin,
+    require_super_admin_reauth,
+    ADMIN_PERMISSION_ROLES,
+)
 from app.models import (
     User,
     LandAvailability,
@@ -3513,7 +3519,7 @@ def update_admin_permission(
     user_id: int,
     permission_role: str,
     db: Session = Depends(get_db),
-    admin: int = Depends(require_super_admin),
+    admin: int = Depends(require_super_admin_reauth),
 ):
     """Change another administrator's permission role.
 
@@ -3543,6 +3549,11 @@ def update_admin_permission(
 
     previous = target.admin_permission_role
     target.admin_permission_role = normalized
+    # STEP 77D-1 - Invalidate all previously issued
+    # admin sessions for this account.
+    target.admin_session_version = (
+        getattr(target, "admin_session_version", 0) or 0
+    ) + 1
 
     create_activity_log(
         db=db,

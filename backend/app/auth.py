@@ -1,15 +1,15 @@
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, UserAccountStatus, UserKYCVerification
+from app.models import User, UserAccountStatus, UserKYCVerification, AdminReauthChallenge
 from app.admin_permissions import (
     ADMIN_PERMISSION_ROLES,
     normalize_admin_permission,
     normalize_requested_permission,
 )
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordBearer
 
 from jose import JWTError, jwt
@@ -163,6 +163,33 @@ def get_current_user(
                     "WWW-Authenticate": "Bearer"
                 },
             )
+                # --------------------------------------------------
+        # STEP 77D-1 - Admin session invalidation
+        #
+        # Admin JWTs carry the server-side session version.
+        # If the version changes in the database, previously
+        # issued admin tokens become invalid immediately.
+        # --------------------------------------------------
+        if str(user.role or "").strip().lower() == "admin":
+            token_session_version = payload.get("admin_session_version")
+
+            try:
+                token_session_version = int(token_session_version)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Admin session is no longer valid.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            if token_session_version != (
+                getattr(user, "admin_session_version", 0) or 0
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Admin session is no longer valid. Please log in again.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
         # --------------------------------------------------
         # Administrator suspension check
@@ -418,3 +445,125 @@ def require_super_admin(
         )
 
     return user.id
+
+# =========================================================
+# STEP 77D-3 - ADMIN SENSITIVE-ACTION RE-AUTHENTICATION
+# =========================================================
+
+def require_super_admin_reauth(
+    current_user: int = Depends(get_current_user),
+    reauth_token: Optional[str] = Header(
+        default=None,
+        alias="X-Admin-Reauth-Token",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Require the current user to be a Super Admin and present a valid,
+    one-time sensitive-action re-authentication token.
+
+    The raw re-auth token is never stored in the database. Only its
+    SHA-256 hash is stored. The token is bound to the administrator's
+    current admin_session_version and can be consumed only once.
+    """
+
+    user = _get_admin_user(current_user, db)
+
+    if normalize_admin_permission(
+        getattr(user, "admin_permission_role", None)
+    ) != "SUPER_ADMIN":
+        raise HTTPException(
+            status_code=403,
+            detail="Super Admin access required.",
+        )
+
+    if not reauth_token or not reauth_token.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Sensitive action requires administrator re-authentication.",
+        )
+
+    token_hash = __import__("hashlib").sha256(
+        reauth_token.strip().encode("utf-8")
+    ).hexdigest()
+
+    challenge = (
+        db.query(AdminReauthChallenge)
+        .filter(AdminReauthChallenge.token_hash == token_hash)
+        .first()
+    )
+
+    if not challenge:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired re-authentication token.",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    # PostgreSQL returns timezone-aware values for this column, but
+    # normalize defensively in case an existing record is naive.
+    expires_at = challenge.expires_at
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if challenge.consumed_at is not None:
+        raise HTTPException(
+            status_code=401,
+            detail="Re-authentication token has already been used.",
+        )
+
+    if expires_at is None or expires_at <= now:
+        challenge.consumed_at = now
+        db.commit()
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired re-authentication token.",
+        )
+
+    current_session_version = (
+        getattr(user, "admin_session_version", 0) or 0
+    )
+
+    if challenge.user_id != user.id:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid re-authentication token.",
+        )
+
+    if challenge.admin_session_version != current_session_version:
+        challenge.consumed_at = now
+        db.commit()
+        raise HTTPException(
+            status_code=401,
+            detail="Re-authentication token is no longer valid. Please re-authenticate.",
+        )
+
+    # Atomically consume the token so it cannot be reused by a second
+    # request after this dependency succeeds.
+    updated = (
+        db.query(AdminReauthChallenge)
+        .filter(
+            AdminReauthChallenge.id == challenge.id,
+            AdminReauthChallenge.consumed_at.is_(None),
+        )
+        .update(
+            {AdminReauthChallenge.consumed_at: now},
+            synchronize_session=False,
+        )
+    )
+
+    if updated != 1:
+        db.rollback()
+        raise HTTPException(
+            status_code=401,
+            detail="Re-authentication token has already been used.",
+        )
+
+    # Commit the one-time consumption before the sensitive action runs.
+    # This intentionally means a failed sensitive action requires a new
+    # re-authentication rather than allowing token replay.
+    db.commit()
+
+    return user.id
+

@@ -93,6 +93,44 @@ class User(Base):
         DateTime(timezone=True),
         nullable=True
     )
+    failed_login_attempts = Column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False
+    )
+
+    locked_until = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True
+    )
+
+    last_failed_login_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    # STEP 77D-2 - Admin MFA / TOTP
+    mfa_enabled = Column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+    )
+
+    mfa_secret = Column(
+        String,
+        nullable=True,
+    )
+    
+    # STEP 77D-1 - Server-side admin session invalidation
+    admin_session_version = Column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False
+    )
 
     created_at = Column(
         DateTime(timezone=True),
@@ -149,7 +187,12 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
-
+    mfa_challenges = relationship(
+        "MFAChallenge",
+        foreign_keys="MFAChallenge.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
     # -----------------------------------------------------
     # Phase 2 - Land Reports
     # -----------------------------------------------------
@@ -1553,7 +1596,127 @@ class RiskEvent(Base):
         "User",
         foreign_keys=[resolved_by]
     )
+# =========================================================
+# STEP 77D-2A - ADMIN MFA LOGIN CHALLENGE
+# =========================================================
 
+class MFAChallenge(Base):
+    __tablename__ = "mfa_challenges"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+    admin_session_version = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        index=True,
+    )
+
+
+    # Store only a hash of the MFA challenge token.
+    token_hash = Column(
+        String,
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True
+    )
+
+    consumed_at = Column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    failed_attempts = Column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True
+    )
+
+    user = relationship(
+        "User",
+        foreign_keys=[user_id],
+        back_populates="mfa_challenges"
+    )
+class AdminReauthChallenge(Base):
+    __tablename__ = "admin_reauth_challenges"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    admin_session_version = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        index=True,
+    )
+
+    token_hash = Column(
+        String,
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+
+    consumed_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    failed_attempts = Column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
 
 # =========================================================
 # PHASE 1
