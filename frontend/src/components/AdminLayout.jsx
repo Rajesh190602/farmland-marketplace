@@ -80,7 +80,10 @@ function AdminLayout() {
                 Lands
               </Link>
 
-              <Link to="/admin/pending-lands" style={linkStyle}>
+              <Link
+                to="/admin/pending-lands"
+                style={linkStyle}
+              >
                 Pending Approvals
               </Link>
             </>
@@ -88,38 +91,72 @@ function AdminLayout() {
 
           {can(ADMIN_PERMISSIONS.VERIFICATION_ADMIN) && (
             <>
-              <Link to="/admin/land-ownership" style={linkStyle}>
+              <Link
+                to="/admin/land-ownership"
+                style={linkStyle}
+              >
                 Land Ownership Verification
               </Link>
 
-              <Link to="/admin/kyc" style={linkStyle}>
+              <Link
+                to="/admin/kyc"
+                style={linkStyle}
+              >
                 KYC Verification
               </Link>
             </>
           )}
 
           {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
-            <Link to="/admin/reports" style={linkStyle}>
+            <Link
+              to="/admin/reports"
+              style={linkStyle}
+            >
               Reports
             </Link>
           )}
+
           {can(ADMIN_PERMISSIONS.MODERATION_ADMIN) && (
-            <Link to="/admin/risk" style={linkStyle}>
+            <Link
+              to="/admin/risk"
+              style={linkStyle}
+            >
               Risk Monitoring
             </Link>
           )}
 
           {can(ADMIN_PERMISSIONS.SUPPORT_ADMIN) && (
-            <Link to="/admin/activity-logs" style={linkStyle}>
+            <Link
+              to="/admin/activity-logs"
+              style={linkStyle}
+            >
               Activity Logs
             </Link>
           )}
 
           {permission === ADMIN_PERMISSIONS.SUPER_ADMIN && (
-            <Link to="/admin/permissions" style={linkStyle}>
+            <Link
+              to="/admin/permissions"
+              style={linkStyle}
+            >
               Admin Permissions
             </Link>
           )}
+
+          {/* =====================================================
+              STEP 77D-5 - ADMIN SECURITY / MFA
+
+              Every administrator can access their own
+              security settings. This is intentionally NOT
+              restricted to SUPER_ADMIN.
+          ===================================================== */}
+
+          <Link
+            to="/admin/security"
+            style={linkStyle}
+          >
+            Security / MFA
+          </Link>
 
           <Link to="/home" style={linkStyle}>
             Home
