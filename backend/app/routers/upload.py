@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 import cloudinary.uploader
 from PIL import Image, UnidentifiedImageError
 import io
+import os
 from app import cloudinary_config
 from app.auth import get_current_user
 
@@ -22,6 +23,47 @@ ALLOWED_CONTENT_TYPES = {
 # Maximum upload size: 5 MB.
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
+# Maximum filename length accepted from the client.
+MAX_FILENAME_LENGTH = 255
+
+
+def validate_upload_filename(filename: str | None) -> str:
+    """Validate and normalize a client-provided upload filename."""
+    if not filename:
+        raise HTTPException(
+            status_code=400,
+            detail="A filename is required.",
+        )
+
+    if "\x00" in filename or any(ord(char) < 32 for char in filename):
+        raise HTTPException(
+            status_code=400,
+            detail="The filename contains invalid characters.",
+        )
+
+    # Reject path components rather than silently stripping them.
+    safe_filename = os.path.basename(filename.replace("\\", "/"))
+
+    if safe_filename != filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename.",
+        )
+
+    if len(safe_filename) > MAX_FILENAME_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail="Filename must be 255 characters or less.",
+        )
+
+    if safe_filename in {".", ".."}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename.",
+        )
+
+    return safe_filename
+
 
 @router.post("/")
 async def upload_image(
@@ -29,6 +71,8 @@ async def upload_image(
     current_user: int = Depends(get_current_user),
 ):
     try:
+        safe_filename = validate_upload_filename(file.filename)
+
         # Validate the client-provided MIME type.
         if file.content_type not in ALLOWED_CONTENT_TYPES:
             raise HTTPException(
@@ -36,9 +80,10 @@ async def upload_image(
                 detail="Only JPEG, PNG, and WebP images are allowed.",
             )
 
-        # Read the file so we can enforce the size limit
-        # and validate the actual image contents.
-        contents = await file.read()
+        # Read at most one byte beyond the allowed limit.
+        # This prevents unnecessarily loading arbitrarily large uploads
+        # into application memory.
+        contents = await file.read(MAX_FILE_SIZE + 1)
 
         if not contents:
             raise HTTPException(
@@ -82,7 +127,7 @@ async def upload_image(
         )
 
         return {
-            "filename": file.filename,
+            "filename": safe_filename,
             "url": result["secure_url"],
         }
 

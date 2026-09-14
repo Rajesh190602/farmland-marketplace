@@ -116,6 +116,11 @@ const AdminPermissions = lazy(() =>
   import("./pages/admin/AdminPermissions")
 );
 
+// Step 77D-5 - Admin Security / MFA
+const AdminSecurity = lazy(() =>
+  import("./pages/AdminSecurity")
+);
+
 const AdminLands = lazy(() =>
   import("./pages/admin/AdminLands")
 );
@@ -502,6 +507,7 @@ function App() {
                 </AdminRoute>
               }
             />
+
             {/* Step 76 - Risk Monitoring - Moderation Admin + Super Admin */}
             <Route
               path="risk"
@@ -553,6 +559,22 @@ function App() {
                 </AdminRoute>
               }
             />
+
+            {/* =================================================
+                STEP 77D-5 - ADMIN SECURITY / MFA
+                All authenticated administrators can access
+                their own security settings.
+            ================================================= */}
+
+            <Route
+              path="security"
+              element={
+                <AdminRoute>
+                  <AdminSecurity />
+                </AdminRoute>
+              }
+            />
+
           </Route>
 
         </Routes>

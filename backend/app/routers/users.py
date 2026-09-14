@@ -19,6 +19,7 @@ from app.schemas import UserCreate
 from datetime import datetime, timedelta,timezone
 import secrets
 import hashlib
+import os
 import pyotp
 from app.schemas import ChangePassword
 from app.auth import verify_password, get_password_hash
@@ -63,7 +64,8 @@ from app.schemas import (
 from app.schemas import (
     UserCreate,
     SendOTPRequest,
-    VerifyOTPRequest
+    VerifyOTPRequest,
+    ProfileUpdate,
 )
 from app.utils.email import  send_email_otp
 def generate_otp():
@@ -1435,7 +1437,6 @@ def get_profile(
 # =========================================================
 # UPLOAD PROFILE PHOTO
 # =========================================================
-
 @router.post("/profile/photo")
 async def upload_profile_photo(
     file: UploadFile = File(...),
@@ -1460,7 +1461,47 @@ async def upload_profile_photo(
             detail="User not found"
         )
 
-        # ----------------------------------
+    # ----------------------------------
+    # Validate filename
+    # ----------------------------------
+
+    filename = file.filename
+
+    if not filename:
+        raise HTTPException(
+            status_code=400,
+            detail="A filename is required."
+        )
+
+    if "\x00" in filename or any(ord(char) < 32 for char in filename):
+        raise HTTPException(
+            status_code=400,
+            detail="The filename contains invalid characters."
+        )
+
+    safe_filename = os.path.basename(
+        filename.replace("\\", "/")
+    )
+
+    if safe_filename != filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename."
+        )
+
+    if safe_filename in {".", ".."}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename."
+        )
+
+    if len(safe_filename) > 255:
+        raise HTTPException(
+            status_code=400,
+            detail="Filename must be 255 characters or less."
+        )
+
+    # ----------------------------------
     # Validate file type
     # ----------------------------------
 
@@ -1477,10 +1518,10 @@ async def upload_profile_photo(
         )
 
     # ----------------------------------
-    # Read file and validate size
+    # Read file with bounded size
     # ----------------------------------
 
-    contents = await file.read()
+    contents = await file.read(MAX_PROFILE_IMAGE_SIZE + 1)
 
     if not contents:
         raise HTTPException(
@@ -1564,8 +1605,6 @@ async def upload_profile_photo(
         "message": "Profile photo updated successfully",
         "profile_image": user.profile_image
     }
-
-from app.schemas import ProfileUpdate
 
 # =========================================================
 # UPDATE PROFILE
