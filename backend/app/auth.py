@@ -8,6 +8,7 @@ from app.admin_permissions import (
 )
 from app.utils.activity_log import create_activity_log
 from datetime import datetime, timedelta, timezone
+from app.utils.risk_monitor import check_unauthorized_admin_access_risk
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Header, status
@@ -433,6 +434,12 @@ def require_admin_permission(permission: str):
                 f"{assigned}."
             ),
             target_type="ADMIN_PERMISSION",
+        )
+        db.flush()
+
+        check_unauthorized_admin_access_risk(
+            db=db,
+            user_id=user.id,
         )
 
         db.commit()

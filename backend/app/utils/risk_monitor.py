@@ -8,7 +8,7 @@ It does NOT suspend, ban, delete, reject, or otherwise
 automatically punish users.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
 
 from sqlalchemy.orm import Session
 
@@ -363,4 +363,51 @@ def check_repeated_kyc_failure_risk(
             f"User had {failures} KYC rejection/change-request "
             f"actions within the last {window_days} days."
         ),
+    )
+# =========================================================
+# STEP 78C.2 - Unauthorized Admin Access Risk Detection
+# =========================================================
+
+UNAUTHORIZED_ADMIN_ACCESS_WINDOW_MINUTES = 15
+UNAUTHORIZED_ADMIN_ACCESS_THRESHOLD = 5
+
+
+def check_unauthorized_admin_access_risk(
+    db: Session,
+    user_id: int,
+) -> RiskEvent | None:
+    """
+    Create a risk event when an admin repeatedly attempts to access
+    endpoints outside their assigned permission within a short window.
+    """
+
+    window_start = datetime.now(timezone.utc) - timedelta(
+        minutes=UNAUTHORIZED_ADMIN_ACCESS_WINDOW_MINUTES
+    )
+
+    recent_attempts = (
+        db.query(ActivityLog)
+        .filter(
+            ActivityLog.user_id == user_id,
+            ActivityLog.action == "ADMIN_UNAUTHORIZED_ACCESS",
+            ActivityLog.created_at >= window_start,
+        )
+        .count()
+    )
+
+    if recent_attempts < UNAUTHORIZED_ADMIN_ACCESS_THRESHOLD:
+        return None
+
+    return create_risk_event(
+        db=db,
+        user_id=user_id,
+        event_type="UNAUTHORIZED_ADMIN_ACCESS",
+        risk_score=50,
+        description=(
+            f"Administrator made {recent_attempts} unauthorized admin "
+            f"access attempts within {UNAUTHORIZED_ADMIN_ACCESS_WINDOW_MINUTES} "
+            "minutes."
+        ),
+        target_type="USER",
+        target_id=user_id,
     )
