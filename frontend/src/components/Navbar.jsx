@@ -10,7 +10,7 @@ function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isMobile, setIsMobile] = useState(
-    window.innerWidth <= 1200
+    window.innerWidth <= 1600
   );
 
   // =====================================================
@@ -87,9 +87,9 @@ function Navbar() {
     const handleResize = () => {
       console.log("Screen Width:", window.innerWidth);
 
-      setIsMobile(window.innerWidth <= 1200);
+      setIsMobile(window.innerWidth <= 1600);
 
-      if (window.innerWidth > 1200) {
+      if (window.innerWidth > 1600) {
         setMenuOpen(false);
       }
     };
