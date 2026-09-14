@@ -93,9 +93,12 @@ async def add_security_headers(request, call_next):
     response.headers["Permissions-Policy"] = (
         "camera=(), microphone=(), geolocation=()"
     )
-    response.headers["Strict-Transport-Security"] = (
-        "max-age=31536000; includeSubDomains"
-    )
+
+    # HSTS should only be enabled in production HTTPS.
+    if os.getenv("ENVIRONMENT", "").lower() == "production":
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
 
     return response
 
