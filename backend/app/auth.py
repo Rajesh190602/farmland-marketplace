@@ -6,6 +6,7 @@ from app.admin_permissions import (
     normalize_admin_permission,
     normalize_requested_permission,
 )
+from app.utils.activity_log import create_activity_log
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -421,6 +422,20 @@ def require_admin_permission(permission: str):
 
         if assigned == "SUPER_ADMIN" or assigned == normalized:
             return user.id
+        # STEP 78C.1 - Log unauthorized admin permission attempts.
+        create_activity_log(
+            db=db,
+            user_id=user.id,
+            action="ADMIN_UNAUTHORIZED_ACCESS",
+            description=(
+                f"Administrator attempted to access an endpoint requiring "
+                f"{normalized} permission, but their assigned permission is "
+                f"{assigned}."
+            ),
+            target_type="ADMIN_PERMISSION",
+        )
+
+        db.commit()
 
         raise HTTPException(
             status_code=403,
