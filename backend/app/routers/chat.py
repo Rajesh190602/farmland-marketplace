@@ -1,4 +1,4 @@
-from sqlalchemy import or_, desc
+﻿from sqlalchemy import or_,desc
 from fastapi import (
     APIRouter,
     Depends,
@@ -946,6 +946,8 @@ async def send_chat_file(
 
         message_type=message_type,
         file_url=file_url,
+        cloudinary_public_id=upload_result.get("public_id"),
+        cloudinary_resource_type=upload_result.get("resource_type", "auto"),
         file_name=safe_filename,
         file_size=len(file_content),
         file_type=canonical_mime
@@ -1098,6 +1100,22 @@ def delete_message(
         target_type="message",
         target_id=message.id
     )
+    # ----------------------------------
+    # Delete Cloudinary file if present
+    # ----------------------------------
+
+    if message.cloudinary_public_id:
+        try:
+            cloudinary.uploader.destroy(
+                message.cloudinary_public_id,
+                resource_type=message.cloudinary_resource_type or "auto"
+            )
+        except Exception:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to delete chat file from Cloudinary."
+            )
+
 
     # ----------------------------------
     # Delete message

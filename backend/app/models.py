@@ -1281,6 +1281,19 @@ class Message(Base):
         nullable=True
     )
 
+    # Cloudinary public ID
+    cloudinary_public_id = Column(
+        String,
+        nullable=True,
+        index=True
+    )
+
+    # Cloudinary resource type
+    cloudinary_resource_type = Column(
+        String,
+        nullable=True
+    )
+
     # Original uploaded filename
     file_name = Column(
         String,
