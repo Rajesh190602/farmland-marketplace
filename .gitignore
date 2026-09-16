@@ -27,3 +27,8 @@ frontend/dist/
 Thumbs.db
 vapid_private.pem
 vapid_public.pem
+
+# Database backups
+backups/
+*.dump
+*.sql
