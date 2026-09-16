@@ -73,6 +73,7 @@ async def upload_land_images(
             # -------------------------------------------------
             # Validate file type
             # -------------------------------------------------
+
             if file.content_type not in ALLOWED_IMAGE_TYPES:
                 raise HTTPException(
                     status_code=400,
@@ -85,6 +86,7 @@ async def upload_land_images(
             # -------------------------------------------------
             # Read file so size can be checked
             # -------------------------------------------------
+
             contents = await file.read()
 
             if not contents:
@@ -100,9 +102,11 @@ async def upload_land_images(
                         f"{file.filename} must be 5 MB or smaller."
                     )
                 )
+
             # -------------------------------------------------
             # Validate actual image contents
             # -------------------------------------------------
+
             try:
                 with Image.open(io.BytesIO(contents)) as image:
                     detected_format = image.format
@@ -132,15 +136,21 @@ async def upload_land_images(
             # -------------------------------------------------
             # Upload validated image to Cloudinary
             # -------------------------------------------------
+
             result = cloudinary.uploader.upload(
                 contents,
                 resource_type="image",
                 folder=f"farmland-marketplace/lands/{land_id}"
             )
 
+            # -------------------------------------------------
+            # Save Cloudinary URL + public ID in database
+            # -------------------------------------------------
+
             image = models.LandImage(
                 image_url=result["secure_url"],
-                land_id=land_id
+                land_id=land_id,
+                cloudinary_public_id=result["public_id"]
             )
 
             db.add(image)
@@ -154,6 +164,7 @@ async def upload_land_images(
         # -----------------------------------------------------
         # Activity log
         # -----------------------------------------------------
+
         create_activity_log(
             db=db,
             user_id=current_user,
@@ -209,9 +220,11 @@ def get_land_images(
             status_code=404,
             detail="Land not found"
         )
+
     # Owners and admins may access their land images.
     # Other users may access images only for approved,
     # published marketplace land.
+
     user = (
         db.query(models.User)
         .filter(models.User.id == current_user)
@@ -298,10 +311,35 @@ def delete_land_image(
             detail="Image not found"
         )
 
+    # ---------------------------------------------------------
+    # Delete image from Cloudinary
+    # ---------------------------------------------------------
+
+    if image.cloudinary_public_id:
+        try:
+            cloudinary.uploader.destroy(
+                image.cloudinary_public_id,
+                resource_type="image"
+            )
+        except Exception:
+            # Do not delete the database record if Cloudinary
+            # deletion fails. This prevents losing the reference
+            # while the actual Cloudinary asset still exists.
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to delete image from Cloudinary."
+            )
+
+    # ---------------------------------------------------------
     # Delete database record
+    # ---------------------------------------------------------
+
     db.delete(image)
 
+    # ---------------------------------------------------------
     # Activity log
+    # ---------------------------------------------------------
+
     create_activity_log(
         db=db,
         user_id=current_user,

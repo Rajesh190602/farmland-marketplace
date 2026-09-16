@@ -1044,6 +1044,11 @@ class LandImage(Base):
         String,
         nullable=False
     )
+    cloudinary_public_id = Column(
+        String,
+        nullable=True,
+        index=True
+    )
 
     land_id = Column(
         Integer,
