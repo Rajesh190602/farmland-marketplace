@@ -1,4 +1,4 @@
-﻿from sqlalchemy import or_,desc
+﻿from sqlalchemy import or_,desc,func
 from fastapi import (
     APIRouter,
     Depends,
@@ -1557,6 +1557,15 @@ def delete_conversation_for_me(
 # MY CONVERSATIONS
 # ONE CHAT PER BUYER / FARMER
 # =========================================================
+# =========================================================
+# MY CONVERSATIONS
+# ONE CHAT PER BUYER / FARMER
+#
+# PERFORMANCE:
+# - Avoid N+1 queries
+# - Batch related records
+# - Keep the existing response format
+# =========================================================
 
 @router.get("/my-conversations")
 def my_conversations(
@@ -1564,9 +1573,9 @@ def my_conversations(
     current_user: int = Depends(get_current_user)
 ):
     # -----------------------------------------------------
-    # Get all conversations involving the current user.
-    # Newest conversations come first.
+    # 1. Get candidate conversations
     # -----------------------------------------------------
+
     conversations = (
         db.query(Conversation)
         .filter(
@@ -1575,167 +1584,259 @@ def my_conversations(
                 Conversation.farmer_id == current_user
             )
         )
-        .order_by(
-            desc(Conversation.id)
-        )
+        .order_by(desc(Conversation.id))
         .limit(100)
         .all()
     )
 
-    result = []
+    if not conversations:
+        return []
 
     # -----------------------------------------------------
-    # Keep track of people already shown.
-    #
-    # This makes:
-    #
-    # Buyer + Farmer A = ONE chat
-    #
-    # even if they have conversations about multiple lands.
+    # 2. Keep only the newest conversation for each
+    #    buyer/farmer pair.
     # -----------------------------------------------------
+
+    selected_conversations = []
     seen_other_users = set()
 
     for conversation in conversations:
 
-        # -------------------------------------------------
-        # Find the other participant
-        # -------------------------------------------------
         if conversation.buyer_id == current_user:
             other_user_id = conversation.farmer_id
         else:
             other_user_id = conversation.buyer_id
 
-        # -------------------------------------------------
-        # If this farmer/buyer was already displayed,
-        # skip older duplicate conversations.
-        # -------------------------------------------------
         if other_user_id in seen_other_users:
             continue
 
-        # -------------------------------------------------
-        # Get the other user's details
-        # -------------------------------------------------
-        other_user = (
-            db.query(User)
-            .filter(
-                User.id == other_user_id
-            )
-            .first()
-        )
-
-        if not other_user:
-            # Do not allow one bad conversation record
-            # to break the entire My Chats page.
-            seen_other_users.add(other_user_id)
-            continue
-
-        # -------------------------------------------------
-        # Check whether this conversation is archived
-        # for the current user.
-        # -------------------------------------------------
-        archived_for_user = (
-            db.query(ConversationArchive)
-            .filter(
-                ConversationArchive.conversation_id ==
-                conversation.id,
-                ConversationArchive.user_id ==
-                current_user
-            )
-            .first()
-        )
-
-        # -------------------------------------------------
-        # Check whether this conversation is deleted
-        # for the current user.
-        # -------------------------------------------------
-        deleted_for_user = (
-            db.query(ConversationDeletion)
-            .filter(
-                ConversationDeletion.conversation_id ==
-                conversation.id,
-                ConversationDeletion.user_id ==
-                current_user
-            )
-            .first()
-        )
-
-        # -------------------------------------------------
-        # IMPORTANT:
-        #
-        # Mark this person as already processed BEFORE
-        # checking archive/delete.
-        #
-        # Therefore an older duplicate conversation will
-        # never appear if the newest one is archived or
-        # deleted.
-        # -------------------------------------------------
         seen_other_users.add(other_user_id)
+        selected_conversations.append(conversation)
 
-        if archived_for_user or deleted_for_user:
+    if not selected_conversations:
+        return []
+
+    conversation_ids = [
+        conversation.id
+        for conversation in selected_conversations
+    ]
+
+    other_user_ids = []
+
+    for conversation in selected_conversations:
+        if conversation.buyer_id == current_user:
+            other_user_ids.append(conversation.farmer_id)
+        else:
+            other_user_ids.append(conversation.buyer_id)
+
+    land_ids = [
+        conversation.land_id
+        for conversation in selected_conversations
+        if conversation.land_id is not None
+    ]
+
+    # -----------------------------------------------------
+    # 3. Load all users in ONE query
+    # -----------------------------------------------------
+
+    users = (
+        db.query(User)
+        .filter(User.id.in_(other_user_ids))
+        .all()
+    )
+
+    users_by_id = {
+        user.id: user
+        for user in users
+    }
+
+    # -----------------------------------------------------
+    # 4. Load archive states in ONE query
+    # -----------------------------------------------------
+
+    archives = (
+        db.query(ConversationArchive)
+        .filter(
+            ConversationArchive.conversation_id.in_(conversation_ids),
+            ConversationArchive.user_id == current_user
+        )
+        .all()
+    )
+
+    archives_by_conversation = {
+        archive.conversation_id: archive
+        for archive in archives
+    }
+
+    # -----------------------------------------------------
+    # 5. Load deletion states in ONE query
+    # -----------------------------------------------------
+
+    deletions = (
+        db.query(ConversationDeletion)
+        .filter(
+            ConversationDeletion.conversation_id.in_(conversation_ids),
+            ConversationDeletion.user_id == current_user
+        )
+        .all()
+    )
+
+    deleted_conversation_ids = {
+        deletion.conversation_id
+        for deletion in deletions
+    }
+
+    # -----------------------------------------------------
+    # 6. Load all lands in ONE query
+    # -----------------------------------------------------
+
+    lands = (
+        db.query(Land)
+        .filter(Land.id.in_(land_ids))
+        .all()
+    )
+
+    lands_by_id = {
+        land.id: land
+        for land in lands
+    }
+
+    # -----------------------------------------------------
+    # 7. Get latest message for each conversation
+    #
+    # ROW_NUMBER allows us to select exactly one latest
+    # message per conversation without querying inside
+    # the Python loop.
+    # -----------------------------------------------------
+
+    latest_message_ranked = (
+        db.query(
+            Message.id.label("message_id"),
+            Message.conversation_id.label("conversation_id"),
+            func.row_number()
+            .over(
+                partition_by=Message.conversation_id,
+                order_by=(
+                    Message.created_at.desc(),
+                    Message.id.desc()
+                )
+            )
+            .label("message_rank")
+        )
+        .filter(
+            Message.conversation_id.in_(conversation_ids)
+        )
+        .subquery()
+    )
+
+    latest_message_ids = (
+        db.query(latest_message_ranked.c.message_id)
+        .filter(
+            latest_message_ranked.c.message_rank == 1
+        )
+        .subquery()
+    )
+
+    latest_messages = (
+        db.query(Message)
+        .filter(
+            Message.id.in_(
+                db.query(latest_message_ids.c.message_id)
+            )
+        )
+        .all()
+    )
+
+    latest_messages_by_conversation = {
+        message.conversation_id: message
+        for message in latest_messages
+    }
+
+    # -----------------------------------------------------
+    # 8. Count unread messages for ALL conversations in ONE
+    #    grouped query.
+    # -----------------------------------------------------
+
+    unread_rows = (
+        db.query(
+            Message.conversation_id,
+            func.count(Message.id).label("unread_count")
+        )
+        .filter(
+            Message.conversation_id.in_(conversation_ids),
+            Message.sender_id != current_user,
+            Message.is_read == False
+        )
+        .group_by(Message.conversation_id)
+        .all()
+    )
+
+    unread_by_conversation = {
+        conversation_id: unread_count
+        for conversation_id, unread_count in unread_rows
+    }
+
+    # -----------------------------------------------------
+    # 9. Build response without additional database queries
+    # -----------------------------------------------------
+
+    result = []
+
+    for conversation in selected_conversations:
+
+        if conversation.buyer_id == current_user:
+            other_user_id = conversation.farmer_id
+        else:
+            other_user_id = conversation.buyer_id
+
+        other_user = users_by_id.get(other_user_id)
+
+        # Keep existing behavior:
+        # invalid/missing participant should not break
+        # the complete My Chats response.
+        if not other_user:
             continue
 
-        # -------------------------------------------------
-        # Find land connected to this conversation
-        # -------------------------------------------------
-        land = (
-            db.query(Land)
-            .filter(
-                Land.id == conversation.land_id
-            )
-            .first()
+        archive = archives_by_conversation.get(
+            conversation.id
         )
 
-        # -------------------------------------------------
-        # Find latest message
-        # -------------------------------------------------
-        last_message = (
-            db.query(Message)
-            .filter(
-                Message.conversation_id ==
-                conversation.id
-            )
-            .order_by(
-                Message.created_at.desc()
-            )
-            .first()
+        if (
+            archive is not None
+            or conversation.id in deleted_conversation_ids
+        ):
+            continue
+
+        land = lands_by_id.get(
+            conversation.land_id
         )
 
-        # -------------------------------------------------
-        # Count unread messages
-        #
-        # Only messages from the other participant count.
-        # -------------------------------------------------
-        unread_count = (
-            db.query(Message)
-            .filter(
-                Message.conversation_id ==
-                conversation.id,
-                Message.sender_id !=
-                current_user,
-                Message.is_read == False
-            )
-            .count()
+        last_message = latest_messages_by_conversation.get(
+            conversation.id
         )
 
-        # -------------------------------------------------
-        # Add conversation to response
-        # -------------------------------------------------
+        unread_count = unread_by_conversation.get(
+            conversation.id,
+            0
+        )
+
         result.append(
             {
-                "conversation_id":
-                    conversation.id,
+                "conversation_id": conversation.id,
 
-                "land_title":
+                "land_title": (
                     land.title
                     if land
-                    else "",
+                    else ""
+                ),
 
-                "other_user":
+                "other_user": (
                     other_user.full_name
                     if other_user
-                    else "",
+                    else ""
+                ),
 
-                "last_message":
+                "last_message": (
                     last_message.message
                     if last_message
                     and last_message.message
@@ -1744,22 +1845,29 @@ def my_conversations(
                         if last_message
                         and last_message.file_url
                         else ""
-                    ),
+                    )
+                ),
 
-                "last_message_time":
+                "last_message_time": (
                     last_message.created_at
                     if last_message
-                    else None,
+                    else None
+                ),
 
-                "unread_count":
-                    unread_count,
+                "unread_count": unread_count,
 
-                **_chat_verification_flags(other_user),
-                **_chat_land_verification_flags(land)
+                **_chat_verification_flags(
+                    other_user
+                ),
+
+                **_chat_land_verification_flags(
+                    land
+                )
             }
         )
 
     return result
+
 # =========================================================
 # GET CONVERSATION DETAILS
 # =========================================================

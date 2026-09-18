@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Text,
+    Index,
     UniqueConstraint,
     CheckConstraint,
 )
@@ -615,8 +616,10 @@ class Land(Base):
     # changes_requested
     status = Column(
         String,
-        default="pending"
+        default="pending",
+        index=True,
     )
+    
     is_published = Column(
         Boolean,
         default=False,
@@ -642,7 +645,9 @@ class Land(Base):
 
     owner_id = Column(
         Integer,
-        ForeignKey("users.id")
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
     )
 
     owner = relationship(
@@ -1052,7 +1057,8 @@ class LandImage(Base):
 
     land_id = Column(
         Integer,
-        ForeignKey("lands.id")
+        ForeignKey("lands.id"),
+        index=True
     )
 
     land = relationship(
@@ -1077,19 +1083,22 @@ class Conversation(Base):
     buyer_id = Column(
         Integer,
         ForeignKey("users.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     farmer_id = Column(
         Integer,
         ForeignKey("users.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     land_id = Column(
         Integer,
         ForeignKey("lands.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     created_at = Column(
@@ -1243,7 +1252,13 @@ class ConversationDeletion(Base):
 
 class Message(Base):
     __tablename__ = "messages"
-
+    __table_args__ = (
+        Index(
+            "ix_messages_conversation_created_at",
+            "conversation_id",
+            "created_at",
+        ),
+    )
     id = Column(
         Integer,
         primary_key=True,
@@ -1508,7 +1523,7 @@ class ActivityLog(Base):
     )
 
     archived_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True
     )
 
