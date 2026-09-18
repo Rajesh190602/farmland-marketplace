@@ -546,7 +546,6 @@ def admin_analytics(
 # =========================================================
 # Admin Recent Activity
 # =========================================================
-
 @router.get("/recent-activity")
 def get_recent_activity(
     limit: int = Query(
@@ -558,7 +557,11 @@ def get_recent_activity(
     admin: int = Depends(require_admin_permission("support")),
 ):
     logs = (
-        db.query(ActivityLog)
+        db.query(ActivityLog, User)
+        .outerjoin(
+            User,
+            User.id == ActivityLog.user_id
+        )
         .filter(
             ActivityLog.is_archived == False
         )
@@ -571,43 +574,24 @@ def get_recent_activity(
 
     result = []
 
-    for log in logs:
-
-        user = None
-
-        if log.user_id:
-            user = (
-                db.query(User)
-                .filter(
-                    User.id == log.user_id
-                )
-                .first()
-            )
+    for log, user in logs:
         result.append({
             "id": log.id,
-
             "user_id": log.user_id,
-
             "user_name": (
                 user.full_name
                 if user
                 else "System"
             ),
-
             "user_email": (
                 user.email
                 if user
                 else ""
             ),
-
             "action": log.action,
-
             "description": log.description,
-
             "target_type": log.target_type,
-
             "target_id": log.target_id,
-
             "created_at": log.created_at,
         })
 
@@ -615,6 +599,7 @@ def get_recent_activity(
         "total": len(result),
         "activities": result,
     }
+
 # =========================================================
 # PHASE 5 - AUDIT / ACTIVITY LOG VIEWER
 # =========================================================
