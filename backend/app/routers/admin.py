@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session,aliased,selectinload
 from sqlalchemy import or_, String
 from app.database import get_db
+from sqlalchemy.orm import joinedload
 from app.auth import (
     get_current_admin,
     require_admin_permission,
