@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app import models
+from sqlalchemy import func
 import math
 from sqlalchemy import or_
 from app.auth import get_current_user
@@ -265,6 +266,19 @@ def get_buyer_recommendations(
         .order_by(Land.id.desc())
         .all()
     )
+    candidate_ids = [land.id for land in candidates]
+    view_counts = {}
+
+    if candidate_ids:
+        view_counts = dict(
+            db.query(
+                ListingView.land_id,
+                func.count(ListingView.id)
+            )
+            .filter(ListingView.land_id.in_(candidate_ids))
+            .group_by(ListingView.land_id)
+            .all()
+        )
 
     scored = []
 
@@ -350,7 +364,7 @@ def get_buyer_recommendations(
                     break
 
         # Mild popularity/freshness signal for buyers with little/no history.
-        view_count = db.query(ListingView).filter(ListingView.land_id == land.id).count()
+        view_count = int(view_counts.get(land.id, 0))
         score += min(view_count, 20) * 0.5
 
         # If there is no history, keep useful marketplace listings visible.
