@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query,LandImage
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app import models
 from sqlalchemy import func
@@ -811,9 +811,9 @@ def get_my_lands(
     # Batch-load all land images.
     # ---------------------------------------------------------
     images = (
-        db.query(LandImage)
+        db.query(models.LandImage)
         .filter(
-            LandImage.land_id.in_(land_ids)
+            models.LandImage.land_id.in_(land_ids)
         )
         .all()
     )
