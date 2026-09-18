@@ -136,11 +136,14 @@ def sync_listing_expiry(
 
 
 def sync_all_published_listings(db: Session):
-    """Synchronize expiry state for currently published approved listings."""
+    """Synchronize only listings whose expiry time has been reached."""
     now = datetime.utcnow()
-    lands = (
-        db.query(Land)
+
+    expired_listings = (
+        db.query(ListingExpiry, Land)
+        .join(Land, Land.id == ListingExpiry.land_id)
         .filter(
+            ListingExpiry.expires_at <= now,
             Land.status == "approved",
             Land.is_published == True,
         )
@@ -148,12 +151,13 @@ def sync_all_published_listings(db: Session):
     )
 
     changed = False
-    for land in lands:
+
+    for expiry, land in expired_listings:
         _, expired = sync_listing_expiry(db, land, now)
         changed = changed or expired
 
-    # Creating missing expiry records is also a database change.
-    if lands:
+    # Commit only when there are candidate listings to process.
+    if expired_listings:
         db.commit()
 
     return changed

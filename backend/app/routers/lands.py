@@ -23,7 +23,6 @@ from app.utils.activity_log import create_activity_log
 from app.utils.listing_expiry import (
     ensure_listing_expiry,
     get_expiry_status,
-    sync_all_published_listings,
     start_or_renew_listing_expiry,
 )
 from typing import Optional
@@ -137,7 +136,6 @@ def get_buyer_recommendations(
     current_user: int = Depends(get_current_user),
 ):
     # Step 57: expire stale marketplace listings before public reads.
-    sync_all_published_listings(db)
 
     """
     Return personalized farmland recommendations for buyers.
@@ -475,7 +473,6 @@ def get_all_lands(
     current_user: int = Depends(get_current_user),
 ):
     # Step 57: expire stale marketplace listings before public reads.
-    sync_all_published_listings(db)
 
     user = db.query(User).filter(User.id == current_user).first()
 
@@ -608,7 +605,6 @@ def search_lands(
     current_user: int = Depends(get_current_user),
 ):
     # Step 57: expire stale marketplace listings before public reads.
-    sync_all_published_listings(db)
 
     user = db.query(User).filter(User.id == current_user).first()
 
@@ -761,7 +757,6 @@ def get_my_lands(
     current_user: int = Depends(get_current_user)
 ):
     # Step 57: synchronize expiry before returning farmer inventory.
-    sync_all_published_listings(db)
 
     lands = (
         db.query(Land)
@@ -952,7 +947,6 @@ def get_my_listing_analytics(
     current_user: int = Depends(get_current_user),
 ):
     # Step 57: keep analytics publication state synchronized with expiry.
-    sync_all_published_listings(db)
 
     """Return listing performance analytics for the logged-in farmer."""
 
@@ -1895,7 +1889,6 @@ def get_recently_viewed_lands(
     current_user: int = Depends(get_current_user),
 ):
     # Step 57: expire stale listings before buyer-facing reads.
-    sync_all_published_listings(db)
 
     views = (
         db.query(RecentlyViewedLand)
@@ -2045,7 +2038,6 @@ def get_similar_lands(
     current_user: int = Depends(get_current_user),
 ):
     # Step 57: expire stale listings before buyer-facing reads.
-    sync_all_published_listings(db)
 
     """
     Return similar approved and published farmland listings for buyers.
@@ -2294,7 +2286,6 @@ def get_land(
     current_user: int = Depends(get_current_user)
 ):
     # Step 57: expire stale listings before buyer-facing reads.
-    sync_all_published_listings(db)
 
     # Load the current user.
     user = (
