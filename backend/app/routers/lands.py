@@ -392,8 +392,31 @@ def get_buyer_recommendations(
 
     scored.sort(key=lambda item: (item["score"], item["land"].id), reverse=True)
 
+    # Batch KYC verification for only the recommendations we are about to return.
+    # This preserves the existing server-authoritative verification logic while
+    # avoiding one database query per recommendation.
+    top_items = scored[:limit]
+    owner_ids = {item["land"].owner_id for item in top_items}
+
+    verified_owner_ids = set()
+
+    if owner_ids:
+        verified_owner_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .join(User, User.id == UserKYCVerification.user_id)
+                .filter(
+                    UserKYCVerification.user_id.in_(owner_ids),
+                    UserKYCVerification.status == "verified",
+                    User.role == "farmer",
+                )
+                .all()
+            )
+        }
+
     results = []
-    for item in scored[:limit]:
+    for item in top_items:
         land = item["land"]
         results.append({
             "id": land.id,
@@ -416,7 +439,7 @@ def get_buyer_recommendations(
             "status": land.status,
             "is_published": land.is_published,
             "owner_id": land.owner_id,
-            "is_verified_farmer": is_verified_farmer(db, land.owner_id),
+            "is_verified_farmer": land.owner_id in verified_owner_ids,
             "recommendation_score": item["score"],
             "recommendation_reasons": item["reasons"],
             "view_count": item["view_count"],
