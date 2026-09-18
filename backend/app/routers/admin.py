@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends,HTTPException,Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session,aliased
+from sqlalchemy.orm import Session,aliased,selectinload
 from sqlalchemy import or_, String
 from app.database import get_db
 from app.auth import (
@@ -961,7 +961,13 @@ def get_all_lands(
     db: Session = Depends(get_db),
     admin: int = Depends(require_admin_permission("moderation"))
 ):
-    query = db.query(Land)
+    query = (
+        db.query(Land)
+        .options(
+            joinedload(Land.owner),
+            selectinload(Land.images),
+        )
+    )
 
     if search:
         query = query.filter(
@@ -993,12 +999,7 @@ def get_all_lands(
     result = []
 
     for land in lands:
-
-        owner = (
-            db.query(User)
-            .filter(User.id == land.owner_id)
-            .first()
-        )
+        owner = land.owner
 
         result.append({
             "id": land.id,
@@ -1024,7 +1025,7 @@ def get_all_lands(
             # Existing single image
             "image_url": land.image_url,
 
-            # New multiple-image gallery
+            # Multiple-image gallery
             "images": [
                 {
                     "id": image.id,
@@ -1045,7 +1046,6 @@ def get_all_lands(
         "limit": limit,
         "lands": result,
     }
-
 
 
 @router.get("/lands/pending")
