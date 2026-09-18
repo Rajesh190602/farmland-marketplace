@@ -1048,7 +1048,6 @@ def get_all_lands(
         "lands": result,
     }
 
-
 @router.get("/lands/pending")
 def get_pending_lands(
     search: str = Query(default=""),
@@ -1059,17 +1058,20 @@ def get_pending_lands(
 ):
     query = (
         db.query(Land)
+        .options(joinedload(Land.owner))
         .filter(Land.status == "pending")
     )
 
     # Search pending lands
     if search:
+        search_pattern = f"%{search}%"
+
         query = query.filter(
-            (Land.title.ilike(f"%{search}%")) |
-            (Land.village.ilike(f"%{search}%")) |
-            (Land.mandal.ilike(f"%{search}%")) |
-            (Land.district.ilike(f"%{search}%")) |
-            (Land.survey_number.ilike(f"%{search}%"))
+            (Land.title.ilike(search_pattern)) |
+            (Land.village.ilike(search_pattern)) |
+            (Land.mandal.ilike(search_pattern)) |
+            (Land.district.ilike(search_pattern)) |
+            (Land.survey_number.ilike(search_pattern))
         )
 
     # Total matching pending lands
@@ -1087,12 +1089,7 @@ def get_pending_lands(
     result = []
 
     for land in lands:
-
-        owner = (
-            db.query(User)
-            .filter(User.id == land.owner_id)
-            .first()
-        )
+        owner = land.owner
 
         result.append({
             "id": land.id,
@@ -1125,6 +1122,7 @@ def get_pending_lands(
         "limit": limit,
         "lands": result,
     }
+
 # ==========================
 # Approve Land
 # ==========================
