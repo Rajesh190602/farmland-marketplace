@@ -1391,15 +1391,25 @@ def get_archive_status(
         "conversation_id": conversation_id,
         "archived": archived
     }
-
+# =========================================================
+# MY ARCHIVED CONVERSATIONS
+#
+# PERFORMANCE:
+# - Avoid N+1 queries
+# - Batch related records
+# - Preserve existing archive/deletion behavior
+# - Keep the existing response format
+# =========================================================
 
 @router.get("/my-archived-conversations")
 def my_archived_conversations(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    # Only the newest conversation for each buyer/farmer pair is
-    # considered the active logical conversation.
+    # -----------------------------------------------------
+    # 1. Get candidate conversations
+    # -----------------------------------------------------
+
     conversations = (
         db.query(Conversation)
         .filter(
@@ -1413,10 +1423,23 @@ def my_archived_conversations(
         .all()
     )
 
-    result = []
+    if not conversations:
+        return []
+
+    # -----------------------------------------------------
+    # 2. Keep only the newest conversation for each
+    #    buyer/farmer pair.
+    #
+    # IMPORTANT:
+    # This preserves the existing behavior where the newest
+    # logical conversation is the one considered.
+    # -----------------------------------------------------
+
+    selected_conversations = []
     seen_other_users = set()
 
     for conversation in conversations:
+
         if conversation.buyer_id == current_user:
             other_user_id = conversation.farmer_id
         else:
@@ -1426,75 +1449,231 @@ def my_archived_conversations(
             continue
 
         seen_other_users.add(other_user_id)
+        selected_conversations.append(conversation)
 
-        archive = db.query(ConversationArchive).filter(
-            ConversationArchive.conversation_id == conversation.id,
+    if not selected_conversations:
+        return []
+
+    conversation_ids = [
+        conversation.id
+        for conversation in selected_conversations
+    ]
+
+    other_user_ids = [
+        (
+            conversation.farmer_id
+            if conversation.buyer_id == current_user
+            else conversation.buyer_id
+        )
+        for conversation in selected_conversations
+    ]
+
+    land_ids = [
+        conversation.land_id
+        for conversation in selected_conversations
+        if conversation.land_id is not None
+    ]
+
+    # -----------------------------------------------------
+    # 3. Load archives in ONE query
+    # -----------------------------------------------------
+
+    archives = (
+        db.query(ConversationArchive)
+        .filter(
+            ConversationArchive.conversation_id.in_(conversation_ids),
             ConversationArchive.user_id == current_user
-        ).first()
+        )
+        .all()
+    )
 
-        deleted_for_user = db.query(ConversationDeletion).filter(
-            ConversationDeletion.conversation_id == conversation.id,
+    archives_by_conversation = {
+        archive.conversation_id: archive
+        for archive in archives
+    }
+
+    # -----------------------------------------------------
+    # 4. Load deletions in ONE query
+    # -----------------------------------------------------
+
+    deletions = (
+        db.query(ConversationDeletion)
+        .filter(
+            ConversationDeletion.conversation_id.in_(conversation_ids),
             ConversationDeletion.user_id == current_user
-        ).first()
+        )
+        .all()
+    )
 
-        # A deleted conversation is not shown anywhere.
-        if deleted_for_user or not archive:
+    deleted_conversation_ids = {
+        deletion.conversation_id
+        for deletion in deletions
+    }
+
+    # -----------------------------------------------------
+    # 5. Load users in ONE query
+    # -----------------------------------------------------
+
+    users = (
+        db.query(User)
+        .filter(User.id.in_(other_user_ids))
+        .all()
+    )
+
+    users_by_id = {
+        user.id: user
+        for user in users
+    }
+
+    # -----------------------------------------------------
+    # 6. Load lands in ONE query
+    # -----------------------------------------------------
+
+    lands = (
+        db.query(Land)
+        .filter(Land.id.in_(land_ids))
+        .all()
+    )
+
+    lands_by_id = {
+        land.id: land
+        for land in lands
+    }
+
+    # -----------------------------------------------------
+    # 7. Get latest message for each conversation
+    # -----------------------------------------------------
+
+    latest_message_ranked = (
+        db.query(
+            Message.id.label("message_id"),
+            Message.conversation_id.label("conversation_id"),
+            func.row_number()
+            .over(
+                partition_by=Message.conversation_id,
+                order_by=(
+                    Message.created_at.desc(),
+                    Message.id.desc()
+                )
+            )
+            .label("message_rank")
+        )
+        .filter(
+            Message.conversation_id.in_(conversation_ids)
+        )
+        .subquery()
+    )
+
+    latest_message_ids = (
+        db.query(latest_message_ranked.c.message_id)
+        .filter(
+            latest_message_ranked.c.message_rank == 1
+        )
+        .subquery()
+    )
+
+    latest_messages = (
+        db.query(Message)
+        .filter(
+            Message.id.in_(
+                db.query(latest_message_ids.c.message_id)
+            )
+        )
+        .all()
+    )
+
+    latest_messages_by_conversation = {
+        message.conversation_id: message
+        for message in latest_messages
+    }
+
+    # -----------------------------------------------------
+    # 8. Build response without database queries in loop
+    # -----------------------------------------------------
+
+    result = []
+
+    for conversation in selected_conversations:
+
+        archive = archives_by_conversation.get(
+            conversation.id
+        )
+
+        # Archived endpoint must contain an archive record.
+        if archive is None:
+            continue
+
+        # Deleted conversations are never shown.
+        if conversation.id in deleted_conversation_ids:
             continue
 
         if conversation.buyer_id == current_user:
-            other_user = (
-                db.query(User)
-                .filter(User.id == conversation.farmer_id)
-                .first()
-            )
+            other_user_id = conversation.farmer_id
         else:
-            other_user = (
-                db.query(User)
-                .filter(User.id == conversation.buyer_id)
-                .first()
-            )
+            other_user_id = conversation.buyer_id
 
-        land = (
-            db.query(Land)
-            .filter(Land.id == conversation.land_id)
-            .first()
+        other_user = users_by_id.get(other_user_id)
+
+        if not other_user:
+            continue
+
+        land = lands_by_id.get(
+            conversation.land_id
         )
 
-        last_message = (
-            db.query(Message)
-            .filter(Message.conversation_id == conversation.id)
-            .order_by(Message.created_at.desc())
-            .first()
+        last_message = latest_messages_by_conversation.get(
+            conversation.id
         )
 
-        result.append({
-            "conversation_id": conversation.id,
-            "land_title": land.title if land else "",
-            "other_user": (
-                other_user.full_name
-                if other_user
-                else ""
-            ),
-            "last_message": (
-                last_message.message
-                if last_message and last_message.message
-                else (
-                    "📎 File"
-                    if last_message and last_message.file_url
+        result.append(
+            {
+                "conversation_id": conversation.id,
+
+                "land_title": (
+                    land.title
+                    if land
                     else ""
+                ),
+
+                "other_user": (
+                    other_user.full_name
+                    if other_user
+                    else ""
+                ),
+
+                "last_message": (
+                    last_message.message
+                    if last_message
+                    and last_message.message
+                    else (
+                        "📎 File"
+                        if last_message
+                        and last_message.file_url
+                        else ""
+                    )
+                ),
+
+                "last_message_time": (
+                    last_message.created_at
+                    if last_message
+                    else None
+                ),
+
+                "archived_at": archive.archived_at,
+
+                **_chat_verification_flags(
+                    other_user
+                ),
+
+                **_chat_land_verification_flags(
+                    land
                 )
-            ),
-            "last_message_time": (
-                last_message.created_at
-                if last_message
-                else None
-            ),
-            "archived_at": archive.archived_at,
-            **_chat_verification_flags(other_user),
-            **_chat_land_verification_flags(land)
-        })
+            }
+        )
 
     return result
+
+
 
 
 # =========================================================
