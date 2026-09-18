@@ -2298,12 +2298,9 @@ def get_similar_lands(
         "count": len(results),
         "recommendations": results,
     }
-
-
 # =========================================================
 # Get Land By ID
 # =========================================================
-
 @router.get("/{land_id}")
 def get_land(
     land_id: int,
@@ -2313,7 +2310,12 @@ def get_land(
     # Step 57: expire stale listings before buyer-facing reads.
     sync_all_published_listings(db)
 
-    user = db.query(User).filter(User.id == current_user).first()
+    # Load the current user.
+    user = (
+        db.query(User)
+        .filter(User.id == current_user)
+        .first()
+    )
 
     if not user:
         raise HTTPException(
@@ -2321,11 +2323,10 @@ def get_land(
             detail="User not found"
         )
 
+    # Load the requested land.
     land = (
         db.query(Land)
-        .filter(
-            Land.id == land_id
-        )
+        .filter(Land.id == land_id)
         .first()
     )
 
@@ -2353,21 +2354,54 @@ def get_land(
                 detail="Land not found"
             )
 
+    # ---------------------------------------------------------
+    # Batch/load related data without per-field helper queries.
+    # ---------------------------------------------------------
+
+    # Owner
     owner = (
         db.query(User)
         .filter(User.id == land.owner_id)
         .first()
     )
 
+    # View count
+    view_count = (
+        db.query(func.count(ListingView.id))
+        .filter(ListingView.land_id == land.id)
+        .scalar()
+    )
+
+    # KYC verification
+    verified_owner = (
+        db.query(UserKYCVerification.id)
+        .join(
+            User,
+            User.id == UserKYCVerification.user_id
+        )
+        .filter(
+            UserKYCVerification.user_id == land.owner_id,
+            UserKYCVerification.status == "verified",
+            User.role == "farmer",
+        )
+        .first()
+        is not None
+    )
+
+    # Land images
+    images = (
+        db.query(models.LandImage)
+        .filter(
+            models.LandImage.land_id == land.id
+        )
+        .all()
+    )
+
     return {
         "id": land.id,
         "title": land.title,
         "description": land.description,
-        "view_count": (
-            db.query(ListingView)
-            .filter(ListingView.land_id == land.id)
-            .count()
-        ),
+        "view_count": int(view_count or 0),
         "image_url": land.image_url,
         "price": land.price,
         "area": land.area,
@@ -2385,7 +2419,7 @@ def get_land(
         "status": land.status,
         "rejection_reason": land.rejection_reason,
         "owner_id": land.owner_id,
-        "is_verified_farmer": is_verified_farmer(db, land.owner_id),
+        "is_verified_farmer": verified_owner,
 
         # Multiple land images
         "images": [
@@ -2393,14 +2427,12 @@ def get_land(
                 "id": image.id,
                 "image_url": image.image_url,
             }
-            for image in land.images
+            for image in images
         ],
 
         "owner_name": owner.full_name if owner else "",
         "owner_mobile": owner.mobile if owner else "",
     }
-
-
 # =========================================================
 # STEP 57 - LISTING EXPIRY / RENEWAL
 # =========================================================
