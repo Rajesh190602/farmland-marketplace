@@ -561,8 +561,27 @@ def get_all_lands(
     )
 
     # Expose only the public verification flag; never expose KYC documents.
+    # Batch verification for all returned land owners to avoid one KYC query per land.
+    owner_ids = {land.owner_id for land in lands if land.owner_id is not None}
+    verified_owner_ids = set()
+
+    if owner_ids:
+        verified_owner_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .join(User, User.id == UserKYCVerification.user_id)
+                .filter(
+                    UserKYCVerification.user_id.in_(owner_ids),
+                    UserKYCVerification.status == "verified",
+                    User.role == "farmer",
+                )
+                .all()
+            )
+        }
+
     for land in lands:
-        land.is_verified_farmer = is_verified_farmer(db, land.owner_id)
+        land.is_verified_farmer = land.owner_id in verified_owner_ids
 
     return lands
 
@@ -708,8 +727,27 @@ def search_lands(
     )
 
     # Expose only the public verification flag; never expose KYC documents.
+    # Batch verification for all returned land owners to avoid one KYC query per land.
+    owner_ids = {land.owner_id for land in lands if land.owner_id is not None}
+    verified_owner_ids = set()
+
+    if owner_ids:
+        verified_owner_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .join(User, User.id == UserKYCVerification.user_id)
+                .filter(
+                    UserKYCVerification.user_id.in_(owner_ids),
+                    UserKYCVerification.status == "verified",
+                    User.role == "farmer",
+                )
+                .all()
+            )
+        }
+
     for land in lands:
-        land.is_verified_farmer = is_verified_farmer(db, land.owner_id)
+        land.is_verified_farmer = land.owner_id in verified_owner_ids
 
     return lands
 
