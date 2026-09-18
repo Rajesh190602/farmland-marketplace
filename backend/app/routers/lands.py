@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query,LandImage
 from sqlalchemy.orm import Session
 from app import models
 from sqlalchemy import func
@@ -755,7 +755,6 @@ def search_lands(
 # ==========================
 # My Lands
 # ==========================
-
 @router.get("/my/lands")
 def get_my_lands(
     db: Session = Depends(get_db),
@@ -774,17 +773,95 @@ def get_my_lands(
         .all()
     )
 
+    if not lands:
+        return []
+
+    # ---------------------------------------------------------
+    # Batch-load listing expiry records for all lands.
+    # ---------------------------------------------------------
+    land_ids = [land.id for land in lands]
+
+    expiries = (
+        db.query(ListingExpiry)
+        .filter(
+            ListingExpiry.land_id.in_(land_ids)
+        )
+        .all()
+    )
+
+    expiry_by_land_id = {
+        expiry.land_id: expiry
+        for expiry in expiries
+    }
+
+    # ---------------------------------------------------------
+    # Create missing expiry records only for published lands.
+    #
+    # This preserves the existing behavior where a published
+    # land without an expiry record receives one.
+    # ---------------------------------------------------------
+    for land in lands:
+        if land.is_published and land.id not in expiry_by_land_id:
+            expiry = ensure_listing_expiry(db, land)
+
+            if expiry:
+                expiry_by_land_id[land.id] = expiry
+
+    # ---------------------------------------------------------
+    # Batch-load all land images.
+    # ---------------------------------------------------------
+    images = (
+        db.query(LandImage)
+        .filter(
+            LandImage.land_id.in_(land_ids)
+        )
+        .all()
+    )
+
+    images_by_land_id = {}
+
+    for image in images:
+        images_by_land_id.setdefault(
+            image.land_id,
+            []
+        ).append(image)
+
+    # ---------------------------------------------------------
+    # Batch-load KYC verification state for all land owners.
+    # ---------------------------------------------------------
+    owner_ids = {
+        land.owner_id
+        for land in lands
+        if land.owner_id is not None
+    }
+
+    verified_owner_ids = set()
+
+    if owner_ids:
+        verified_owner_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .join(
+                    User,
+                    User.id == UserKYCVerification.user_id
+                )
+                .filter(
+                    UserKYCVerification.user_id.in_(owner_ids),
+                    UserKYCVerification.status == "verified",
+                    User.role == "farmer",
+                )
+                .all()
+            )
+        }
+
+    # ---------------------------------------------------------
+    # Build response without additional database queries.
+    # ---------------------------------------------------------
     result = []
 
     for land in lands:
-        expiry = (
-            db.query(ListingExpiry)
-            .filter(ListingExpiry.land_id == land.id)
-            .first()
-        )
-
-        if land.is_published and not expiry:
-            expiry = ensure_listing_expiry(db, land)
+        expiry = expiry_by_land_id.get(land.id)
 
         expiry_status = get_expiry_status(
             expiry,
@@ -802,7 +879,10 @@ def get_my_lands(
                     "id": image.id,
                     "image_url": image.image_url,
                 }
-                for image in land.images
+                for image in images_by_land_id.get(
+                    land.id,
+                    []
+                )
             ],
 
             "price": land.price,
@@ -823,19 +903,41 @@ def get_my_lands(
             "status": land.status,
             "rejection_reason": land.rejection_reason,
             "owner_id": land.owner_id,
-            "is_verified_farmer": is_verified_farmer(db, land.owner_id),
+            "is_verified_farmer": (
+                land.owner_id in verified_owner_ids
+            ),
             "is_published": bool(land.is_published),
             "expiry_status": expiry_status,
-            "published_at": expiry.published_at if expiry else None,
-            "expires_at": expiry.expires_at if expiry else None,
-            "renewed_at": expiry.renewed_at if expiry else None,
-            "renewal_count": int(expiry.renewal_count or 0) if expiry else 0,
-            "expired_at": expiry.expired_at if expiry else None,
+            "published_at": (
+                expiry.published_at
+                if expiry
+                else None
+            ),
+            "expires_at": (
+                expiry.expires_at
+                if expiry
+                else None
+            ),
+            "renewed_at": (
+                expiry.renewed_at
+                if expiry
+                else None
+            ),
+            "renewal_count": (
+                int(expiry.renewal_count or 0)
+                if expiry
+                else 0
+            ),
+            "expired_at": (
+                expiry.expired_at
+                if expiry
+                else None
+            ),
         })
 
     db.commit()
-    return result
 
+    return result
 
 # =========================================================
 # PHASE 7 - FARMER LISTING ANALYTICS
