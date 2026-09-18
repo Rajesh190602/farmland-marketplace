@@ -1797,7 +1797,6 @@ def get_land_view_count(
         "view_count": view_count
     }
 
-
 # =========================================================
 # GET RECENTLY VIEWED LANDS
 # =========================================================
@@ -1822,18 +1821,66 @@ def get_recently_viewed_lands(
         .all()
     )
 
+    if not views:
+        return []
+
+    # ---------------------------------------------------------
+    # Batch-load all referenced lands.
+    # ---------------------------------------------------------
+    land_ids = [view.land_id for view in views]
+
+    lands = (
+        db.query(Land)
+        .filter(
+            Land.id.in_(land_ids),
+            Land.status == "approved",
+            Land.is_published == True,
+        )
+        .all()
+    )
+
+    land_by_id = {
+        land.id: land
+        for land in lands
+    }
+
+    # ---------------------------------------------------------
+    # Batch-load KYC verification state for the owners.
+    # Only the public verification flag is exposed.
+    # ---------------------------------------------------------
+    owner_ids = {
+        land.owner_id
+        for land in lands
+        if land.owner_id is not None
+    }
+
+    verified_owner_ids = set()
+
+    if owner_ids:
+        verified_owner_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .join(
+                    User,
+                    User.id == UserKYCVerification.user_id
+                )
+                .filter(
+                    UserKYCVerification.user_id.in_(owner_ids),
+                    UserKYCVerification.status == "verified",
+                    User.role == "farmer",
+                )
+                .all()
+            )
+        }
+
+    # ---------------------------------------------------------
+    # Rebuild the result in the original recently-viewed order.
+    # ---------------------------------------------------------
     result = []
 
     for view in views:
-        land = (
-            db.query(Land)
-            .filter(
-                Land.id == view.land_id,
-                Land.status == "approved",
-                Land.is_published == True
-            )
-            .first()
-        )
+        land = land_by_id.get(view.land_id)
 
         if not land:
             continue
@@ -1857,8 +1904,8 @@ def get_recently_viewed_lands(
             "latitude": land.latitude,
             "longitude": land.longitude,
             "owner_id": land.owner_id,
-            "is_verified_farmer": is_verified_farmer(db, land.owner_id),
-            "viewed_at": view.viewed_at
+            "is_verified_farmer": land.owner_id in verified_owner_ids,
+            "viewed_at": view.viewed_at,
         })
 
     return result
