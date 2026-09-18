@@ -840,6 +840,9 @@ def get_my_lands(
 # =========================================================
 # PHASE 7 - FARMER LISTING ANALYTICS
 # =========================================================
+# =========================================================
+# PHASE 7 - FARMER LISTING ANALYTICS
+# =========================================================
 
 @router.get("/my/analytics")
 def get_my_listing_analytics(
@@ -865,6 +868,9 @@ def get_my_listing_analytics(
             detail="Only farmers can access listing analytics"
         )
 
+    # ---------------------------------------------------------
+    # Load the farmer's listings once.
+    # ---------------------------------------------------------
     lands = (
         db.query(Land)
         .filter(Land.owner_id == current_user)
@@ -896,75 +902,236 @@ def get_my_listing_analytics(
         "cancelled_site_visits": 0,
     }
 
-    for land in lands:
-        availability = (
-            db.query(LandAvailability)
-            .filter(LandAvailability.land_id == land.id)
-            .first()
+    if not lands:
+        return {
+            "summary": summary,
+            "records": records,
+        }
+
+    # ---------------------------------------------------------
+    # Collect land IDs once.
+    # ---------------------------------------------------------
+    land_ids = [land.id for land in lands]
+
+    # ---------------------------------------------------------
+    # BATCH 1 - Availability
+    #
+    # Replaces one availability query per land.
+    # ---------------------------------------------------------
+    availability_by_land = {}
+
+    availability_rows = (
+        db.query(LandAvailability)
+        .filter(LandAvailability.land_id.in_(land_ids))
+        .all()
+    )
+
+    for availability in availability_rows:
+        # Preserve the previous .first() behavior as closely as
+        # possible when more than one row exists for a land.
+        if availability.land_id not in availability_by_land:
+            availability_by_land[availability.land_id] = availability
+
+    # ---------------------------------------------------------
+    # BATCH 2 - Listing views
+    #
+    # Replaces one COUNT query per land.
+    # ---------------------------------------------------------
+    view_counts = dict(
+        db.query(
+            ListingView.land_id,
+            func.count(ListingView.id).label("view_count"),
         )
+        .filter(ListingView.land_id.in_(land_ids))
+        .group_by(ListingView.land_id)
+        .all()
+    )
+
+    # ---------------------------------------------------------
+    # BATCH 3 - Inquiries
+    #
+    # One grouped query instead of loading inquiries
+    # separately for every land.
+    # ---------------------------------------------------------
+    inquiry_rows = (
+        db.query(
+            LandInquiry.land_id,
+            func.count(LandInquiry.id).label("total"),
+            func.count(LandInquiry.id)
+            .filter(LandInquiry.status == "pending")
+            .label("pending"),
+            func.count(LandInquiry.id)
+            .filter(LandInquiry.status == "accepted")
+            .label("accepted"),
+            func.count(LandInquiry.id)
+            .filter(LandInquiry.status == "rejected")
+            .label("rejected"),
+        )
+        .filter(LandInquiry.land_id.in_(land_ids))
+        .group_by(LandInquiry.land_id)
+        .all()
+    )
+
+    inquiry_counts_by_land = {
+        land_id: {
+            "total": int(total or 0),
+            "pending": int(pending or 0),
+            "accepted": int(accepted or 0),
+            "rejected": int(rejected or 0),
+        }
+        for land_id, total, pending, accepted, rejected in inquiry_rows
+    }
+
+    # ---------------------------------------------------------
+    # BATCH 4 - Offers
+    #
+    # One grouped query instead of loading offers
+    # separately for every land.
+    # ---------------------------------------------------------
+    offer_rows = (
+        db.query(
+            LandOffer.land_id,
+            func.count(LandOffer.id).label("total"),
+            func.count(LandOffer.id)
+            .filter(LandOffer.status == "pending")
+            .label("pending"),
+            func.count(LandOffer.id)
+            .filter(LandOffer.status == "accepted")
+            .label("accepted"),
+            func.count(LandOffer.id)
+            .filter(LandOffer.status == "rejected")
+            .label("rejected"),
+        )
+        .filter(LandOffer.land_id.in_(land_ids))
+        .group_by(LandOffer.land_id)
+        .all()
+    )
+
+    offer_counts_by_land = {
+        land_id: {
+            "total": int(total or 0),
+            "pending": int(pending or 0),
+            "accepted": int(accepted or 0),
+            "rejected": int(rejected or 0),
+        }
+        for land_id, total, pending, accepted, rejected in offer_rows
+    }
+
+    # ---------------------------------------------------------
+    # BATCH 5 - Site visits
+    #
+    # One grouped query instead of loading site visits
+    # separately for every land.
+    # ---------------------------------------------------------
+    site_visit_rows = (
+        db.query(
+            SiteVisit.land_id,
+            func.count(SiteVisit.id).label("total"),
+            func.count(SiteVisit.id)
+            .filter(SiteVisit.status == "pending")
+            .label("pending"),
+            func.count(SiteVisit.id)
+            .filter(SiteVisit.status == "accepted")
+            .label("accepted"),
+            func.count(SiteVisit.id)
+            .filter(SiteVisit.status == "rejected")
+            .label("rejected"),
+            func.count(SiteVisit.id)
+            .filter(SiteVisit.status == "completed")
+            .label("completed"),
+            func.count(SiteVisit.id)
+            .filter(SiteVisit.status == "cancelled")
+            .label("cancelled"),
+        )
+        .filter(SiteVisit.land_id.in_(land_ids))
+        .group_by(SiteVisit.land_id)
+        .all()
+    )
+
+    site_visit_counts_by_land = {
+        land_id: {
+            "total": int(total or 0),
+            "pending": int(pending or 0),
+            "accepted": int(accepted or 0),
+            "rejected": int(rejected or 0),
+            "completed": int(completed or 0),
+            "cancelled": int(cancelled or 0),
+        }
+        for (
+            land_id,
+            total,
+            pending,
+            accepted,
+            rejected,
+            completed,
+            cancelled,
+        ) in site_visit_rows
+    }
+
+    # ---------------------------------------------------------
+    # Build the same response using the batched results.
+    # ---------------------------------------------------------
+    for land in lands:
+        availability = availability_by_land.get(land.id)
+
         availability_status = (
             availability.status.lower()
             if availability and availability.status
             else "available"
         )
 
-        view_count = (
-            db.query(ListingView)
-            .filter(ListingView.land_id == land.id)
-            .count()
+        view_count = int(view_counts.get(land.id, 0))
+
+        inquiry_counts = inquiry_counts_by_land.get(
+            land.id,
+            {
+                "total": 0,
+                "pending": 0,
+                "accepted": 0,
+                "rejected": 0,
+            },
         )
 
-        inquiries = (
-            db.query(LandInquiry)
-            .filter(LandInquiry.land_id == land.id)
-            .all()
-        )
-        offers = (
-            db.query(LandOffer)
-            .filter(LandOffer.land_id == land.id)
-            .all()
-        )
-        site_visits = (
-            db.query(SiteVisit)
-            .filter(SiteVisit.land_id == land.id)
-            .all()
+        offer_counts = offer_counts_by_land.get(
+            land.id,
+            {
+                "total": 0,
+                "pending": 0,
+                "accepted": 0,
+                "rejected": 0,
+            },
         )
 
-        inquiry_counts = {
-            "total": len(inquiries),
-            "pending": sum(1 for item in inquiries if item.status == "pending"),
-            "accepted": sum(1 for item in inquiries if item.status == "accepted"),
-            "rejected": sum(1 for item in inquiries if item.status == "rejected"),
-        }
+        visit_counts = site_visit_counts_by_land.get(
+            land.id,
+            {
+                "total": 0,
+                "pending": 0,
+                "accepted": 0,
+                "rejected": 0,
+                "completed": 0,
+                "cancelled": 0,
+            },
+        )
 
-        offer_counts = {
-            "total": len(offers),
-            "pending": sum(1 for item in offers if item.status == "pending"),
-            "accepted": sum(1 for item in offers if item.status == "accepted"),
-            "rejected": sum(1 for item in offers if item.status == "rejected"),
-        }
-
-        visit_counts = {
-            "total": len(site_visits),
-            "pending": sum(1 for item in site_visits if item.status == "pending"),
-            "accepted": sum(1 for item in site_visits if item.status == "accepted"),
-            "rejected": sum(1 for item in site_visits if item.status == "rejected"),
-            "completed": sum(1 for item in site_visits if item.status == "completed"),
-            "cancelled": sum(1 for item in site_visits if item.status == "cancelled"),
-        }
-
+        # -----------------------------------------------------
+        # Summary calculations
+        # -----------------------------------------------------
         if availability_status in ("available", "reserved", "sold"):
             summary[availability_status] += 1
 
         summary["total_views"] += view_count
+
         summary["total_inquiries"] += inquiry_counts["total"]
         summary["pending_inquiries"] += inquiry_counts["pending"]
         summary["accepted_inquiries"] += inquiry_counts["accepted"]
         summary["rejected_inquiries"] += inquiry_counts["rejected"]
+
         summary["total_offers"] += offer_counts["total"]
         summary["pending_offers"] += offer_counts["pending"]
         summary["accepted_offers"] += offer_counts["accepted"]
         summary["rejected_offers"] += offer_counts["rejected"]
+
         summary["total_site_visits"] += visit_counts["total"]
         summary["pending_site_visits"] += visit_counts["pending"]
         summary["accepted_site_visits"] += visit_counts["accepted"]
@@ -972,6 +1139,9 @@ def get_my_listing_analytics(
         summary["completed_site_visits"] += visit_counts["completed"]
         summary["cancelled_site_visits"] += visit_counts["cancelled"]
 
+        # -----------------------------------------------------
+        # Same record structure as before.
+        # -----------------------------------------------------
         records.append({
             "id": land.id,
             "title": land.title,
