@@ -1,4 +1,4 @@
-﻿from sqlalchemy import or_,desc,func
+﻿from sqlalchemy import or_,desc,func,case
 from fastapi import (
     APIRouter,
     Depends,
@@ -1673,9 +1673,6 @@ def my_archived_conversations(
 
     return result
 
-
-
-
 # =========================================================
 # DELETE CONVERSATION FOR ME
 # The shared conversation and messages remain for the other participant.
@@ -2050,67 +2047,60 @@ def my_conversations(
 # =========================================================
 # GET CONVERSATION DETAILS
 # =========================================================
-
 @router.get("/conversation/{conversation_id}")
 def get_conversation_details(
     conversation_id: int,
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user)
 ):
-    # ----------------------------------
-    # Find conversation
-    # ----------------------------------
+    # -----------------------------------------------------
+    # Determine the other participant at SQL level.
+    # -----------------------------------------------------
+    other_user_id = case(
+        (
+            Conversation.buyer_id == current_user,
+            Conversation.farmer_id
+        ),
+        else_=Conversation.buyer_id
+    )
 
-    conversation = (
-        db.query(Conversation)
+    # -----------------------------------------------------
+    # Load conversation + other user + land in one query.
+    # -----------------------------------------------------
+    row = (
+        db.query(Conversation, User, Land)
+        .outerjoin(
+            User,
+            User.id == other_user_id
+        )
+        .outerjoin(
+            Land,
+            Land.id == Conversation.land_id
+        )
         .filter(
             Conversation.id == conversation_id
         )
         .first()
     )
 
-    if not conversation:
+    if not row:
         raise HTTPException(
             status_code=404,
             detail="Conversation not found"
         )
 
-    # ----------------------------------
-    # Only participants can access
-    # ----------------------------------
+    conversation, other_user, land = row
 
+    # -----------------------------------------------------
+    # Security: only participants can access.
+    # -----------------------------------------------------
     if (
         conversation.buyer_id != current_user
-        and
-        conversation.farmer_id != current_user
+        and conversation.farmer_id != current_user
     ):
         raise HTTPException(
             status_code=403,
             detail="You are not a participant in this conversation"
-        )
-
-    # ----------------------------------
-    # Find the OTHER user
-    # ----------------------------------
-
-    if conversation.buyer_id == current_user:
-
-        other_user = (
-            db.query(User)
-            .filter(
-                User.id == conversation.farmer_id
-            )
-            .first()
-        )
-
-    else:
-
-        other_user = (
-            db.query(User)
-            .filter(
-                User.id == conversation.buyer_id
-            )
-            .first()
         )
 
     if not other_user:
@@ -2119,22 +2109,9 @@ def get_conversation_details(
             detail="Other user not found"
         )
 
-    # ----------------------------------
-    # Find land
-    # ----------------------------------
-
-    land = (
-        db.query(Land)
-        .filter(
-            Land.id == conversation.land_id
-        )
-        .first()
-    )
-
-    # ----------------------------------
-    # Return details
-    # ----------------------------------
-
+    # -----------------------------------------------------
+    # Return the existing response format.
+    # -----------------------------------------------------
     return {
         "conversation_id": conversation.id,
         "other_user_id": other_user.id,
@@ -2146,10 +2123,10 @@ def get_conversation_details(
             if land
             else ""
         ),
-
         **_chat_verification_flags(other_user),
         **_chat_land_verification_flags(land)
     }
+
 # =========================================================
 # UPDATE ONLINE PRESENCE
 # =========================================================
