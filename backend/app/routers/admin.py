@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends,HTTPException,Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session,aliased
 from sqlalchemy import or_, String
 from app.database import get_db
 from app.auth import (
@@ -91,7 +91,6 @@ def _get_land_for_moderation(
 # =========================================================
 # PHASE 2 - ADMIN REPORTS
 # =========================================================
-
 @router.get("/reports")
 def get_admin_reports(
     status: str = Query(default=""),
@@ -121,29 +120,75 @@ def get_admin_reports(
 
     result = []
 
+    # =========================================================
+    # LAND REPORTS
+    # =========================================================
+
     if report_type in {"", "land"}:
-        query = db.query(LandReport)
+        land_owner = aliased(User)
+        land_reporter = aliased(User)
+
+        query = (
+            db.query(
+                LandReport,
+                Land,
+                land_reporter,
+                land_owner,
+            )
+            .outerjoin(
+                Land,
+                Land.id == LandReport.land_id,
+            )
+            .outerjoin(
+                land_reporter,
+                land_reporter.id == LandReport.reporter_id,
+            )
+            .outerjoin(
+                land_owner,
+                land_owner.id == Land.owner_id,
+            )
+        )
+
         if status:
             query = query.filter(LandReport.status == status)
 
-        for report in query.order_by(LandReport.id.desc()).all():
-            land = db.query(Land).filter(Land.id == report.land_id).first()
-            reporter = db.query(User).filter(User.id == report.reporter_id).first()
-            owner = (
-                db.query(User).filter(User.id == land.owner_id).first()
-                if land else None
-            )
+        rows = (
+            query
+            .order_by(LandReport.id.desc())
+            .all()
+        )
 
+        for report, land, reporter, owner in rows:
             result.append({
                 "id": report.id,
                 "report_type": "land",
                 "land_id": report.land_id,
-                "land_title": land.title if land else "Land no longer available",
-                "reported_user_id": land.owner_id if land else None,
-                "reported_user_name": owner.full_name if owner else "Unknown",
+                "land_title": (
+                    land.title
+                    if land
+                    else "Land no longer available"
+                ),
+                "reported_user_id": (
+                    land.owner_id
+                    if land
+                    else None
+                ),
+                "reported_user_name": (
+                    owner.full_name
+                    if owner
+                    else "Unknown"
+                ),
                 "reporter_id": report.reporter_id,
-                "reporter_name": reporter.full_name if reporter else "Unknown",
-                "reporter_email": reporter.email if reporter else "",
+                "reporter_name": (
+                    reporter.full_name
+                    if reporter
+                    else "Unknown"
+                ),
+                "reporter_email": (
+                    reporter.email
+                    if reporter
+                    else ""
+                ),
                 "reason": report.reason,
                 "description": report.description,
                 "status": report.status,
@@ -151,19 +196,40 @@ def get_admin_reports(
                 "updated_at": report.updated_at,
             })
 
+    # =========================================================
+    # USER REPORTS
+    # =========================================================
+
     if report_type in {"", "user"}:
-        query = db.query(UserReport)
+        user_reporter = aliased(User)
+        reported_user = aliased(User)
+
+        query = (
+            db.query(
+                UserReport,
+                user_reporter,
+                reported_user,
+            )
+            .outerjoin(
+                user_reporter,
+                user_reporter.id == UserReport.reporter_id,
+            )
+            .outerjoin(
+                reported_user,
+                reported_user.id == UserReport.reported_user_id,
+            )
+        )
+
         if status:
             query = query.filter(UserReport.status == status)
 
-        for report in query.order_by(UserReport.id.desc()).all():
-            reporter = db.query(User).filter(User.id == report.reporter_id).first()
-            reported_user = (
-                db.query(User)
-                .filter(User.id == report.reported_user_id)
-                .first()
-            )
+        rows = (
+            query
+            .order_by(UserReport.id.desc())
+            .all()
+        )
 
+        for report, reporter, reported in rows:
             result.append({
                 "id": report.id,
                 "report_type": "user",
@@ -171,16 +237,26 @@ def get_admin_reports(
                 "land_title": None,
                 "reported_user_id": report.reported_user_id,
                 "reported_user_name": (
-                    reported_user.full_name
-                    if reported_user
+                    reported.full_name
+                    if reported
                     else "User no longer available"
                 ),
                 "reported_user_email": (
-                    reported_user.email if reported_user else ""
+                    reported.email
+                    if reported
+                    else ""
                 ),
                 "reporter_id": report.reporter_id,
-                "reporter_name": reporter.full_name if reporter else "Unknown",
-                "reporter_email": reporter.email if reporter else "",
+                "reporter_name": (
+                    reporter.full_name
+                    if reporter
+                    else "Unknown"
+                ),
+                "reporter_email": (
+                    reporter.email
+                    if reporter
+                    else ""
+                ),
                 "reason": report.reason,
                 "description": report.description,
                 "status": report.status,
@@ -195,12 +271,20 @@ def get_admin_reports(
 
     return {
         "total": len(result),
-        "pending": sum(1 for item in result if item["status"] == "pending"),
-        "resolved": sum(1 for item in result if item["status"] == "resolved"),
-        "dismissed": sum(1 for item in result if item["status"] == "dismissed"),
+        "pending": sum(
+            1 for item in result
+            if item["status"] == "pending"
+        ),
+        "resolved": sum(
+            1 for item in result
+            if item["status"] == "resolved"
+        ),
+        "dismissed": sum(
+            1 for item in result
+            if item["status"] == "dismissed"
+        ),
         "reports": result,
     }
-
 
 @router.get("/reports/lands")
 def get_admin_land_reports(
@@ -219,30 +303,72 @@ def get_admin_land_reports(
             detail="Invalid report status. Use pending, resolved, or dismissed.",
         )
 
-    query = db.query(LandReport)
+    land_owner = aliased(User)
+    reporter = aliased(User)
+
+    query = (
+        db.query(
+            LandReport,
+            Land,
+            reporter,
+            land_owner,
+        )
+        .outerjoin(
+            Land,
+            Land.id == LandReport.land_id,
+        )
+        .outerjoin(
+            reporter,
+            reporter.id == LandReport.reporter_id,
+        )
+        .outerjoin(
+            land_owner,
+            land_owner.id == Land.owner_id,
+        )
+    )
+
     if status:
         query = query.filter(LandReport.status == status)
 
+    rows = (
+        query
+        .order_by(LandReport.id.desc())
+        .all()
+    )
+
     result = []
 
-    for report in query.order_by(LandReport.id.desc()).all():
-        land = db.query(Land).filter(Land.id == report.land_id).first()
-        reporter = db.query(User).filter(User.id == report.reporter_id).first()
-        owner = (
-            db.query(User).filter(User.id == land.owner_id).first()
-            if land else None
-        )
-
+    for report, land, report_user, owner in rows:
         result.append({
             "id": report.id,
             "report_type": "land",
             "land_id": report.land_id,
-            "land_title": land.title if land else "Land no longer available",
-            "reported_user_id": land.owner_id if land else None,
-            "reported_user_name": owner.full_name if owner else "Unknown",
+            "land_title": (
+                land.title
+                if land
+                else "Land no longer available"
+            ),
+            "reported_user_id": (
+                land.owner_id
+                if land
+                else None
+            ),
+            "reported_user_name": (
+                owner.full_name
+                if owner
+                else "Unknown"
+            ),
             "reporter_id": report.reporter_id,
-            "reporter_name": reporter.full_name if reporter else "Unknown",
-            "reporter_email": reporter.email if reporter else "",
+            "reporter_name": (
+                report_user.full_name
+                if report_user
+                else "Unknown"
+            ),
+            "reporter_email": (
+                report_user.email
+                if report_user
+                else ""
+            ),
             "reason": report.reason,
             "description": report.description,
             "status": report.status,
@@ -250,8 +376,10 @@ def get_admin_land_reports(
             "updated_at": report.updated_at,
         })
 
-    return {"total": len(result), "reports": result}
-
+    return {
+        "total": len(result),
+        "reports": result,
+    }
 
 @router.get("/reports/users")
 def get_admin_user_reports(
@@ -270,35 +398,62 @@ def get_admin_user_reports(
             detail="Invalid report status. Use pending, resolved, or dismissed.",
         )
 
-    query = db.query(UserReport)
+    reporter = aliased(User)
+    reported_user = aliased(User)
+
+    query = (
+        db.query(
+            UserReport,
+            reporter,
+            reported_user,
+        )
+        .outerjoin(
+            reporter,
+            reporter.id == UserReport.reporter_id,
+        )
+        .outerjoin(
+            reported_user,
+            reported_user.id == UserReport.reported_user_id,
+        )
+    )
+
     if status:
         query = query.filter(UserReport.status == status)
 
+    rows = (
+        query
+        .order_by(UserReport.id.desc())
+        .all()
+    )
+
     result = []
 
-    for report in query.order_by(UserReport.id.desc()).all():
-        reporter = db.query(User).filter(User.id == report.reporter_id).first()
-        reported_user = (
-            db.query(User)
-            .filter(User.id == report.reported_user_id)
-            .first()
-        )
-
+    for report, report_user, reported in rows:
         result.append({
             "id": report.id,
             "report_type": "user",
             "reported_user_id": report.reported_user_id,
             "reported_user_name": (
-                reported_user.full_name
-                if reported_user
+                reported.full_name
+                if reported
                 else "User no longer available"
             ),
             "reported_user_email": (
-                reported_user.email if reported_user else ""
+                reported.email
+                if reported
+                else ""
             ),
             "reporter_id": report.reporter_id,
-            "reporter_name": reporter.full_name if reporter else "Unknown",
-            "reporter_email": reporter.email if reporter else "",
+            "reporter_name": (
+                report_user.full_name
+                if report_user
+                else "Unknown"
+            ),
+            "reporter_email": (
+                report_user.email
+                if report_user
+                else ""
+            ),
             "reason": report.reason,
             "description": report.description,
             "status": report.status,
@@ -306,7 +461,10 @@ def get_admin_user_reports(
             "updated_at": report.updated_at,
         })
 
-    return {"total": len(result), "reports": result}
+    return {
+        "total": len(result),
+        "reports": result,
+    }
 
 
 @router.get("/dashboard")
