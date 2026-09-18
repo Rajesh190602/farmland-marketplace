@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends,HTTPException,Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session,aliased,selectinload
-from sqlalchemy import or_, String
+from sqlalchemy import or_, String, and_, func, literal
 from app.database import get_db
 from sqlalchemy.orm import joinedload
 from app.auth import (
@@ -37,7 +37,7 @@ from app.models import (
 from app.schemas import LandUpdate,UserUpdate,LandReview
 from app.utils.activity_log import create_activity_log
 from app.utils.listing_expiry import start_or_renew_listing_expiry
-from sqlalchemy import func,extract
+from sqlalchemy import extract
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
 import csv
@@ -1422,134 +1422,95 @@ def publish_land(
     # Notify buyers whose saved searches match this land
     # ---------------------------------------------------------
 
-    saved_searches = (
-        db.query(SavedSearch)
-        .filter(
-            SavedSearch.user_id != land.owner_id
+    # ---------------------------------------------------------
+    # Notify buyers whose saved searches match this land
+    #
+    # Scalability improvement:
+    # Let PostgreSQL perform the saved-search matching instead of
+    # loading every SavedSearch row into Python.
+    #
+    # The matching semantics are preserved:
+    # - Empty/NULL text criteria mean "no filter".
+    # - Non-empty criteria use case-insensitive substring matching.
+    # - Numeric min/max criteria behave exactly as before.
+    # - The land owner is excluded.
+    # - A buyer receives at most one notification even if multiple
+    #   saved searches match.
+    # ---------------------------------------------------------
+
+    def text_match(saved_field, land_value):
+        # land_value comes from the already-loaded Land object and is
+        # therefore a normal Python value, while saved_field is a
+        # SQLAlchemy column expression.
+        #
+        # Preserve the original behavior:
+        # - NULL/empty saved-search text means no filter.
+        # - A non-empty saved-search value requires a non-empty land value.
+        # - Matching is case-insensitive substring matching after trim().
+        if not land_value:
+            return or_(
+                saved_field.is_(None),
+                saved_field == "",
+            )
+
+        # PostgreSQL strpos() gives true substring semantics and avoids
+        # treating '%' or '_' in a saved-search value as LIKE wildcards.
+        return or_(
+            saved_field.is_(None),
+            saved_field == "",
+            func.strpos(
+                func.lower(func.trim(literal(land_value))),
+                func.lower(func.trim(saved_field)),
+            ) > 0,
         )
+
+    def min_number_match(saved_field, land_value):
+        if land_value is None:
+            return saved_field.is_(None)
+        return or_(
+            saved_field.is_(None),
+            saved_field <= land_value,
+        )
+
+    def max_number_match(saved_field, land_value):
+        if land_value is None:
+            return saved_field.is_(None)
+        return or_(
+            saved_field.is_(None),
+            saved_field >= land_value,
+        )
+
+    matched_user_ids = (
+        db.query(SavedSearch.user_id)
+        .filter(
+            SavedSearch.user_id != land.owner_id,
+
+            # Text filters
+            text_match(SavedSearch.district, land.district),
+            text_match(SavedSearch.village, land.village),
+            text_match(SavedSearch.mandal, land.mandal),
+            text_match(SavedSearch.crop_type, land.crop_type),
+            text_match(SavedSearch.soil_type, land.soil_type),
+            text_match(SavedSearch.water_source, land.water_source),
+
+            # Numeric filters
+            min_number_match(SavedSearch.min_price, land.price),
+            max_number_match(SavedSearch.max_price, land.price),
+            min_number_match(SavedSearch.min_area, land.area),
+            max_number_match(SavedSearch.max_area, land.area),
+        )
+        .distinct()
         .all()
     )
 
-    notified_users = set()
+    notified_users = {
+        user_id
+        for (user_id,) in matched_user_ids
+    }
 
-    for saved_search in saved_searches:
-
-        # District
-        if (
-            saved_search.district
-            and (
-                not land.district
-                or saved_search.district.strip().lower()
-                not in land.district.strip().lower()
-            )
-        ):
-            continue
-
-        # Village
-        if (
-            saved_search.village
-            and (
-                not land.village
-                or saved_search.village.strip().lower()
-                not in land.village.strip().lower()
-            )
-        ):
-            continue
-
-        # Mandal
-        if (
-            saved_search.mandal
-            and (
-                not land.mandal
-                or saved_search.mandal.strip().lower()
-                not in land.mandal.strip().lower()
-            )
-        ):
-            continue
-
-        # Crop type
-        if (
-            saved_search.crop_type
-            and (
-                not land.crop_type
-                or saved_search.crop_type.strip().lower()
-                not in land.crop_type.strip().lower()
-            )
-        ):
-            continue
-
-        # Soil type
-        if (
-            saved_search.soil_type
-            and (
-                not land.soil_type
-                or saved_search.soil_type.strip().lower()
-                not in land.soil_type.strip().lower()
-            )
-        ):
-            continue
-
-        # Water source
-        if (
-            saved_search.water_source
-            and (
-                not land.water_source
-                or saved_search.water_source.strip().lower()
-                not in land.water_source.strip().lower()
-            )
-        ):
-            continue
-
-        # Minimum price
-        if (
-            saved_search.min_price is not None
-            and (
-                land.price is None
-                or land.price < saved_search.min_price
-            )
-        ):
-            continue
-
-        # Maximum price
-        if (
-            saved_search.max_price is not None
-            and (
-                land.price is None
-                or land.price > saved_search.max_price
-            )
-        ):
-            continue
-
-        # Minimum area
-        if (
-            saved_search.min_area is not None
-            and (
-                land.area is None
-                or land.area < saved_search.min_area
-            )
-        ):
-            continue
-
-        # Maximum area
-        if (
-            saved_search.max_area is not None
-            and (
-                land.area is None
-                or land.area > saved_search.max_area
-            )
-        ):
-            continue
-
-        # -----------------------------------------------------
-        # Avoid sending multiple notifications to the same
-        # buyer when they have multiple matching saved searches.
-        # -----------------------------------------------------
-
-        if saved_search.user_id in notified_users:
-            continue
-
+    for user_id in notified_users:
         notification = Notification(
-            user_id=saved_search.user_id,
+            user_id=user_id,
             title="New Land Matches Your Saved Search",
             message=(
                 f'A new land "{land.title}" matches one of '
@@ -1561,8 +1522,6 @@ def publish_land(
         )
 
         db.add(notification)
-
-        notified_users.add(saved_search.user_id)
 
     # ---------------------------------------------------------
     # Save everything together
@@ -1577,7 +1536,6 @@ def publish_land(
         "is_published": land.is_published,
         "matched_buyers_notified": len(notified_users),
     }
-
 
 @router.put("/lands/{land_id}/unpublish")
 def unpublish_land(
