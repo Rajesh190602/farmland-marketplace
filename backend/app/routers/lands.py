@@ -1159,8 +1159,6 @@ def get_my_listing_analytics(
         "records": records,
     }
 
-
-
 # =========================================================
 # PHASE 7 - FARMER LISTING ANALYTICS DETAILS
 # =========================================================
@@ -1206,6 +1204,9 @@ def get_my_listing_analytics_details(
             ),
         )
 
+    # ---------------------------------------------------------
+    # Load the farmer's lands once.
+    # ---------------------------------------------------------
     lands = (
         db.query(Land)
         .filter(Land.owner_id == current_user)
@@ -1213,36 +1214,79 @@ def get_my_listing_analytics_details(
         .all()
     )
 
-    def availability_for(land):
-        availability = (
+    land_ids = [land.id for land in lands]
+    land_by_id = {land.id: land for land in lands}
+
+    # ---------------------------------------------------------
+    # BATCH 1 - Availability
+    #
+    # Replaces availability_for(land) queries inside loops.
+    # ---------------------------------------------------------
+    availability_by_land = {}
+
+    if land_ids:
+        availability_rows = (
             db.query(LandAvailability)
-            .filter(LandAvailability.land_id == land.id)
-            .first()
+            .filter(LandAvailability.land_id.in_(land_ids))
+            .all()
         )
+
+        for availability in availability_rows:
+            if availability.land_id not in availability_by_land:
+                availability_by_land[availability.land_id] = availability
+
+    def availability_for(land):
+        availability = availability_by_land.get(land.id)
+
         return (
             availability.status.lower()
             if availability and availability.status
             else "available"
         )
 
-    # Listing-based cards show one row per listing.
-    if category in {"my_listings", "available", "reserved", "sold", "total_views"}:
+    # ---------------------------------------------------------
+    # BATCH 2 - View counts
+    #
+    # One grouped query instead of one COUNT query per land.
+    # ---------------------------------------------------------
+    view_counts = {}
+
+    if land_ids:
+        view_counts = dict(
+            db.query(
+                ListingView.land_id,
+                func.count(ListingView.id).label("view_count"),
+            )
+            .filter(ListingView.land_id.in_(land_ids))
+            .group_by(ListingView.land_id)
+            .all()
+        )
+
+    # ---------------------------------------------------------
+    # Listing-based cards
+    # ---------------------------------------------------------
+    if category in {
+        "my_listings",
+        "available",
+        "reserved",
+        "sold",
+        "total_views",
+    }:
         records = []
 
         for land in lands:
             availability_status = availability_for(land)
-            view_count = (
-                db.query(ListingView)
-                .filter(ListingView.land_id == land.id)
-                .count()
-            )
+            view_count = int(view_counts.get(land.id, 0))
 
             if category == "available" and availability_status != "available":
                 continue
+
             if category == "reserved" and availability_status != "reserved":
                 continue
+
             if category == "sold" and availability_status != "sold":
                 continue
+
             if category == "total_views" and view_count <= 0:
                 continue
 
@@ -1261,85 +1305,202 @@ def get_my_listing_analytics_details(
             "records": records,
         }
 
-    # Buyer activity cards show individual buyer activity.
+    # ---------------------------------------------------------
+    # BATCH 3 - Inquiries
+    #
+    # Load all relevant inquiries once.
+    # ---------------------------------------------------------
+    inquiries = (
+        db.query(LandInquiry)
+        .filter(LandInquiry.land_id.in_(land_ids))
+        .order_by(LandInquiry.created_at.desc())
+        .all()
+    )
+
     if category == "inquiries":
-        inquiries = (
-            db.query(LandInquiry)
-            .filter(LandInquiry.land_id.in_([land.id for land in lands]))
-            .order_by(LandInquiry.created_at.desc())
-            .all()
-        )
+        # Collect buyer IDs and load users in one query.
+        buyer_ids = {
+            inquiry.buyer_id
+            for inquiry in inquiries
+            if inquiry.buyer_id is not None
+        }
+
+        buyers_by_id = {}
+
+        if buyer_ids:
+            buyers = (
+                db.query(User)
+                .filter(User.id.in_(buyer_ids))
+                .all()
+            )
+            buyers_by_id = {
+                buyer.id: buyer
+                for buyer in buyers
+            }
 
         records = []
+
         for inquiry in inquiries:
-            buyer = db.query(User).filter(User.id == inquiry.buyer_id).first()
-            land = db.query(Land).filter(Land.id == inquiry.land_id).first()
+            buyer = buyers_by_id.get(inquiry.buyer_id)
+            land = land_by_id.get(inquiry.land_id)
+
             records.append({
                 "id": inquiry.id,
                 "land_id": inquiry.land_id,
                 "land_title": land.title if land else "",
                 "buyer_id": inquiry.buyer_id,
-                "buyer_name": buyer.full_name if buyer else "Unknown buyer",
-                "buyer_mobile": buyer.mobile if buyer else "",
+                "buyer_name": (
+                    buyer.full_name
+                    if buyer
+                    else "Unknown buyer"
+                ),
+                "buyer_mobile": (
+                    buyer.mobile
+                    if buyer
+                    else ""
+                ),
                 "message": inquiry.message or "",
                 "status": inquiry.status,
                 "created_at": inquiry.created_at,
             })
 
-        return {"category": category, "total": len(records), "records": records}
+        return {
+            "category": category,
+            "total": len(records),
+            "records": records,
+        }
+
+    # ---------------------------------------------------------
+    # BATCH 4 - Offers
+    #
+    # Load all relevant offers once.
+    # ---------------------------------------------------------
+    offers = (
+        db.query(LandOffer)
+        .filter(LandOffer.land_id.in_(land_ids))
+        .order_by(LandOffer.created_at.desc())
+        .all()
+    )
 
     if category == "offers":
-        offers = (
-            db.query(LandOffer)
-            .filter(LandOffer.land_id.in_([land.id for land in lands]))
-            .order_by(LandOffer.created_at.desc())
-            .all()
-        )
+        # Collect buyer IDs and load users in one query.
+        buyer_ids = {
+            offer.buyer_id
+            for offer in offers
+            if offer.buyer_id is not None
+        }
+
+        buyers_by_id = {}
+
+        if buyer_ids:
+            buyers = (
+                db.query(User)
+                .filter(User.id.in_(buyer_ids))
+                .all()
+            )
+            buyers_by_id = {
+                buyer.id: buyer
+                for buyer in buyers
+            }
 
         records = []
+
         for offer in offers:
-            buyer = db.query(User).filter(User.id == offer.buyer_id).first()
-            land = db.query(Land).filter(Land.id == offer.land_id).first()
+            buyer = buyers_by_id.get(offer.buyer_id)
+            land = land_by_id.get(offer.land_id)
+
             records.append({
                 "id": offer.id,
                 "land_id": offer.land_id,
                 "land_title": land.title if land else "",
                 "buyer_id": offer.buyer_id,
-                "buyer_name": buyer.full_name if buyer else "Unknown buyer",
-                "buyer_mobile": buyer.mobile if buyer else "",
+                "buyer_name": (
+                    buyer.full_name
+                    if buyer
+                    else "Unknown buyer"
+                ),
+                "buyer_mobile": (
+                    buyer.mobile
+                    if buyer
+                    else ""
+                ),
                 "amount": offer.amount,
                 "message": offer.message or "",
                 "status": offer.status,
                 "created_at": offer.created_at,
             })
 
-        return {"category": category, "total": len(records), "records": records}
+        return {
+            "category": category,
+            "total": len(records),
+            "records": records,
+        }
 
+    # ---------------------------------------------------------
+    # BATCH 5 - Site visits
+    #
+    # Load all relevant site visits once.
+    # ---------------------------------------------------------
     site_visits = (
         db.query(SiteVisit)
-        .filter(SiteVisit.land_id.in_([land.id for land in lands]))
+        .filter(SiteVisit.land_id.in_(land_ids))
         .order_by(SiteVisit.created_at.desc())
         .all()
     )
 
+    # Collect buyer IDs and load users in one query.
+    buyer_ids = {
+        visit.buyer_id
+        for visit in site_visits
+        if visit.buyer_id is not None
+    }
+
+    buyers_by_id = {}
+
+    if buyer_ids:
+        buyers = (
+            db.query(User)
+            .filter(User.id.in_(buyer_ids))
+            .all()
+        )
+        buyers_by_id = {
+            buyer.id: buyer
+            for buyer in buyers
+        }
+
     records = []
+
     for visit in site_visits:
-        buyer = db.query(User).filter(User.id == visit.buyer_id).first()
-        land = db.query(Land).filter(Land.id == visit.land_id).first()
+        buyer = buyers_by_id.get(visit.buyer_id)
+        land = land_by_id.get(visit.land_id)
+
         records.append({
             "id": visit.id,
             "land_id": visit.land_id,
             "land_title": land.title if land else "",
             "buyer_id": visit.buyer_id,
-            "buyer_name": buyer.full_name if buyer else "Unknown buyer",
-            "buyer_mobile": buyer.mobile if buyer else "",
+            "buyer_name": (
+                buyer.full_name
+                if buyer
+                else "Unknown buyer"
+            ),
+            "buyer_mobile": (
+                buyer.mobile
+                if buyer
+                else ""
+            ),
             "requested_date": visit.requested_date,
             "message": visit.message or "",
             "status": visit.status,
             "created_at": visit.created_at,
         })
 
-    return {"category": category, "total": len(records), "records": records}
+    return {
+        "category": category,
+        "total": len(records),
+        "records": records,
+    }
+
 
 # ==========================
 # Get My Land By ID
