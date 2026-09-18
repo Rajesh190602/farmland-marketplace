@@ -1571,7 +1571,6 @@ def remove_recently_viewed_land(
 # =========================================================
 # STEP 46 - SIMILAR FARMLAND
 # =========================================================
-
 @router.get("/{land_id}/similar")
 def get_similar_lands(
     land_id: int,
@@ -1587,6 +1586,7 @@ def get_similar_lands(
     Similarity is ranked using location, crop, soil, water source,
     price, and land area. The current listing is excluded.
     """
+
     user = db.query(User).filter(User.id == current_user).first()
 
     if not user:
@@ -1638,6 +1638,41 @@ def get_similar_lands(
         ("water_source", "same water source", 3),
     ]
 
+    # ---------------------------------------------------------
+    # STEP 4 - Batch listing view counts
+    # ---------------------------------------------------------
+    candidate_ids = [candidate.id for candidate in candidates]
+
+    view_counts = {}
+
+    if candidate_ids:
+        view_counts = dict(
+            db.query(
+                ListingView.land_id,
+                func.count(ListingView.id),
+            )
+            .filter(ListingView.land_id.in_(candidate_ids))
+            .group_by(ListingView.land_id)
+            .all()
+        )
+
+    # ---------------------------------------------------------
+    # STEP 4 - Batch availability lookup
+    # ---------------------------------------------------------
+    availability_by_land = {}
+
+    if candidate_ids:
+        availability_rows = (
+            db.query(LandAvailability)
+            .filter(LandAvailability.land_id.in_(candidate_ids))
+            .all()
+        )
+
+        for availability in availability_rows:
+            # Preserve the first available record for each land.
+            if availability.land_id not in availability_by_land:
+                availability_by_land[availability.land_id] = availability
+
     scored = []
 
     for candidate in candidates:
@@ -1645,8 +1680,12 @@ def get_similar_lands(
         reasons = []
 
         for field, label, points in field_rules:
-            current_value = normalize(getattr(current_land, field, None))
-            candidate_value = normalize(getattr(candidate, field, None))
+            current_value = normalize(
+                getattr(current_land, field, None)
+            )
+            candidate_value = normalize(
+                getattr(candidate, field, None)
+            )
 
             if (
                 current_value
@@ -1657,10 +1696,12 @@ def get_similar_lands(
                 reasons.append(label)
 
         candidate_price = float(candidate.price or 0)
+
         if current_price > 0 and candidate_price > 0:
             price_difference = (
                 abs(candidate_price - current_price) / current_price
             )
+
             if price_difference <= 0.10:
                 score += 6
                 reasons.append("very similar price")
@@ -1669,10 +1710,12 @@ def get_similar_lands(
                 reasons.append("similar price range")
 
         candidate_area = float(candidate.area or 0)
+
         if current_area > 0 and candidate_area > 0:
             area_difference = (
                 abs(candidate_area - current_area) / current_area
             )
+
             if area_difference <= 0.15:
                 score += 5
                 reasons.append("very similar land area")
@@ -1680,9 +1723,8 @@ def get_similar_lands(
                 score += 2
                 reasons.append("similar land area")
 
-        view_count = db.query(ListingView).filter(
-            ListingView.land_id == candidate.id
-        ).count()
+        # Use the already-batched view count.
+        view_count = int(view_counts.get(candidate.id, 0))
 
         # Small popularity tie-breaker; similarity remains the main signal.
         score += min(view_count, 20) * 0.25
@@ -1690,11 +1732,7 @@ def get_similar_lands(
         if score <= 0:
             continue
 
-        availability = (
-            db.query(LandAvailability)
-            .filter(LandAvailability.land_id == candidate.id)
-            .first()
-        )
+        availability = availability_by_land.get(candidate.id)
 
         scored.append({
             "land": candidate,
@@ -1713,9 +1751,39 @@ def get_similar_lands(
         reverse=True,
     )
 
+    # ---------------------------------------------------------
+    # STEP 4 - Batch KYC verification for final results
+    # ---------------------------------------------------------
+    top_items = scored[:limit]
+
+    owner_ids = {
+        item["land"].owner_id
+        for item in top_items
+    }
+
+    verified_owner_ids = set()
+
+    if owner_ids:
+        verified_owner_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .join(
+                    User,
+                    User.id == UserKYCVerification.user_id,
+                )
+                .filter(
+                    UserKYCVerification.user_id.in_(owner_ids),
+                    UserKYCVerification.status == "verified",
+                    User.role == "farmer",
+                )
+                .all()
+            )
+        }
+
     results = []
 
-    for item in scored[:limit]:
+    for item in top_items:
         candidate = item["land"]
 
         results.append({
@@ -1735,7 +1803,9 @@ def get_similar_lands(
             "status": candidate.status,
             "is_published": candidate.is_published,
             "owner_id": candidate.owner_id,
-            "is_verified_farmer": is_verified_farmer(db, candidate.owner_id),
+            "is_verified_farmer": (
+                candidate.owner_id in verified_owner_ids
+            ),
             "view_count": item["view_count"],
             "availability": item["availability"],
             "similarity_score": item["score"],
