@@ -1675,11 +1675,6 @@ def get_my_land_by_id(
         "owner_mobile": owner.mobile if owner else ""
     }
 
-
-# =========================================================
-# RECENTLY VIEWED LANDS
-# =========================================================
-
 @router.post("/{land_id}/view")
 def record_land_view(
     land_id: int,
@@ -1687,23 +1682,10 @@ def record_land_view(
     current_user: int = Depends(get_current_user),
 ):
     # =====================================================
-    # GET USER
-    # =====================================================
-    user = (
-        db.query(User)
-        .filter(User.id == current_user)
-        .first()
-    )
-
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
-
-    # =====================================================
     # GET LAND
     # =====================================================
+    # get_current_user already guarantees an authenticated user,
+    # so a separate User query is unnecessary here.
     land = (
         db.query(Land)
         .filter(Land.id == land_id)
@@ -1798,11 +1780,12 @@ def record_land_view(
         )
         db.add(viewed)
 
-    db.commit()
-
     # =====================================================
     # KEEP ONLY LATEST 20 RECENTLY VIEWED LANDS
     # =====================================================
+    # SQLAlchemy will flush the pending view changes before
+    # executing this query, so we can perform cleanup before
+    # the single final commit.
     old_views = (
         db.query(RecentlyViewedLand)
         .filter(
@@ -1818,11 +1801,11 @@ def record_land_view(
     for old_view in old_views:
         db.delete(old_view)
 
-    db.commit()
-
     # =====================================================
     # VIEW COUNT
     # =====================================================
+    # The pending ListingView change is flushed automatically
+    # before this query, so the new count is available.
     view_count = (
         db.query(ListingView)
         .filter(
@@ -1831,14 +1814,17 @@ def record_land_view(
         .count()
     )
 
+    # =====================================================
+    # SINGLE DATABASE COMMIT
+    # =====================================================
+    db.commit()
+
     return {
         "message": "Land view recorded",
         "land_id": land_id,
         "viewed_at": now,
         "view_count": view_count,
     }
-
-
 # =========================================================
 # GET LISTING VIEW COUNT
 # =========================================================
