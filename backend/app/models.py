@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     UniqueConstraint,
     CheckConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -537,6 +538,15 @@ class UserBlock(Base):
 
 class Land(Base):
     __tablename__ = "lands"
+    __table_args__ = (
+        Index(
+            "ix_lands_marketplace_published_id",
+            text("id DESC"),
+            postgresql_where=text(
+                "status = 'approved' AND is_published = true"
+            ),
+        ),
+    )
 
     id = Column(
         Integer,
