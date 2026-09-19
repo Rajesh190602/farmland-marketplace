@@ -20,6 +20,7 @@ from app.routers import (
     reports,
     land_images,
     activity_logs,
+    internal_tasks,
 )
 from app.routers import saved_searches
 from app.routers import reviews
@@ -138,6 +139,7 @@ app.include_router(activity_logs.router)
 app.include_router(saved_searches.router)
 app.include_router(reviews.router)
 app.include_router(land_ownership.router)
+app.include_router(internal_tasks.router)
 
 
 # =========================================================
