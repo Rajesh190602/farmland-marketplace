@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app import models
-from sqlalchemy import func
+from sqlalchemy import func, literal, union_all
 import math
+import time
 from sqlalchemy import or_
 from app.auth import get_current_user
 from app.database import get_db
@@ -135,6 +136,14 @@ def get_buyer_recommendations(
     db: Session = Depends(get_db),
     current_user: int = Depends(get_current_user),
 ):
+    profile_start = time.perf_counter()
+    profile_marks = {}
+
+    def profile_mark(name):
+        profile_marks[name] = round(
+            (time.perf_counter() - profile_start) * 1000,
+            2,
+        )
     # Step 57: expire stale marketplace listings before public reads.
 
     """
@@ -177,35 +186,105 @@ def get_buyer_recommendations(
         activity_weights[land_id] = activity_weights.get(land_id, 0) + weight
         activity_reason.setdefault(land_id, set()).add(reason)
 
-    for row in db.query(Favorite).filter(Favorite.user_id == current_user).all():
-        add_activity(row.land_id, 5, "favorited by you")
+    # ---------------------------------------------------------
+    # Load buyer activity with two DB round trips instead of one
+    # round trip per activity table. The six event sources share
+    # the same output shape, so UNION ALL lets PostgreSQL return
+    # them together. SavedSearch remains a separate query because
+    # the recommendation scorer needs its filter fields.
+    # ---------------------------------------------------------
+    activity_query_start = time.perf_counter()
 
-    for row in db.query(ListingView).filter(ListingView.user_id == current_user).all():
-        add_activity(row.land_id, 4, "viewed by you")
+    activity_union = union_all(
+        db.query(
+            Favorite.land_id.label("land_id"),
+            Favorite.user_id.label("user_id"),
+            literal(5).label("weight"),
+            literal("favorited by you").label("reason"),
+        ).filter(Favorite.user_id == current_user),
+        db.query(
+            ListingView.land_id.label("land_id"),
+            ListingView.user_id.label("user_id"),
+            literal(4).label("weight"),
+            literal("viewed by you").label("reason"),
+        ).filter(ListingView.user_id == current_user),
+        db.query(
+            RecentlyViewedLand.land_id.label("land_id"),
+            RecentlyViewedLand.user_id.label("user_id"),
+            literal(3).label("weight"),
+            literal("recently viewed").label("reason"),
+        ).filter(RecentlyViewedLand.user_id == current_user),
+        db.query(
+            LandInquiry.land_id.label("land_id"),
+            LandInquiry.buyer_id.label("user_id"),
+            literal(6).label("weight"),
+            literal("you inquired about similar land").label("reason"),
+        ).filter(LandInquiry.buyer_id == current_user),
+        db.query(
+            LandOffer.land_id.label("land_id"),
+            LandOffer.buyer_id.label("user_id"),
+            literal(8).label("weight"),
+            literal("you made an offer on similar land").label("reason"),
+        ).filter(LandOffer.buyer_id == current_user),
+        db.query(
+            SiteVisit.land_id.label("land_id"),
+            SiteVisit.buyer_id.label("user_id"),
+            literal(10).label("weight"),
+            literal("you requested a site visit for similar land").label("reason"),
+        ).filter(SiteVisit.buyer_id == current_user),
+    ).subquery()
 
-    for row in db.query(RecentlyViewedLand).filter(RecentlyViewedLand.user_id == current_user).all():
-        add_activity(row.land_id, 3, "recently viewed")
+    # Fetch the activity rows and their corresponding Land objects in the
+    # same database round trip. The previous implementation made a second
+    # query to load interacted lands after loading activity. With the
+    # local-to-Neon network path, that extra round trip was measurable.
+    activity_query_start = time.perf_counter()
 
-    for row in db.query(LandInquiry).filter(LandInquiry.buyer_id == current_user).all():
-        add_activity(row.land_id, 6, "you inquired about similar land")
+    activity_rows = db.query(
+        activity_union.c.land_id,
+        activity_union.c.weight,
+        activity_union.c.reason,
+        Land,
+    ).join(
+    Land,
+    Land.id == activity_union.c.land_id,
+    ).all()
 
-    for row in db.query(LandOffer).filter(LandOffer.buyer_id == current_user).all():
-        add_activity(row.land_id, 8, "you made an offer on similar land")
+    activity_query_ms = round(
+        (time.perf_counter() - activity_query_start) * 1000,
+        2,
+    )
 
-    for row in db.query(SiteVisit).filter(SiteVisit.buyer_id == current_user).all():
-        add_activity(row.land_id, 10, "you requested a site visit for similar land")
+    interacted_land_map = {}
+    for row in activity_rows:
+        add_activity(row.land_id, row.weight, row.reason)
+        interacted_land_map[row.land.id] = row.Land
 
-    saved_searches = db.query(SavedSearch).filter(SavedSearch.user_id == current_user).all()
+    interacted_lands = list(interacted_land_map.values())
 
-    # Use interacted lands as the main preference source.
+    activity_queries_ms = round(
+        (time.perf_counter() - activity_query_start) * 1000,
+        2,
+    )
+
+    saved_search_start = time.perf_counter()
+    saved_searches = db.query(SavedSearch).filter(
+        SavedSearch.user_id == current_user
+    ).all()
+    saved_searches_ms = round(
+        (time.perf_counter() - saved_search_start) * 1000,
+        2,
+    )
+
+    profile_marks["activity_queries"] = {
+        "combined_activity_with_lands": activity_queries_ms,
+        "activity_query_ms": activity_query_ms,
+        "saved_searches": saved_searches_ms,
+    }
+    profile_mark("activity_loaded")
+    # The interacted Land objects were loaded together with activity above.
     interacted_ids = set(activity_weights.keys())
-    interacted_lands = []
-    if interacted_ids:
-        interacted_lands = (
-            db.query(Land)
-            .filter(Land.id.in_(interacted_ids))
-            .all()
-        )
+    profile_mark("interacted_lands_loaded")
 
     # Weighted frequency of categorical preferences.
     preference_fields = [
@@ -254,29 +333,49 @@ def get_buyer_recommendations(
     # Candidate listings: public marketplace only, excluding
     # the buyer's own records (normally none, but kept defensive).
     # ---------------------------------------------------------
-    candidates = (
-        db.query(Land)
+    # ---------------------------------------------------------
+    # Candidate listings + view counts in ONE database round trip.
+    #
+    # The previous implementation loaded candidates and then made
+    # a second database query to count ListingView rows. Because
+    # the local-to-Neon connection has significant round-trip
+    # latency, combine both operations while preserving the same
+    # candidate filters, ordering, and view_count values.
+    # ---------------------------------------------------------
+    candidate_view_query_start = time.perf_counter()
+
+    candidate_rows = (
+        db.query(
+            Land,
+            func.count(ListingView.id).label("view_count"),
+        )
+        .outerjoin(
+            ListingView,
+            ListingView.land_id == Land.id,
+        )
         .filter(
             Land.status == "approved",
             Land.is_published == True,
             Land.owner_id != current_user,
         )
+        .group_by(Land.id)
         .order_by(Land.id.desc())
         .all()
     )
-    candidate_ids = [land.id for land in candidates]
-    view_counts = {}
 
-    if candidate_ids:
-        view_counts = dict(
-            db.query(
-                ListingView.land_id,
-                func.count(ListingView.id)
-            )
-            .filter(ListingView.land_id.in_(candidate_ids))
-            .group_by(ListingView.land_id)
-            .all()
-        )
+    candidates = [land for land, _view_count in candidate_rows]
+    view_counts = {
+        land.id: int(view_count or 0)
+        for land, view_count in candidate_rows
+    }
+
+    candidate_view_query_ms = round(
+        (time.perf_counter() - candidate_view_query_start) * 1000,
+        2,
+    )
+    profile_marks["candidate_view_query_ms"] = candidate_view_query_ms
+    profile_mark("candidates_loaded")
+    profile_mark("view_counts_loaded")
 
     scored = []
 
@@ -389,15 +488,19 @@ def get_buyer_recommendations(
         })
 
     scored.sort(key=lambda item: (item["score"], item["land"].id), reverse=True)
-
+    profile_mark("scoring_finished")
+    # KYC is intentionally kept as a separate small query for only the
+    # recommendations that are actually returned.
     # Batch KYC verification for only the recommendations we are about to return.
-    # This preserves the existing server-authoritative verification logic while
-    # avoiding one database query per recommendation.
+    # Keep this as a separate, small query. The previous experiment that pushed
+    # KYC verification into the candidate query made that query much slower
+    # because the correlated EXISTS was evaluated across candidate rows.
     top_items = scored[:limit]
     owner_ids = {item["land"].owner_id for item in top_items}
 
-    verified_owner_ids = set()
+    kyc_query_start = time.perf_counter()
 
+    verified_owner_ids = set()
     if owner_ids:
         verified_owner_ids = {
             user_id
@@ -412,6 +515,13 @@ def get_buyer_recommendations(
                 .all()
             )
         }
+
+    kyc_query_ms = round(
+        (time.perf_counter() - kyc_query_start) * 1000,
+        2,
+    )
+    profile_marks["kyc_query_ms"] = kyc_query_ms
+    profile_mark("kyc_loaded")
 
     results = []
     for item in top_items:
@@ -442,7 +552,8 @@ def get_buyer_recommendations(
             "recommendation_reasons": item["reasons"],
             "view_count": item["view_count"],
         })
-
+    profile_mark("before_return")
+    print("RECOMMENDATION PROFILE:", profile_marks)
     return {
         "count": len(results),
         "based_on": {
@@ -2208,7 +2319,6 @@ def get_similar_lands(
         key=lambda item: (item["score"], item["land"].id),
         reverse=True,
     )
-
     # ---------------------------------------------------------
     # STEP 4 - Batch KYC verification for final results
     # ---------------------------------------------------------
