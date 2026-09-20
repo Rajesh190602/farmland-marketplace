@@ -2357,12 +2357,17 @@ def export_admin_report(
             "Crop Type", "Status", "Published", "Created At",
         ]
 
-        for land in db.query(Land).order_by(Land.id.desc()).all():
-            owner = (
-                db.query(User)
-                .filter(User.id == land.owner_id)
-                .first()
-            )
+        lands = db.query(Land).order_by(Land.id.desc()).all()
+        owner_ids = {land.owner_id for land in lands if land.owner_id is not None}
+        owners_by_id = {}
+        if owner_ids:
+            owners_by_id = {
+                user.id: user
+                for user in db.query(User).filter(User.id.in_(owner_ids)).all()
+            }
+
+        for land in lands:
+            owner = owners_by_id.get(land.owner_id)
 
             rows.append([
                 land.id,
@@ -2392,28 +2397,18 @@ def export_admin_report(
             "Owner Name", "Status", "Message", "Created At",
         ]
 
-        for inquiry in (
-            db.query(LandInquiry)
+        buyer_user = aliased(User)
+        owner_user = aliased(User)
+        inquiry_rows = (
+            db.query(LandInquiry, Land, buyer_user, owner_user)
+            .outerjoin(Land, Land.id == LandInquiry.land_id)
+            .outerjoin(buyer_user, buyer_user.id == LandInquiry.buyer_id)
+            .outerjoin(owner_user, owner_user.id == Land.owner_id)
             .order_by(LandInquiry.created_at.desc())
             .all()
-        ):
-            land = (
-                db.query(Land)
-                .filter(Land.id == inquiry.land_id)
-                .first()
-            )
-            buyer = (
-                db.query(User)
-                .filter(User.id == inquiry.buyer_id)
-                .first()
-            )
-            owner = (
-                db.query(User)
-                .filter(User.id == land.owner_id)
-                .first()
-                if land else None
-            )
+        )
 
+        for inquiry, land, buyer, owner in inquiry_rows:
             rows.append([
                 inquiry.id,
                 inquiry.land_id,
@@ -2432,28 +2427,18 @@ def export_admin_report(
             "Owner Name", "Amount", "Status", "Message", "Created At",
         ]
 
-        for offer in (
-            db.query(LandOffer)
+        buyer_user = aliased(User)
+        owner_user = aliased(User)
+        offer_rows = (
+            db.query(LandOffer, Land, buyer_user, owner_user)
+            .outerjoin(Land, Land.id == LandOffer.land_id)
+            .outerjoin(buyer_user, buyer_user.id == LandOffer.buyer_id)
+            .outerjoin(owner_user, owner_user.id == Land.owner_id)
             .order_by(LandOffer.created_at.desc())
             .all()
-        ):
-            land = (
-                db.query(Land)
-                .filter(Land.id == offer.land_id)
-                .first()
-            )
-            buyer = (
-                db.query(User)
-                .filter(User.id == offer.buyer_id)
-                .first()
-            )
-            owner = (
-                db.query(User)
-                .filter(User.id == land.owner_id)
-                .first()
-                if land else None
-            )
+        )
 
+        for offer, land, buyer, owner in offer_rows:
             rows.append([
                 offer.id,
                 offer.land_id,
@@ -2474,28 +2459,18 @@ def export_admin_report(
             "Created At",
         ]
 
-        for visit in (
-            db.query(SiteVisit)
+        buyer_user = aliased(User)
+        owner_user = aliased(User)
+        visit_rows = (
+            db.query(SiteVisit, Land, buyer_user, owner_user)
+            .outerjoin(Land, Land.id == SiteVisit.land_id)
+            .outerjoin(buyer_user, buyer_user.id == SiteVisit.buyer_id)
+            .outerjoin(owner_user, owner_user.id == Land.owner_id)
             .order_by(SiteVisit.requested_date.asc(), SiteVisit.id.desc())
             .all()
-        ):
-            land = (
-                db.query(Land)
-                .filter(Land.id == visit.land_id)
-                .first()
-            )
-            buyer = (
-                db.query(User)
-                .filter(User.id == visit.buyer_id)
-                .first()
-            )
-            owner = (
-                db.query(User)
-                .filter(User.id == land.owner_id)
-                .first()
-                if land else None
-            )
+        )
 
+        for visit, land, buyer, owner in visit_rows:
             rows.append([
                 visit.id,
                 visit.land_id,
@@ -3085,24 +3060,26 @@ def marketplace_records(
                 detail="Invalid listing status. Use available, reserved, or sold.",
             )
 
-        query = (
-            db.query(Land, LandAvailability)
+        owner_user = aliased(User)
+        rows = (
+            db.query(Land, LandAvailability, owner_user)
             .join(
                 LandAvailability,
                 LandAvailability.land_id == Land.id,
             )
+            .outerjoin(
+                owner_user,
+                owner_user.id == Land.owner_id,
+            )
         )
         if status:
-            query = query.filter(LandAvailability.status == status)
+            rows = rows.filter(LandAvailability.status == status)
+        rows = rows.order_by(
+            LandAvailability.updated_at.desc(),
+            Land.id.desc(),
+        ).all()
 
-        rows = query.order_by(LandAvailability.updated_at.desc(), Land.id.desc()).all()
-
-        for land, availability in rows:
-            owner = (
-                db.query(User)
-                .filter(User.id == land.owner_id)
-                .first()
-            )
+        for land, availability, owner in rows:
             result.append({
                 "id": land.id,
                 "land_id": land.id,
@@ -3125,19 +3102,20 @@ def marketplace_records(
                 detail="Invalid inquiry status. Use pending, accepted, or rejected.",
             )
 
-        query = db.query(LandInquiry)
+        buyer_user = aliased(User)
+        owner_user = aliased(User)
+        query = (
+            db.query(LandInquiry, Land, buyer_user, owner_user)
+            .outerjoin(Land, Land.id == LandInquiry.land_id)
+            .outerjoin(buyer_user, buyer_user.id == LandInquiry.buyer_id)
+            .outerjoin(owner_user, owner_user.id == Land.owner_id)
+        )
         if status:
             query = query.filter(LandInquiry.status == status)
 
         rows = query.order_by(LandInquiry.created_at.desc()).all()
 
-        for inquiry in rows:
-            land = db.query(Land).filter(Land.id == inquiry.land_id).first()
-            buyer = db.query(User).filter(User.id == inquiry.buyer_id).first()
-            owner = (
-                db.query(User).filter(User.id == land.owner_id).first()
-                if land else None
-            )
+        for inquiry, land, buyer, owner in rows:
             result.append({
                 "id": inquiry.id,
                 "land_id": inquiry.land_id,
@@ -3158,19 +3136,20 @@ def marketplace_records(
                 detail="Invalid offer status. Use pending, accepted, or rejected.",
             )
 
-        query = db.query(LandOffer)
+        buyer_user = aliased(User)
+        owner_user = aliased(User)
+        query = (
+            db.query(LandOffer, Land, buyer_user, owner_user)
+            .outerjoin(Land, Land.id == LandOffer.land_id)
+            .outerjoin(buyer_user, buyer_user.id == LandOffer.buyer_id)
+            .outerjoin(owner_user, owner_user.id == Land.owner_id)
+        )
         if status:
             query = query.filter(LandOffer.status == status)
 
         rows = query.order_by(LandOffer.created_at.desc()).all()
 
-        for offer in rows:
-            land = db.query(Land).filter(Land.id == offer.land_id).first()
-            buyer = db.query(User).filter(User.id == offer.buyer_id).first()
-            owner = (
-                db.query(User).filter(User.id == land.owner_id).first()
-                if land else None
-            )
+        for offer, land, buyer, owner in rows:
             result.append({
                 "id": offer.id,
                 "land_id": offer.land_id,
@@ -3202,19 +3181,23 @@ def marketplace_records(
                 ),
             )
 
-        query = db.query(SiteVisit)
+        buyer_user = aliased(User)
+        owner_user = aliased(User)
+        query = (
+            db.query(SiteVisit, Land, buyer_user, owner_user)
+            .outerjoin(Land, Land.id == SiteVisit.land_id)
+            .outerjoin(buyer_user, buyer_user.id == SiteVisit.buyer_id)
+            .outerjoin(owner_user, owner_user.id == Land.owner_id)
+        )
         if status:
             query = query.filter(SiteVisit.status == status)
 
-        rows = query.order_by(SiteVisit.requested_date.asc(), SiteVisit.id.desc()).all()
+        rows = query.order_by(
+            SiteVisit.requested_date.asc(),
+            SiteVisit.id.desc(),
+        ).all()
 
-        for visit in rows:
-            land = db.query(Land).filter(Land.id == visit.land_id).first()
-            buyer = db.query(User).filter(User.id == visit.buyer_id).first()
-            owner = (
-                db.query(User).filter(User.id == land.owner_id).first()
-                if land else None
-            )
+        for visit, land, buyer, owner in rows:
             result.append({
                 "id": visit.id,
                 "land_id": visit.land_id,
