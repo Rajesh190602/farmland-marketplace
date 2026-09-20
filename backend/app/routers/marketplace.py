@@ -149,7 +149,7 @@ def _is_user_kyc_verified(user) -> bool:
 
 
 def _decorate_marketplace_item(db: Session, item, land=None, buyer=None, farmer=None):
-    """Attach server-authoritative verification flags to an activity item."""
+    """Attach server-authoritative verification flags to one activity item."""
     if land is None:
         land = db.query(Land).filter(Land.id == item.land_id).first()
 
@@ -181,12 +181,164 @@ def _decorate_marketplace_item(db: Session, item, land=None, buyer=None, farmer=
     return item
 
 
+def _decorate_marketplace_items(db: Session, items):
+    """
+    Batch version of _decorate_marketplace_item.
+
+    List endpoints previously called the single-item decorator in a loop.
+    That could issue up to three database queries per returned item
+    (land, buyer, farmer), plus lazy KYC relationship queries.
+
+    Load all required lands, users, and verified KYC records in batches so
+    response decoration uses a bounded number of database round trips.
+    """
+    items = list(items or [])
+    if not items:
+        return items
+
+    land_ids = {
+        item.land_id
+        for item in items
+        if getattr(item, "land_id", None) is not None
+    }
+
+    lands_by_id = {}
+    if land_ids:
+        lands_by_id = {
+            land.id: land
+            for land in (
+                db.query(Land)
+                .filter(Land.id.in_(land_ids))
+                .all()
+            )
+        }
+
+    buyer_ids = {
+        item.buyer_id
+        for item in items
+        if getattr(item, "buyer_id", None) is not None
+    }
+
+    farmer_ids = set()
+    for item in items:
+        farmer_id = getattr(item, "farmer_id", None)
+        if farmer_id is not None:
+            farmer_ids.add(farmer_id)
+        else:
+            land = lands_by_id.get(getattr(item, "land_id", None))
+            if land and land.owner_id is not None:
+                farmer_ids.add(land.owner_id)
+
+    user_ids = buyer_ids | farmer_ids
+
+    users_by_id = {}
+    if user_ids:
+        users_by_id = {
+            user.id: user
+            for user in (
+                db.query(User)
+                .filter(User.id.in_(user_ids))
+                .all()
+            )
+        }
+
+    verified_user_ids = set()
+    if user_ids:
+        verified_user_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .filter(
+                    UserKYCVerification.user_id.in_(user_ids),
+                    UserKYCVerification.status == "verified",
+                )
+                .all()
+            )
+        }
+
+    for item in items:
+        land = lands_by_id.get(getattr(item, "land_id", None))
+
+        buyer = None
+        buyer_id = getattr(item, "buyer_id", None)
+        if buyer_id is not None:
+            buyer = users_by_id.get(buyer_id)
+
+        farmer = None
+        farmer_id = getattr(item, "farmer_id", None)
+        if farmer_id is not None:
+            farmer = users_by_id.get(farmer_id)
+        elif land and land.owner_id is not None:
+            farmer = users_by_id.get(land.owner_id)
+
+        item.is_land_verified = bool(
+            land and (
+                land.is_land_verified is True
+                or land.ownership_verification_status == "verified"
+            )
+        )
+        item.ownership_verification_status = (
+            land.ownership_verification_status
+            if land
+            else "not_submitted"
+        )
+        item.is_verified_farmer = bool(
+            farmer
+            and farmer.role == "farmer"
+            and farmer.id in verified_user_ids
+        )
+        item.is_verified_buyer = bool(
+            buyer
+            and buyer.role == "buyer"
+            and buyer.id in verified_user_ids
+        )
+
+    return items
+
+
 def _decorate_offer_history(db: Session, entries):
-    for entry in entries or []:
-        sender = getattr(entry, "sender", None)
-        if sender is None and getattr(entry, "sender_id", None):
-            sender = db.query(User).filter(User.id == entry.sender_id).first()
-        entry.is_verified_sender = _is_user_kyc_verified(sender)
+    entries = list(entries or [])
+    if not entries:
+        return entries
+
+    sender_ids = {
+        entry.sender_id
+        for entry in entries
+        if getattr(entry, "sender_id", None) is not None
+    }
+
+    if not sender_ids:
+        for entry in entries:
+            entry.is_verified_sender = False
+        return entries
+
+    users_by_id = {
+        user.id: user
+        for user in (
+            db.query(User)
+            .filter(User.id.in_(sender_ids))
+            .all()
+        )
+    }
+
+    verified_user_ids = {
+        user_id
+        for (user_id,) in (
+            db.query(UserKYCVerification.user_id)
+            .filter(
+                UserKYCVerification.user_id.in_(sender_ids),
+                UserKYCVerification.status == "verified",
+            )
+            .all()
+        )
+    }
+
+    for entry in entries:
+        sender = users_by_id.get(getattr(entry, "sender_id", None))
+        entry.is_verified_sender = bool(
+            sender and sender.id in verified_user_ids
+        )
+
     return entries
 
 
@@ -730,8 +882,7 @@ def get_received_inquiries(
         .all()
     )
 
-    for inquiry in inquiries:
-        _decorate_marketplace_item(db, inquiry)
+    _decorate_marketplace_items(db, inquiries)
     return inquiries
 
 
@@ -763,8 +914,7 @@ def get_my_inquiries(
         .limit(100)
         .all()
     )
-    for inquiry in inquiries:
-        _decorate_marketplace_item(db, inquiry)
+    _decorate_marketplace_items(db, inquiries)
     return inquiries
 
 
@@ -1116,8 +1266,7 @@ def get_received_offers(
         .limit(100)
         .all()
     )
-    for offer in offers:
-        _decorate_marketplace_item(db, offer)
+    _decorate_marketplace_items(db, offers)
     return offers
 
 
@@ -1137,8 +1286,7 @@ def get_my_offers(
         .limit(100)
         .all()
     )
-    for offer in offers:
-        _decorate_marketplace_item(db, offer)
+    _decorate_marketplace_items(db, offers)
     return offers
 
 
@@ -1416,8 +1564,7 @@ def get_my_reservations(
         .limit(100)
         .all()
     )
-    for reservation in reservations:
-        _decorate_marketplace_item(db, reservation)
+    _decorate_marketplace_items(db, reservations)
     return reservations
 
 
@@ -1437,8 +1584,7 @@ def get_received_reservations(
         .limit(100)
         .all()
     )
-    for reservation in reservations:
-        _decorate_marketplace_item(db, reservation)
+    _decorate_marketplace_items(db, reservations)
     return reservations
 
 
@@ -2126,11 +2272,55 @@ def get_my_transaction_history(
         .all()
     )
 
+    land_ids = {sale.land_id for sale in sales if sale.land_id is not None}
+    user_ids = {
+        user_id
+        for sale in sales
+        for user_id in (sale.buyer_id, sale.farmer_id)
+        if user_id is not None
+    }
+
+    lands_by_id = {}
+    if land_ids:
+        lands_by_id = {
+            land.id: land
+            for land in (
+                db.query(Land)
+                .filter(Land.id.in_(land_ids))
+                .all()
+            )
+        }
+
+    users_by_id = {}
+    if user_ids:
+        users_by_id = {
+            user.id: user
+            for user in (
+                db.query(User)
+                .filter(User.id.in_(user_ids))
+                .all()
+            )
+        }
+
+    verified_user_ids = set()
+    if user_ids:
+        verified_user_ids = {
+            user_id
+            for (user_id,) in (
+                db.query(UserKYCVerification.user_id)
+                .filter(
+                    UserKYCVerification.user_id.in_(user_ids),
+                    UserKYCVerification.status == "verified",
+                )
+                .all()
+            )
+        }
+
     result = []
     for sale in sales:
-        land = db.query(Land).filter(Land.id == sale.land_id).first()
-        buyer = db.query(User).filter(User.id == sale.buyer_id).first()
-        farmer = db.query(User).filter(User.id == sale.farmer_id).first()
+        land = lands_by_id.get(sale.land_id)
+        buyer = users_by_id.get(sale.buyer_id)
+        farmer = users_by_id.get(sale.farmer_id)
 
         result.append({
             "sale_id": sale.id,
@@ -2148,13 +2338,19 @@ def get_my_transaction_history(
                 )
             ),
             "ownership_verification_status": (
-                land.ownership_verification_status if land else "not_submitted"
+                land.ownership_verification_status
+                if land
+                else "not_submitted"
             ),
             "is_verified_farmer": bool(
-                farmer and farmer.role == "farmer" and _is_user_kyc_verified(farmer)
+                farmer
+                and farmer.role == "farmer"
+                and farmer.id in verified_user_ids
             ),
             "is_verified_buyer": bool(
-                buyer and buyer.role == "buyer" and _is_user_kyc_verified(buyer)
+                buyer
+                and buyer.role == "buyer"
+                and buyer.id in verified_user_ids
             ),
             "amount": sale.amount,
             "status": sale.status,
@@ -2553,8 +2749,7 @@ def get_received_site_visits(
         .limit(100)
         .all()
     )
-    for visit in visits:
-        _decorate_marketplace_item(db, visit)
+    _decorate_marketplace_items(db, visits)
     return visits
 
 
@@ -2586,8 +2781,7 @@ def get_my_site_visits(
         .limit(100)
         .all()
     )
-    for visit in visits:
-        _decorate_marketplace_item(db, visit)
+    _decorate_marketplace_items(db, visits)
     return visits
 
 # =========================================================
