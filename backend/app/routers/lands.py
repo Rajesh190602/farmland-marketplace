@@ -193,8 +193,6 @@ def get_buyer_recommendations(
     # them together. SavedSearch remains a separate query because
     # the recommendation scorer needs its filter fields.
     # ---------------------------------------------------------
-    activity_query_start = time.perf_counter()
-
     activity_union = union_all(
         db.query(
             Favorite.land_id.label("land_id"),
@@ -240,37 +238,46 @@ def get_buyer_recommendations(
     # local-to-Neon network path, that extra round trip was measurable.
     activity_query_start = time.perf_counter()
 
-    activity_rows = db.query(
-        activity_union.c.land_id,
-        activity_union.c.weight,
-        activity_union.c.reason,
-        Land,
-    ).join(
-    Land,
-    Land.id == activity_union.c.land_id,
-    ).all()
+    activity_rows = (
+        db.query(
+            activity_union.c.land_id,
+            activity_union.c.weight,
+            activity_union.c.reason,
+            Land,
+        )
+        .join(
+            Land,
+            Land.id == activity_union.c.land_id,
+        )
+        .all()
+    )
 
+    # Measure only the actual activity + Land database query.
     activity_query_ms = round(
         (time.perf_counter() - activity_query_start) * 1000,
         2,
     )
 
     interacted_land_map = {}
-    for row in activity_rows:
-        add_activity(row.land_id, row.weight, row.reason)
-        interacted_land_map[row.land.id] = row.Land
+
+    for land_id, weight, reason, land in activity_rows:
+        add_activity(land_id, weight, reason)
+        interacted_land_map[land.id] = land
 
     interacted_lands = list(interacted_land_map.values())
 
-    activity_queries_ms = round(
-        (time.perf_counter() - activity_query_start) * 1000,
-        2,
+    # Keep the profiling names consistent.
+    activity_queries_ms = activity_query_ms
+
+    # Measure only the actual SavedSearch database query.
+    saved_search_start = time.perf_counter()
+
+    saved_searches = (
+        db.query(SavedSearch)
+        .filter(SavedSearch.user_id == current_user)
+        .all()
     )
 
-    saved_search_start = time.perf_counter()
-    saved_searches = db.query(SavedSearch).filter(
-        SavedSearch.user_id == current_user
-    ).all()
     saved_searches_ms = round(
         (time.perf_counter() - saved_search_start) * 1000,
         2,
@@ -278,7 +285,6 @@ def get_buyer_recommendations(
 
     profile_marks["activity_queries"] = {
         "combined_activity_with_lands": activity_queries_ms,
-        "activity_query_ms": activity_query_ms,
         "saved_searches": saved_searches_ms,
     }
     profile_mark("activity_loaded")
@@ -342,6 +348,7 @@ def get_buyer_recommendations(
     # latency, combine both operations while preserving the same
     # candidate filters, ordering, and view_count values.
     # ---------------------------------------------------------
+    # Measure only the actual candidate + view-count database query.
     candidate_view_query_start = time.perf_counter()
 
     candidate_rows = (
@@ -363,16 +370,17 @@ def get_buyer_recommendations(
         .all()
     )
 
+    candidate_view_query_ms = round(
+        (time.perf_counter() - candidate_view_query_start) * 1000,
+        2,
+    )
+
     candidates = [land for land, _view_count in candidate_rows]
     view_counts = {
         land.id: int(view_count or 0)
         for land, view_count in candidate_rows
     }
 
-    candidate_view_query_ms = round(
-        (time.perf_counter() - candidate_view_query_start) * 1000,
-        2,
-    )
     profile_marks["candidate_view_query_ms"] = candidate_view_query_ms
     profile_mark("candidates_loaded")
     profile_mark("view_counts_loaded")
