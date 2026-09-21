@@ -473,76 +473,73 @@ def admin_dashboard(
     db: Session = Depends(get_db),
     admin: int = Depends(require_admin_permission("analytics"))
 ):
-    total_users = db.query(User).count()
-    total_lands = db.query(Land).count()
-
-    total_farmers = (
-        db.query(User)
-        .filter(User.role == "farmer")
-        .count()
+    # Step 2H: consolidate the five independent COUNT() calls into
+    # two aggregate queries. This reduces database/network round trips
+    # while preserving the existing response fields and semantics.
+    user_counts = (
+        db.query(
+            func.count(User.id).label("total_users"),
+            func.count(User.id).filter(User.role == "farmer").label("total_farmers"),
+            func.count(User.id).filter(User.role == "buyer").label("total_buyers"),
+            func.count(User.id).filter(User.role == "admin").label("total_admins"),
+        )
+        .one()
     )
 
-    total_buyers = (
-        db.query(User)
-        .filter(User.role == "buyer")
-        .count()
-    )
+    total_lands = db.query(func.count(Land.id)).scalar() or 0
 
-    total_admins = (
-        db.query(User)
-        .filter(User.role == "admin")
-        .count()
-    )
     return {
-        "total_users": total_users,
-        "total_lands": total_lands,
-        "total_farmers": total_farmers,
-        "total_buyers": total_buyers,
-        "total_admins": total_admins
-}
+        "total_users": int(user_counts.total_users or 0),
+        "total_lands": int(total_lands),
+        "total_farmers": int(user_counts.total_farmers or 0),
+        "total_buyers": int(user_counts.total_buyers or 0),
+        "total_admins": int(user_counts.total_admins or 0),
+    }
+
+
 @router.get("/analytics")
 def admin_analytics(
     db: Session = Depends(get_db),
     admin: int = Depends(require_admin_permission("analytics"))
 ):
-    total_chats = db.query(Conversation).count()
+    # Step 2H: consolidate the four user-role counts into one aggregate
+    # query and the five land-status counts into one aggregate query.
+    # Conversation count remains a separate query because it belongs to
+    # a different table. Total: 3 round trips instead of 10.
+    user_counts = (
+        db.query(
+            func.count(User.id).label("total_users"),
+            func.count(User.id).filter(User.role == "farmer").label("farmers"),
+            func.count(User.id).filter(User.role == "buyer").label("buyers"),
+            func.count(User.id).filter(User.role == "admin").label("admins"),
+        )
+        .one()
+    )
+
+    land_counts = (
+        db.query(
+            func.count(Land.id).label("total_lands"),
+            func.count(Land.id).filter(Land.status == "pending").label("pending"),
+            func.count(Land.id).filter(Land.status == "approved").label("approved"),
+            func.count(Land.id).filter(Land.status == "rejected").label("rejected"),
+            func.count(Land.id).filter(Land.status == "changes_requested").label("changes_requested"),
+        )
+        .one()
+    )
+
+    total_chats = db.query(func.count(Conversation.id)).scalar() or 0
 
     return {
-        "total_users": db.query(User).count(),
-
-        "farmers": db.query(User)
-        .filter(User.role == "farmer")
-        .count(),
-
-        "buyers": db.query(User)
-        .filter(User.role == "buyer")
-        .count(),
-
-        "admins": db.query(User)
-        .filter(User.role == "admin")
-        .count(),
-
-        "total_lands": db.query(Land).count(),
-
-        "pending": db.query(Land)
-        .filter(Land.status == "pending")
-        .count(),
-
-        "approved": db.query(Land)
-        .filter(Land.status == "approved")
-        .count(),
-
-        "rejected": db.query(Land)
-        .filter(Land.status == "rejected")
-        .count(),
-
-        "changes_requested": db.query(Land)
-        .filter(
-            Land.status == "changes_requested"
-        )
-        .count(),
-
-        "total_chats": total_chats,
+        "total_users": int(user_counts.total_users or 0),
+        "farmers": int(user_counts.farmers or 0),
+        "buyers": int(user_counts.buyers or 0),
+        "admins": int(user_counts.admins or 0),
+        "total_lands": int(land_counts.total_lands or 0),
+        "pending": int(land_counts.pending or 0),
+        "approved": int(land_counts.approved or 0),
+        "rejected": int(land_counts.rejected or 0),
+        "changes_requested": int(land_counts.changes_requested or 0),
+        "total_chats": int(total_chats),
     }
 # =========================================================
 # Admin Recent Activity
