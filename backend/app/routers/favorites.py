@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -330,13 +330,22 @@ def get_my_favorites(
         )
 
     # ----------------------------------
-    # Get favorites
+    # Get favorites + approved lands
+    #
+    # OPTIMIZED:
+    # Load Favorite and Land together
+    # to avoid an N+1 query pattern.
     # ----------------------------------
 
-    favorites = (
-        db.query(Favorite)
+    favorite_rows = (
+        db.query(Favorite, Land)
+        .join(
+            Land,
+            Land.id == Favorite.land_id
+        )
         .filter(
-            Favorite.user_id == current_user
+            Favorite.user_id == current_user,
+            Land.status == "approved"
         )
         .order_by(
             Favorite.created_at.desc()
@@ -345,26 +354,13 @@ def get_my_favorites(
         .all()
     )
 
+    # ----------------------------------
+    # Build response
+    # ----------------------------------
+
     result = []
 
-    for favorite in favorites:
-
-        # ----------------------------------
-        # Only show approved lands
-        # ----------------------------------
-
-        land = (
-            db.query(Land)
-            .filter(
-                Land.id == favorite.land_id,
-                Land.status == "approved"
-            )
-            .first()
-        )
-
-        if not land:
-            continue
-
+    for favorite, land in favorite_rows:
         result.append({
             "favorite_id": favorite.id,
             "land_id": land.id,
