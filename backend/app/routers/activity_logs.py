@@ -62,20 +62,47 @@ def get_activity_logs(
         .all()
     )
 
+    # =====================================================
+    # BATCH LOAD USERS
+    # =====================================================
+    #
+    # Previously, a User query was executed inside the
+    # activity-log loop, creating an N+1 query pattern.
+    #
+    # Now all required users are loaded in one query.
+    # =====================================================
+
+    user_ids = {
+        log.user_id
+        for log in logs
+        if log.user_id
+    }
+
+    users_by_id = {}
+
+    if user_ids:
+        users = (
+            db.query(models.User)
+            .filter(
+                models.User.id.in_(user_ids)
+            )
+            .all()
+        )
+
+        users_by_id = {
+            user.id: user
+            for user in users
+        }
+
+    # =====================================================
+    # BUILD RESPONSE
+    # =====================================================
+
     result = []
 
     for log in logs:
 
-        user = None
-
-        if log.user_id:
-            user = (
-                db.query(models.User)
-                .filter(
-                    models.User.id == log.user_id
-                )
-                .first()
-            )
+        user = users_by_id.get(log.user_id)
 
         result.append({
             "id": log.id,
@@ -200,6 +227,38 @@ def export_activity_logs(
         )
 
     # =====================================================
+    # BATCH LOAD USERS
+    # =====================================================
+    #
+    # Previously, a User query was executed for every
+    # activity log while creating the Excel file.
+    #
+    # Now all required users are loaded once.
+    # =====================================================
+
+    user_ids = {
+        log.user_id
+        for log in logs
+        if log.user_id
+    }
+
+    users_by_id = {}
+
+    if user_ids:
+        users = (
+            db.query(models.User)
+            .filter(
+                models.User.id.in_(user_ids)
+            )
+            .all()
+        )
+
+        users_by_id = {
+            user.id: user
+            for user in users
+        }
+
+    # =====================================================
     # CREATE EXCEL
     # =====================================================
 
@@ -242,17 +301,7 @@ def export_activity_logs(
 
         for log in logs:
 
-            user = None
-
-            if log.user_id:
-                user = (
-                    db.query(models.User)
-                    .filter(
-                        models.User.id ==
-                        log.user_id
-                    )
-                    .first()
-                )
+            user = users_by_id.get(log.user_id)
 
             # ---------------------------------------------
             # IMPORTANT:
