@@ -1,8 +1,9 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models import (
     User,
+    Land,
     EmailVerification,
     UserBlock,
     UserAccountStatus,
@@ -1834,6 +1835,9 @@ def deactivate_account(
 ):
     user = (
         db.query(User)
+        .options(
+            joinedload(User.lands).joinedload(Land.availability),
+        )
         .filter(User.id == current_user)
         .first()
     )
@@ -2097,14 +2101,29 @@ def get_blocked_users(
         .all()
     )
 
+    if not blocks:
+        return []
+
+    blocked_user_ids = {
+        block.blocked_id
+        for block in blocks
+    }
+
+    users = (
+        db.query(User)
+        .filter(User.id.in_(blocked_user_ids))
+        .all()
+    )
+
+    users_by_id = {
+        user.id: user
+        for user in users
+    }
+
     result = []
 
     for block in blocks:
-        user = (
-            db.query(User)
-            .filter(User.id == block.blocked_id)
-            .first()
-        )
+        user = users_by_id.get(block.blocked_id)
 
         if user:
             result.append({
