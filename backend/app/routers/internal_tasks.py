@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, engine
 from app.utils.listing_expiry import sync_all_published_listings
-
+from app.utils.notification_worker import (
+    process_notification_delivery_jobs,
+)
 
 router = APIRouter(
     prefix="/internal",
@@ -114,4 +116,34 @@ def measure_db_pool_health(
         raise HTTPException(
             status_code=500,
             detail="Database pool measurement failed.",
+        )
+@router.post("/notification-delivery")
+def process_notification_delivery(
+    x_cron_secret: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Process a bounded batch of pending notification delivery jobs.
+
+    External email and push delivery happens outside the original
+    marketplace transaction.
+    """
+    _validate_internal_secret(x_cron_secret)
+
+    try:
+        result = process_notification_delivery_jobs(
+            db=db,
+            batch_size=10,
+        )
+
+        return {
+            "message": "Notification delivery processing completed.",
+            **result,
+        }
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Notification delivery processing failed.",
         )

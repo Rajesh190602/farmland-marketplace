@@ -1,8 +1,11 @@
-"""Automatic email and browser-push delivery for database notifications.
+"""Transactional outbox creation for notification delivery.
 
-Every existing Notification(...) creation point remains valid. SQLAlchemy's
-session events collect newly-created notifications and dispatch them only
-after the surrounding database transaction successfully commits.
+Every existing Notification(...) creation point remains valid.
+
+Whenever a new Notification is added to a database transaction, a
+NotificationDeliveryJob is created in the same transaction. External
+email and browser-push delivery are handled later by the notification
+worker.
 """
 
 from sqlalchemy import event
@@ -10,224 +13,91 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Notification,
-    User,
-    UserNotificationPreference,
-    NotificationPushSubscription,
+    NotificationDeliveryJob,
 )
-from app.utils.email import send_notification_email
-from app.utils.push import send_web_push
 
 
-_QUEUE_KEY = "_step66_notification_delivery_queue"
-_QUEUE_IDS_KEY = "_step66_notification_delivery_ids"
+_JOB_CREATED_KEY = "_step4_notification_delivery_jobs_created"
 
 
-def _queue_notifications(session: Session, flush_context=None):
-    queued = session.info.setdefault(_QUEUE_KEY, [])
-    queued_ids = session.info.setdefault(_QUEUE_IDS_KEY, set())
+@event.listens_for(Session, "before_flush")
+def _create_notification_delivery_jobs(
+    session: Session,
+    flush_context,
+    instances,
+):
+    """
+    Create a durable delivery job in the same transaction as a Notification.
+
+    This provides transactional outbox behavior:
+
+        Notification + NotificationDeliveryJob
+                        ↓
+                    same COMMIT
+
+    If the transaction rolls back, both records are rolled back.
+    """
+
+    created_notifications = session.info.setdefault(
+        _JOB_CREATED_KEY,
+        set(),
+    )
 
     for obj in list(session.new):
+
         if not isinstance(obj, Notification):
             continue
 
         if obj.user_id is None:
             continue
 
-        if obj.id is not None and obj.id in queued_ids:
+        # Prevent duplicate job creation if another flush occurs
+        # during the same transaction.
+        object_key = id(obj)
+
+        if object_key in created_notifications:
             continue
 
-        user = (
-            session.query(User)
-            .filter(User.id == obj.user_id)
-            .first()
+        job = NotificationDeliveryJob(
+            notification=obj,
+            user_id=obj.user_id,
+            status="pending",
+            attempts=0,
         )
 
-        if not user:
-            continue
+        session.add(job)
 
-        preference = (
-            session.query(UserNotificationPreference)
-            .filter(
-                UserNotificationPreference.user_id == obj.user_id
-            )
-            .first()
-        )
-
-        email_enabled = (
-            preference.email_enabled
-            if preference
-            else True
-        )
-
-        push_enabled = (
-            preference.push_enabled
-            if preference
-            else True
-        )
-
-        subscriptions = []
-
-        if push_enabled:
-            subscriptions = (
-                session.query(NotificationPushSubscription)
-                .filter(
-                    NotificationPushSubscription.user_id
-                    == obj.user_id
-                )
-                .all()
-            )
-
-        queued.append(
-            {
-                "notification_id": obj.id,
-                "user_id": obj.user_id,
-                "email": user.email,
-                "name": user.full_name,
-                "title": obj.title,
-                "message": obj.message,
-                "target_type": obj.target_type,
-                "target_id": obj.target_id,
-                "email_enabled": email_enabled,
-                "push_enabled": push_enabled,
-                "subscriptions": [
-                    {
-                        "id": subscription.id,
-                        "endpoint": subscription.endpoint,
-                        "p256dh": subscription.p256dh,
-                        "auth": subscription.auth,
-                    }
-                    for subscription in subscriptions
-                ],
-            }
-        )
-
-        if obj.id is not None:
-            queued_ids.add(obj.id)
-
-
-@event.listens_for(Session, "after_flush")
-def _capture_notifications_after_flush(session, flush_context):
-    _queue_notifications(
-        session,
-        flush_context
-    )
+        created_notifications.add(object_key)
 
 
 @event.listens_for(Session, "after_commit")
-def _dispatch_notifications_after_commit(session):
-    queued = session.info.pop(
-        _QUEUE_KEY,
-        []
-    )
+def _clear_notification_delivery_state_after_commit(
+    session: Session,
+):
+    """
+    Clear temporary duplicate-prevention state.
+
+    External notification delivery is intentionally NOT performed here.
+    """
 
     session.info.pop(
-        _QUEUE_IDS_KEY,
-        None
+        _JOB_CREATED_KEY,
+        None,
     )
-
-    if not queued:
-        return
-
-    # Delivery is intentionally best-effort. A Brevo or push-provider failure
-    # must never turn a successful marketplace transaction into a failed one.
-    for item in queued:
-
-        # Email notification
-        if item["email_enabled"]:
-            try:
-                send_notification_email(
-                    receiver_email=item["email"],
-                    receiver_name=item["name"],
-                    title=item["title"],
-                    message=item["message"],
-                )
-            except Exception:
-                # Notification delivery must never break the
-                # already-successful marketplace transaction.
-                pass
-
-        # Browser push notification
-        if item["push_enabled"]:
-            for subscription_data in item["subscriptions"]:
-
-                class SubscriptionSnapshot:
-                    pass
-
-                subscription = SubscriptionSnapshot()
-
-                subscription.endpoint = (
-                    subscription_data["endpoint"]
-                )
-
-                subscription.p256dh = (
-                    subscription_data["p256dh"]
-                )
-
-                subscription.auth = (
-                    subscription_data["auth"]
-                )
-
-                try:
-                    result = send_web_push(
-                        subscription=subscription,
-                        title=item["title"],
-                        message=item["message"],
-                        target_type=item["target_type"],
-                        target_id=item["target_id"],
-                    )
-                except Exception:
-                    # Push delivery must never break the
-                    # already-successful marketplace transaction.
-                    continue
-
-                # Remove subscriptions that the push provider reports
-                # as permanently expired or no longer valid.
-                if result.get("stale"):
-                    _remove_stale_subscription(
-                        subscription_data["id"]
-                    )
 
 
 @event.listens_for(Session, "after_rollback")
-def _clear_notification_queue_after_rollback(session):
-    session.info.pop(
-        _QUEUE_KEY,
-        None
-    )
+def _clear_notification_delivery_state_after_rollback(
+    session: Session,
+):
+    """
+    Clear temporary state after a rollback.
+
+    The NotificationDeliveryJob is part of the same database transaction,
+    so the database automatically rolls it back as well.
+    """
 
     session.info.pop(
-        _QUEUE_IDS_KEY,
-        None
+        _JOB_CREATED_KEY,
+        None,
     )
-
-
-def _remove_stale_subscription(subscription_id):
-    # Import lazily to avoid creating a module-level database dependency.
-    from sqlalchemy.orm import sessionmaker
-    from app.database import engine
-
-    SessionFactory = sessionmaker(
-        bind=engine
-    )
-
-    db = SessionFactory()
-
-    try:
-        subscription = (
-            db.query(NotificationPushSubscription)
-            .filter(
-                NotificationPushSubscription.id
-                == subscription_id
-            )
-            .first()
-        )
-
-        if subscription:
-            db.delete(subscription)
-            db.commit()
-
-    except Exception:
-        db.rollback()
-
-    finally:
-        db.close()
