@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
@@ -171,6 +171,11 @@ def get_user_reviews(
 
     reviews = (
         db.query(UserReview)
+        .options(
+            joinedload(UserReview.reviewer),
+            joinedload(UserReview.reviewed_user),
+            joinedload(UserReview.land),
+        )
         .filter(
             UserReview.reviewed_user_id == user_id,
             UserReview.status == "published",
@@ -226,6 +231,11 @@ def get_my_written_reviews(
 
     reviews = (
         db.query(UserReview)
+        .options(
+            joinedload(UserReview.reviewer),
+            joinedload(UserReview.reviewed_user),
+            joinedload(UserReview.land),
+        )
         .filter(UserReview.reviewer_id == current_user)
         .order_by(UserReview.created_at.desc())
         .limit(100)
@@ -244,6 +254,11 @@ def get_my_received_reviews(
 
     reviews = (
         db.query(UserReview)
+        .options(
+            joinedload(UserReview.reviewer),
+            joinedload(UserReview.reviewed_user),
+            joinedload(UserReview.land),
+        )
         .filter(
             UserReview.reviewed_user_id == current_user,
             UserReview.status == "published",
