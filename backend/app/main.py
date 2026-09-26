@@ -2,6 +2,7 @@ import os
 
 from app.routers.marketplace import router as marketplace_router
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -46,7 +47,67 @@ app = FastAPI(
     description="Backend API for Farmland Marketplace",
     version="1.0.0",
 )
+# =========================================================
+# OPENAPI FILE UPLOAD COMPATIBILITY
+# =========================================================
 
+from fastapi.openapi.utils import get_openapi
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Swagger UI has problems rendering List[UploadFile]
+    # with OpenAPI 3.1 + contentMediaType.
+    # Use OpenAPI 3.0.3 for Swagger UI compatibility.
+    openapi_schema["openapi"] = "3.0.3"
+
+    components = openapi_schema.get("components", {}).get("schemas", {})
+
+    for schema in components.values():
+        if not isinstance(schema, dict):
+            continue
+
+        properties = schema.get("properties", {})
+
+        for prop in properties.values():
+            if not isinstance(prop, dict):
+                continue
+
+            # Single file upload
+            if (
+                prop.get("type") == "string"
+                and prop.get("contentMediaType") == "application/octet-stream"
+            ):
+                prop.pop("contentMediaType", None)
+                prop["format"] = "binary"
+
+            # Multiple file upload: List[UploadFile]
+            if prop.get("type") == "array":
+                items = prop.get("items")
+
+                if isinstance(items, dict):
+                    if (
+                        items.get("type") == "string"
+                        and items.get("contentMediaType")
+                        == "application/octet-stream"
+                    ):
+                        items.pop("contentMediaType", None)
+                        items["format"] = "binary"
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 # =========================================================
 # CORS

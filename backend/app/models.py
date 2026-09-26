@@ -29,6 +29,7 @@ class User(Base):
 
     full_name = Column(String, nullable=False)
     profile_image = Column(String, nullable=True)
+    profile_image_public_id = Column(String, nullable=True)
 
     mobile = Column(
         String,

@@ -1564,7 +1564,6 @@ async def upload_profile_photo(
     # ----------------------------------
     # Upload validated image to Cloudinary
     # ----------------------------------
-
     try:
         result = cloudinary.uploader.upload(
             contents,
@@ -1572,7 +1571,17 @@ async def upload_profile_photo(
             folder=f"farmland-marketplace/profiles/{current_user}"
         )
 
-        profile_image_url = result["secure_url"]
+        profile_image_url = result.get("secure_url")
+        profile_image_public_id = result.get("public_id")
+
+        if not profile_image_url or not profile_image_public_id:
+            raise HTTPException(
+                status_code=500,
+                detail="Cloudinary did not return profile image details."
+            )
+
+    except HTTPException:
+        raise
 
     except Exception:
         raise HTTPException(
@@ -1581,10 +1590,17 @@ async def upload_profile_photo(
         )
 
     # ----------------------------------
+    # Keep the old public ID before update
+    # ----------------------------------
+
+    old_profile_image_public_id = user.profile_image_public_id
+
+    # ----------------------------------
     # Update user profile image
     # ----------------------------------
 
     user.profile_image = profile_image_url
+    user.profile_image_public_id = profile_image_public_id
 
     # ----------------------------------
     # Activity log
@@ -1599,13 +1615,37 @@ async def upload_profile_photo(
         target_id=current_user
     )
 
+    # ----------------------------------
+    # Commit database update first
+    # ----------------------------------
+
     db.commit()
     db.refresh(user)
+
+    # ----------------------------------
+    # Delete previous Cloudinary image
+    # Only after successful DB commit
+    # ----------------------------------
+
+    if (
+        old_profile_image_public_id
+        and old_profile_image_public_id != profile_image_public_id
+    ):
+        try:
+            cloudinary.uploader.destroy(
+                old_profile_image_public_id,
+                resource_type="image",
+            )
+        except Exception:
+            # Do not fail a successful profile update
+            # because old-image cleanup failed.
+            pass
 
     return {
         "message": "Profile photo updated successfully",
         "profile_image": user.profile_image
     }
+    
 
 # =========================================================
 # UPDATE PROFILE
