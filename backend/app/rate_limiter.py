@@ -39,6 +39,9 @@ RATE_LIMIT_RULES = {
 
     # Password change
     ("PUT", "/users/change-password"): (5, 15 * 60),
+    # Chat abuse protection
+    ("POST", "/chat/send"): (60, 60),
+    ("POST", "/chat/send-file"): (10, 60),
 }
 
 
