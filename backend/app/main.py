@@ -222,3 +222,12 @@ def root():
         "message": "🌾 Welcome to Farmland Marketplace API",
         "docs": "/docs",
     }
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok"
+    }
