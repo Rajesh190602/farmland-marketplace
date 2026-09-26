@@ -136,7 +136,7 @@ def get_activity_logs(
 # EXPORT ACTIVITY LOGS TO EXCEL
 # =========================================================
 
-@router.get("/export")
+@router.get("/export",operation_id="export_activity_logs")
 def export_activity_logs(
     from_date: str = Query(default=""),
     to_date: str = Query(default=""),

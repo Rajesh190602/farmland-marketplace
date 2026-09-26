@@ -708,7 +708,7 @@ def get_activity_logs(
     }
 
 
-@router.get("/activity-logs/export")
+@router.get("/activity-logs/export", operation_id="admin_export_activity_logs",)
 def export_activity_logs(
     from_date: str = Query(...),
     to_date: str = Query(...),

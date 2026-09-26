@@ -561,7 +561,6 @@ def get_buyer_recommendations(
             "view_count": item["view_count"],
         })
     profile_mark("before_return")
-    print("RECOMMENDATION PROFILE:", profile_marks)
     return {
         "count": len(results),
         "based_on": {
