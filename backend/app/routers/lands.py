@@ -5,7 +5,7 @@ from sqlalchemy import func, literal, union_all
 import math
 import time
 from sqlalchemy import or_
-from app.auth import get_current_user
+from app.auth import get_current_user,get_current_marketplace_user
 from app.database import get_db
 from app.models import (
     Land,
@@ -720,23 +720,9 @@ def search_lands(
     # STEP 78 - Bound search results to prevent unbounded database reads.
     limit: int = Query(100, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: int = Depends(get_current_user),
+    current_user: User= Depends(get_current_marketplace_user),
 ):
     # Step 57: expire stale marketplace listings before public reads.
-
-    user_role = (
-        db.query(User.role)
-        .filter(User.id == current_user)
-        .scalar()
-    )
-
-
-    if  user_role is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
     # =====================================================
     # STEP 77 - VALIDATE NUMERIC SEARCH FILTERS
     # =====================================================
@@ -779,9 +765,9 @@ def search_lands(
     # Farmers are restricted to their own lands only.
     query = db.query(Land)
 
-    if user_role== "farmer":
+    if current_user.role== "farmer":
         query = query.filter(
-            Land.owner_id == current_user
+            Land.owner_id == current_user.id
         )
     else:
         query = query.filter(

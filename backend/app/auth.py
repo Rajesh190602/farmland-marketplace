@@ -235,6 +235,92 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
+# ==========================
+# Marketplace Current User
+# ==========================
+
+def get_current_marketplace_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    """
+    Validate a normal marketplace JWT and return the User ORM object.
+
+    This is intentionally separate from get_current_user() so existing
+    endpoints that depend on get_current_user() are not affected.
+    """
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+        )
+
+        user_id = payload.get("user_id")
+
+        if user_id is None:
+            raise credentials_exception
+
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            raise credentials_exception
+
+        # KYC-only tokens cannot access marketplace APIs.
+        if payload.get("scope") == "kyc":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This session is restricted to KYC verification.",
+            )
+
+        user = (
+            db.query(User)
+            .filter(User.id == user_id)
+            .first()
+        )
+
+        if not user:
+            raise credentials_exception
+
+        # Admin suspension must remain effective for existing JWTs.
+        if user.is_suspended:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your account has been suspended. "
+                    "Please contact the administrator."
+                ),
+            )
+
+        account_status = (
+            db.query(UserAccountStatus)
+            .filter(UserAccountStatus.user_id == user_id)
+            .first()
+        )
+
+        if account_status and account_status.status == "deactivated":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your account has been deactivated. "
+                    "Please contact support if you want to reactivate it."
+                ),
+            )
+
+        return user
+
+    except HTTPException:
+        raise
+
+    except JWTError:
+        raise credentials_exception
 
 # ==========================
 # KYC Verification Session
