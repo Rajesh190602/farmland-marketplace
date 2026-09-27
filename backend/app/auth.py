@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import User, UserAccountStatus, UserKYCVerification, AdminReauthChallenge
 from app.admin_permissions import (
     ADMIN_PERMISSION_ROLES,
@@ -241,13 +241,17 @@ def get_current_user(
 
 def get_current_marketplace_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
 ):
     """
     Validate a normal marketplace JWT and return the User ORM object.
 
-    This is intentionally separate from get_current_user() so existing
-    endpoints that depend on get_current_user() are not affected.
+    This dependency intentionally uses a short-lived database session
+    dedicated to authentication. The session is closed immediately after
+    authentication so the marketplace route can acquire its own DB
+    connection without keeping the authentication connection checked out
+    for the lifetime of the request.
+
+    Existing get_current_user() behavior is intentionally unchanged.
     """
 
     credentials_exception = HTTPException(
@@ -280,48 +284,64 @@ def get_current_marketplace_user(
                 detail="This session is restricted to KYC verification.",
             )
 
-        user = (
-            db.query(User)
-            .filter(User.id == user_id)
-            .first()
-        )
+        # --------------------------------------------------
+        # Use a short-lived authentication session.
+        #
+        # This prevents the authentication DB connection from
+        # remaining checked out while /lands/search executes.
+        # --------------------------------------------------
+        db = SessionLocal()
 
-        if not user:
-            raise credentials_exception
-
-        # Admin suspension must remain effective for existing JWTs.
-        if user.is_suspended:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Your account has been suspended. "
-                    "Please contact the administrator."
-                ),
+        try:
+            user = (
+                db.query(User)
+                .filter(User.id == user_id)
+                .first()
             )
 
-        account_status = (
-            db.query(UserAccountStatus)
-            .filter(UserAccountStatus.user_id == user_id)
-            .first()
-        )
+            if not user:
+                raise credentials_exception
 
-        if account_status and account_status.status == "deactivated":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Your account has been deactivated. "
-                    "Please contact support if you want to reactivate it."
-                ),
+            # Admin suspension must remain effective for existing JWTs.
+            if user.is_suspended:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Your account has been suspended. "
+                        "Please contact the administrator."
+                    ),
+                )
+
+            account_status = (
+                db.query(UserAccountStatus)
+                .filter(UserAccountStatus.user_id == user_id)
+                .first()
             )
 
-        return user
+            if (
+                account_status
+                and account_status.status == "deactivated"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Your account has been deactivated. "
+                        "Please contact support if you want to reactivate it."
+                    ),
+                )
+
+            return user
+
+        finally:
+            # Always release the authentication DB connection
+            # before the marketplace route begins its database work.
+            db.close()
 
     except HTTPException:
         raise
 
     except JWTError:
         raise credentials_exception
-
 # ==========================
 # KYC Verification Session
 # ==========================
