@@ -724,9 +724,14 @@ def search_lands(
 ):
     # Step 57: expire stale marketplace listings before public reads.
 
-    user = db.query(User).filter(User.id == current_user).first()
+    user_role = (
+        db.query(User.role)
+        .filter(User.id == current_user)
+        .scalar()
+    )
 
-    if not user:
+
+    if  user_role is None:
         raise HTTPException(
             status_code=404,
             detail="User not found"
@@ -774,7 +779,7 @@ def search_lands(
     # Farmers are restricted to their own lands only.
     query = db.query(Land)
 
-    if user.role == "farmer":
+    if user_role== "farmer":
         query = query.filter(
             Land.owner_id == current_user
         )
