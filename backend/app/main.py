@@ -1,5 +1,5 @@
 import os
-
+import time
 from app.routers.marketplace import router as marketplace_router
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -161,6 +161,29 @@ async def add_security_headers(request, call_next):
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains"
         )
+
+    return response
+# =========================================================
+# TEMPORARY PERFORMANCE DIAGNOSTICS
+# =========================================================
+
+@app.middleware("http")
+async def measure_http_request(request, call_next):
+    request_start = time.perf_counter()
+
+    response = await call_next(request)
+
+    request_total_ms = (
+        time.perf_counter() - request_start
+    ) * 1000
+
+    print(
+        f"[HTTP PERF] "
+        f"method={request.method} "
+        f"path={request.url.path} "
+        f"status={response.status_code} "
+        f"total={request_total_ms:.2f}ms"
+    )
 
     return response
 
