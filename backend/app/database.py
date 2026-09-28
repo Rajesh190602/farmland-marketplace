@@ -33,16 +33,13 @@ def receive_checkin(dbapi_connection, connection_record):
         checkout_duration_ms = (
             time.perf_counter() - checkout_time
         ) * 1000
-
         pool = engine.pool
-
         print(
             f"[DB CONNECTION PERF] "
             f"checkout_duration={checkout_duration_ms:.2f}ms "
             f"checked_out={pool.checkedout()} "
             f"overflow={pool.overflow()}"
         )
-
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
