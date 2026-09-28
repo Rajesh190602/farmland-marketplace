@@ -1,5 +1,6 @@
 import os
 import time
+import anyio.to_thread
 from app.routers.marketplace import router as marketplace_router
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -171,6 +172,15 @@ async def add_security_headers(request, call_next):
 async def measure_http_request(request, call_next):
     request_start = time.perf_counter()
 
+    limiter = anyio.to_thread.current_default_thread_limiter()
+
+    print(
+        f"[THREADPOOL PERF] "
+        f"path={request.url.path} "
+        f"borrowed={limiter.borrowed_tokens} "
+        f"total={limiter.total_tokens}"
+    )
+
     response = await call_next(request)
 
     request_total_ms = (
@@ -186,7 +196,6 @@ async def measure_http_request(request, call_next):
     )
 
     return response
-
 
 # =========================================================
 # UPLOADS
