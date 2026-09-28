@@ -10,7 +10,7 @@ from app.utils.activity_log import create_activity_log
 from datetime import datetime, timedelta, timezone
 from app.utils.risk_monitor import check_unauthorized_admin_access_risk
 from typing import Optional
-
+import time
 from fastapi import Depends, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordBearer
 
@@ -291,13 +291,33 @@ def get_current_marketplace_user(
         # remaining checked out while /lands/search executes.
         # --------------------------------------------------
         db = SessionLocal()
-
         try:
+            auth_start = time.perf_counter()
+
             user = (
                 db.query(User)
                 .filter(User.id == user_id)
                 .first()
             )
+
+            user_query_ms = (time.perf_counter() - auth_start) * 1000
+            status_start = time.perf_counter()
+
+            account_status = (
+                db.query(UserAccountStatus)
+                .filter(UserAccountStatus.user_id == user_id)
+                .first()
+            )
+
+            status_query_ms = (time.perf_counter() - status_start) * 1000
+
+            print(
+                f"[AUTH PERF] user_query={user_query_ms:.2f}ms "
+                f"account_status={status_query_ms:.2f}ms "
+                f"total_db={user_query_ms + status_query_ms:.2f}ms"
+            )
+
+        
 
             if not user:
                 raise credentials_exception
