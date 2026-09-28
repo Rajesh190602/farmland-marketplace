@@ -55,7 +55,7 @@ app = FastAPI(
 @app.on_event("startup")
 async def configure_thread_pool():
     limiter = anyio.to_thread.current_default_thread_limiter()
-    limiter.total_tokens = 60
+    limiter.total_tokens = 80
     print(
         f"[THREADPOOL CONFIG] "
         f"total_tokens={limiter.total_tokens}"
