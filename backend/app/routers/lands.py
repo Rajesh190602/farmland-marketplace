@@ -722,6 +722,7 @@ def search_lands(
     db: Session = Depends(get_db),
     current_user: User= Depends(get_current_marketplace_user),
 ):
+    route_start = time.perf_counter()
     # Step 57: expire stale marketplace listings before public reads.
     # =====================================================
     # STEP 77 - VALIDATE NUMERIC SEARCH FILTERS
@@ -824,6 +825,7 @@ def search_lands(
         query = query.filter(
             Land.area <= max_area
         )
+    main_query_start = time.perf_counter()
 
     lands = (
         query.order_by(Land.id.desc())
@@ -831,10 +833,21 @@ def search_lands(
         .all()
     )
 
+    main_query_ms = (
+        time.perf_counter() - main_query_start
+    ) * 1000
+
+    print(
+        f"[SEARCH PERF] "
+        f"main_query={main_query_ms:.2f}ms "
+        f"lands={len(lands)}"
+    )
+
     # Expose only the public verification flag; never expose KYC documents.
     # Batch verification for all returned land owners to avoid one KYC query per land.
     owner_ids = {land.owner_id for land in lands if land.owner_id is not None}
     verified_owner_ids = set()
+    kyc_query_start = time.perf_counter()
 
     if owner_ids:
         verified_owner_ids = {
@@ -851,12 +864,29 @@ def search_lands(
             )
         }
 
+    kyc_query_ms = (
+        time.perf_counter() - kyc_query_start
+    ) * 1000
+
+    print(
+        f"[SEARCH PERF] "
+        f"kyc_query={kyc_query_ms:.2f}ms "
+        f"owners={len(owner_ids)}"
+    )
     for land in lands:
         land.is_verified_farmer = land.owner_id in verified_owner_ids
+    route_total_ms = (
+        time.perf_counter() - route_start
+    ) * 1000
+
+    print(
+        f"[SEARCH PERF] "
+        f"total={route_total_ms:.2f}ms "
+        f"lands={len(lands)} "
+        f"owners={len(owner_ids)}"
+    )
 
     return lands
-
-
 # ==========================
 # My Lands
 # ==========================
