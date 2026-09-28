@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.database import get_db, SessionLocal
+from app.database import get_db, SessionLocal, engine
 from app.models import User, UserAccountStatus, UserKYCVerification, AdminReauthChallenge
 from app.admin_permissions import (
     ADMIN_PERMISSION_ROLES,
@@ -292,8 +292,33 @@ def get_current_marketplace_user(
         # --------------------------------------------------
         db = SessionLocal()
         try:
-            auth_start = time.perf_counter()
+            # --------------------------------------------------
+            # TEMPORARY DB POOL PERFORMANCE DIAGNOSTICS
+            # --------------------------------------------------
+            pool = engine.pool
 
+            print(
+                f"[DB POOL] "
+                f"size={pool.size()} "
+                f"checked_out={pool.checkedout()} "
+                f"overflow={pool.overflow()}"
+            )
+
+            # Measure how long it takes to acquire a DB connection.
+            conn_start = time.perf_counter()
+
+            db.connection()
+            conn_ms = (time.perf_counter() - conn_start) * 1000
+
+            print(
+                f"[AUTH CONN PERF] "
+                f"connection_checkout={conn_ms:.2f}ms"
+            )
+
+            # --------------------------------------------------
+            # Existing User query timing
+            # --------------------------------------------------
+            auth_start = time.perf_counter()
             user = (
                 db.query(User)
                 .filter(User.id == user_id)
@@ -331,12 +356,6 @@ def get_current_marketplace_user(
                         "Please contact the administrator."
                     ),
                 )
-
-            account_status = (
-                db.query(UserAccountStatus)
-                .filter(UserAccountStatus.user_id == user_id)
-                .first()
-            )
 
             if (
                 account_status
