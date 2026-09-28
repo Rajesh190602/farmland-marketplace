@@ -3,6 +3,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 import os
 import time
+from sqlalchemy import create_engine, event
 # Load environment variables from .env
 load_dotenv()
 
@@ -19,6 +20,28 @@ engine = create_engine(
     pool_recycle=1800,
     pool_pre_ping=False,
 )
+@event.listens_for(engine, "checkout")
+def receive_checkout(dbapi_connection, connection_record, connection_proxy):
+    connection_record.info["checkout_time"] = time.perf_counter()
+
+
+@event.listens_for(engine, "checkin")
+def receive_checkin(dbapi_connection, connection_record):
+    checkout_time = connection_record.info.pop("checkout_time", None)
+
+    if checkout_time is not None:
+        checkout_duration_ms = (
+            time.perf_counter() - checkout_time
+        ) * 1000
+
+        pool = engine.pool
+
+        print(
+            f"[DB CONNECTION PERF] "
+            f"checkout_duration={checkout_duration_ms:.2f}ms "
+            f"checked_out={pool.checkedout()} "
+            f"overflow={pool.overflow()}"
+        )
 
 SessionLocal = sessionmaker(
     autocommit=False,
@@ -48,4 +71,3 @@ def get_db():
         )
 
         db.close()
-
