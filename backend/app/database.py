@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 import os
-
+import time
 # Load environment variables from .env
 load_dotenv()
 
@@ -27,11 +27,25 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
-
-
 def get_db():
     db = SessionLocal()
+    session_start = time.perf_counter()
+
     try:
         yield db
     finally:
+        session_lifetime_ms = (
+            time.perf_counter() - session_start
+        ) * 1000
+
+        pool = engine.pool
+
+        print(
+            f"[DB SESSION PERF] "
+            f"lifetime={session_lifetime_ms:.2f}ms "
+            f"checked_out={pool.checkedout()} "
+            f"overflow={pool.overflow()}"
+        )
+
         db.close()
+
