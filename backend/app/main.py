@@ -1,6 +1,8 @@
 import os
 import time
 import anyio.to_thread
+import psutil
+import asyncio
 from app.routers.marketplace import router as marketplace_router
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -49,17 +51,87 @@ app = FastAPI(
     version="1.0.0",
 )
 # =========================================================
-# TEMPORARY THREAD POOL DIAGNOSTIC
+# TEMPORARY THREAD POOL + RESOURCE DIAGNOSTICS
 # =========================================================
+
+_resource_monitor_task = None
+
+
+async def monitor_resources():
+    process = psutil.Process(os.getpid())
+
+    # Prime CPU measurement
+    process.cpu_percent(interval=None)
+
+    while True:
+        try:
+            cpu_percent = process.cpu_percent(interval=None)
+
+            memory = process.memory_info()
+            memory_mb = memory.rss / (1024 * 1024)
+
+            limiter = anyio.to_thread.current_default_thread_limiter()
+            pool = engine.pool
+
+            checked_out = pool.checkedout()
+            pool_size = pool.size()
+            overflow = max(pool.overflow(), 0)
+
+            print(
+                f"[RESOURCE PERF] "
+                f"cpu={cpu_percent:.2f}% "
+                f"memory={memory_mb:.2f}MB "
+                f"db_pool={checked_out}/{pool_size} "
+                f"db_overflow={overflow} "
+                f"threadpool={limiter.borrowed_tokens}/{limiter.total_tokens}"
+            )
+
+            await asyncio.sleep(5)
+
+        except asyncio.CancelledError:
+            break
+
+        except Exception as e:
+            print(
+                f"[RESOURCE PERF ERROR] {type(e).__name__}: {e}"
+            )
+            await asyncio.sleep(5)
+
 
 @app.on_event("startup")
 async def configure_thread_pool():
+    global _resource_monitor_task
+
     limiter = anyio.to_thread.current_default_thread_limiter()
     limiter.total_tokens = 80
+
     print(
         f"[THREADPOOL CONFIG] "
         f"total_tokens={limiter.total_tokens}"
     )
+
+    _resource_monitor_task = asyncio.create_task(
+        monitor_resources()
+    )
+
+    print("[RESOURCE MONITOR] started")
+
+
+@app.on_event("shutdown")
+async def stop_resource_monitor():
+    global _resource_monitor_task
+
+    if _resource_monitor_task is not None:
+        _resource_monitor_task.cancel()
+
+        try:
+            await _resource_monitor_task
+        except asyncio.CancelledError:
+            pass
+
+        _resource_monitor_task = None
+
+    print("[RESOURCE MONITOR] stopped")
 # =========================================================
 # OPENAPI FILE UPLOAD COMPATIBILITY
 # =========================================================
