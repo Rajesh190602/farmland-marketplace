@@ -238,20 +238,18 @@ def get_current_user(
 # ==========================
 # Marketplace Current User
 # ==========================
-
 def get_current_marketplace_user(
     token: str = Depends(oauth2_scheme),
 ):
     """
     Validate a normal marketplace JWT and return the User ORM object.
 
-    This dependency intentionally uses a short-lived database session
-    dedicated to authentication. The session is closed immediately after
-    authentication so the marketplace route can acquire its own DB
-    connection without keeping the authentication connection checked out
-    for the lifetime of the request.
+    Authentication uses one database query to retrieve both:
+      - User
+      - UserAccountStatus
 
-    Existing get_current_user() behavior is intentionally unchanged.
+    The authentication session is closed immediately after validation
+    so the marketplace route can acquire its own DB connection.
     """
 
     credentials_exception = HTTPException(
@@ -285,12 +283,10 @@ def get_current_marketplace_user(
             )
 
         # --------------------------------------------------
-        # Use a short-lived authentication session.
-        #
-        # This prevents the authentication DB connection from
-        # remaining checked out while /lands/search executes.
+        # Short-lived authentication DB session
         # --------------------------------------------------
         db = SessionLocal()
+
         try:
             # --------------------------------------------------
             # TEMPORARY DB POOL PERFORMANCE DIAGNOSTICS
@@ -304,11 +300,14 @@ def get_current_marketplace_user(
                 f"overflow={pool.overflow()}"
             )
 
-            # Measure how long it takes to acquire a DB connection.
+            # Measure DB connection acquisition.
             conn_start = time.perf_counter()
 
             db.connection()
-            conn_ms = (time.perf_counter() - conn_start) * 1000
+
+            conn_ms = (
+                time.perf_counter() - conn_start
+            ) * 1000
 
             print(
                 f"[AUTH CONN PERF] "
@@ -316,38 +315,50 @@ def get_current_marketplace_user(
             )
 
             # --------------------------------------------------
-            # Existing User query timing
+            # Combined authentication query
+            #
+            # Previously:
+            #   1. User query
+            #   2. UserAccountStatus query
+            #
+            # Now:
+            #   1. User + UserAccountStatus in one query
             # --------------------------------------------------
             auth_start = time.perf_counter()
-            user = (
-                db.query(User)
-                .filter(User.id == user_id)
+
+            result = (
+                db.query(
+                    User,
+                    UserAccountStatus,
+                )
+                .outerjoin(
+                    UserAccountStatus,
+                    UserAccountStatus.user_id == User.id,
+                )
+                .filter(
+                    User.id == user_id
+                )
                 .first()
             )
 
-            user_query_ms = (time.perf_counter() - auth_start) * 1000
-            status_start = time.perf_counter()
+            auth_query_ms = (
+                time.perf_counter() - auth_start
+            ) * 1000
 
-            account_status = (
-                db.query(UserAccountStatus)
-                .filter(UserAccountStatus.user_id == user_id)
-                .first()
-            )
-
-            status_query_ms = (time.perf_counter() - status_start) * 1000
-
-            print(
-                f"[AUTH PERF] user_query={user_query_ms:.2f}ms "
-                f"account_status={status_query_ms:.2f}ms "
-                f"total_db={user_query_ms + status_query_ms:.2f}ms"
-            )
-
-        
-
-            if not user:
+            if not result:
                 raise credentials_exception
 
-            # Admin suspension must remain effective for existing JWTs.
+            user, account_status = result
+
+            print(
+                f"[AUTH PERF] "
+                f"combined_query={auth_query_ms:.2f}ms"
+            )
+
+            # --------------------------------------------------
+            # Admin suspension must remain effective for
+            # existing JWTs.
+            # --------------------------------------------------
             if user.is_suspended:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -357,6 +368,9 @@ def get_current_marketplace_user(
                     ),
                 )
 
+            # --------------------------------------------------
+            # Deactivated account protection
+            # --------------------------------------------------
             if (
                 account_status
                 and account_status.status == "deactivated"
@@ -365,7 +379,8 @@ def get_current_marketplace_user(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=(
                         "Your account has been deactivated. "
-                        "Please contact support if you want to reactivate it."
+                        "Please contact support if you want to "
+                        "reactivate it."
                     ),
                 )
 
@@ -373,7 +388,7 @@ def get_current_marketplace_user(
 
         finally:
             # Always release the authentication DB connection
-            # before the marketplace route begins its database work.
+            # before marketplace database work begins.
             db.close()
 
     except HTTPException:
@@ -381,6 +396,7 @@ def get_current_marketplace_user(
 
     except JWTError:
         raise credentials_exception
+
 # ==========================
 # KYC Verification Session
 # ==========================
