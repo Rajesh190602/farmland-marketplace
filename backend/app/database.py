@@ -50,9 +50,38 @@ def get_db():
     db = SessionLocal()
     session_start = time.perf_counter()
 
+    pool = engine.pool
+
+    print(
+        f"[DB SESSION PERF] "
+        f"opened "
+        f"checked_out={pool.checkedout()} "
+        f"overflow={pool.overflow()}"
+    )
+
     try:
         yield db
+
     finally:
+        cleanup_start = time.perf_counter()
+
+        after_yield_ms = (
+            cleanup_start - session_start
+        ) * 1000
+
+        print(
+            f"[DB SESSION PERF] "
+            f"after_yield={after_yield_ms:.2f}ms"
+        )
+
+        db_close_start = time.perf_counter()
+
+        db.close()
+
+        db_close_ms = (
+            time.perf_counter() - db_close_start
+        ) * 1000
+
         session_lifetime_ms = (
             time.perf_counter() - session_start
         ) * 1000
@@ -62,8 +91,7 @@ def get_db():
         print(
             f"[DB SESSION PERF] "
             f"lifetime={session_lifetime_ms:.2f}ms "
+            f"db_close={db_close_ms:.2f}ms "
             f"checked_out={pool.checkedout()} "
             f"overflow={pool.overflow()}"
         )
-
-        db.close()
