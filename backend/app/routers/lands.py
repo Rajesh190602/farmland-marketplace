@@ -826,6 +826,20 @@ def search_lands(
             Land.area <= max_area
         )
 
+    # Measure marketplace DB connection acquisition wait
+    search_conn_start = time.perf_counter()
+
+    db.connection()
+
+    search_conn_ms = (
+        time.perf_counter() - search_conn_start
+    ) * 1000
+
+    print(
+        f"[SEARCH CONN PERF] "
+        f"connection_checkout={search_conn_ms:.2f}ms"
+    )
+
     main_query_start = time.perf_counter()
 
     lands = (
