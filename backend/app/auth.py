@@ -285,6 +285,7 @@ def get_current_marketplace_user(
         # --------------------------------------------------
         # Short-lived authentication DB session
         # --------------------------------------------------
+        auth_total_start = time.perf_counter()
         db = SessionLocal()
 
         try:
@@ -383,7 +384,14 @@ def get_current_marketplace_user(
                         "reactivate it."
                     ),
                 )
+            auth_total_ms = (
+                time.perf_counter() - auth_total_start
+            ) * 1000
 
+            print(
+                f"[AUTH PERF] "
+                f"total={auth_total_ms:.2f}ms"
+            )
             return user
 
         finally:
