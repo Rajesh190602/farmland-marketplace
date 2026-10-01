@@ -215,15 +215,39 @@ app.add_middleware(
 # =========================================================
 # STEP 77A - SENSITIVE API RATE LIMITING
 # =========================================================
-
 @app.middleware("http")
 async def rate_limit_sensitive_endpoints(request, call_next):
+    middleware_start = time.perf_counter()
+
     rate_limit_response = check_rate_limit(request)
 
+    rate_limit_ms = (
+        time.perf_counter() - middleware_start
+    ) * 1000
+
     if rate_limit_response is not None:
+        print(
+            f"[RATE LIMIT PERF] "
+            f"path={request.url.path} "
+            f"check={rate_limit_ms:.2f}ms"
+        )
         return rate_limit_response
 
-    return await call_next(request)
+    response = await call_next(request)
+
+    middleware_total_ms = (
+        time.perf_counter() - middleware_start
+    ) * 1000
+
+    print(
+        f"[RATE LIMIT PERF] "
+        f"path={request.url.path} "
+        f"check={rate_limit_ms:.2f}ms "
+        f"total={middleware_total_ms:.2f}ms"
+    )
+
+    return response
+
 
 
 # =========================================================
@@ -264,9 +288,13 @@ async def measure_http_request(request, call_next):
         f"borrowed={limiter.borrowed_tokens} "
         f"total={limiter.total_tokens}"
     )
+    call_next_start = time.perf_counter()
 
     response = await call_next(request)
 
+    call_next_ms = (
+        time.perf_counter() - call_next_start
+    ) * 1000
     request_total_ms = (
         time.perf_counter() - request_start
     ) * 1000
@@ -276,9 +304,9 @@ async def measure_http_request(request, call_next):
         f"method={request.method} "
         f"path={request.url.path} "
         f"status={response.status_code} "
+        f"call_next={call_next_ms:.2f}ms "
         f"total={request_total_ms:.2f}ms"
     )
-
     return response
 
 # =========================================================
