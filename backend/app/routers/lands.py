@@ -826,17 +826,6 @@ def search_lands(
             Land.area <= max_area
         )
 
-    search_conn_start = time.perf_counter()
-    db.connection()
-
-    search_conn_ms = (
-        time.perf_counter() - search_conn_start
-    ) * 1000
-
-    print(
-        f"[SEARCH CONN PERF] "
-        f"connection_checkout={search_conn_ms:.2f}ms"
-    )
     main_query_start = time.perf_counter()
 
     lands = (
@@ -887,6 +876,37 @@ def search_lands(
     )
     for land in lands:
         land.is_verified_farmer = land.owner_id in verified_owner_ids
+    # Convert ORM objects to plain dictionaries before returning
+    results = []
+
+    for land in lands:
+        results.append({
+            "id": land.id,
+            "title": land.title,
+            "description": land.description,
+            "image_url": land.image_url,
+            "price": land.price,
+            "area": land.area,
+            "village": land.village,
+            "mandal": land.mandal,
+            "district": land.district,
+            "state": land.state,
+            "pincode": land.pincode,
+            "survey_number": land.survey_number,
+            "soil_type": land.soil_type,
+            "water_source": land.water_source,
+            "crop_type": land.crop_type,
+            "latitude": land.latitude,
+            "longitude": land.longitude,
+            "status": land.status,
+            "rejection_reason": land.rejection_reason,
+            "is_published": land.is_published,
+            "owner_id": land.owner_id,
+            "is_verified_farmer": (
+                land.owner_id in verified_owner_ids
+            ),
+        })
+
     route_total_ms = (
         time.perf_counter() - route_start
     ) * 1000
@@ -894,11 +914,14 @@ def search_lands(
     print(
         f"[SEARCH PERF] "
         f"total={route_total_ms:.2f}ms "
-        f"lands={len(lands)} "
+        f"lands={len(results)} "
         f"owners={len(owner_ids)}"
     )
 
-    return lands
+    # Release database connection before response serialization
+    db.close()
+
+    return results
 # ==========================
 # My Lands
 # ==========================
