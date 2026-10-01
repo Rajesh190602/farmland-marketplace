@@ -275,7 +275,6 @@ async def add_security_headers(request, call_next):
 # =========================================================
 # TEMPORARY PERFORMANCE DIAGNOSTICS
 # =========================================================
-
 @app.middleware("http")
 async def measure_http_request(request, call_next):
     request_start = time.perf_counter()
@@ -288,6 +287,7 @@ async def measure_http_request(request, call_next):
         f"borrowed={limiter.borrowed_tokens} "
         f"total={limiter.total_tokens}"
     )
+
     call_next_start = time.perf_counter()
 
     response = await call_next(request)
@@ -295,6 +295,7 @@ async def measure_http_request(request, call_next):
     call_next_ms = (
         time.perf_counter() - call_next_start
     ) * 1000
+
     request_total_ms = (
         time.perf_counter() - request_start
     ) * 1000
@@ -305,10 +306,12 @@ async def measure_http_request(request, call_next):
         f"path={request.url.path} "
         f"status={response.status_code} "
         f"call_next={call_next_ms:.2f}ms "
-        f"total={request_total_ms:.2f}ms"
+        f"total={request_total_ms:.2f}ms "
+        f"response_type={type(response).__name__} "
+        f"body_type={type(response.body).__name__ if hasattr(response, 'body') else 'N/A'}"
     )
-    return response
 
+    return response
 # =========================================================
 # UPLOADS
 # =========================================================
