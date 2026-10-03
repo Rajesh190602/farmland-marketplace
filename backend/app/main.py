@@ -278,16 +278,16 @@ async def add_security_headers(request, call_next):
 @app.middleware("http")
 async def measure_http_request(request, call_next):
     request_start = time.perf_counter()
-
     limiter = anyio.to_thread.current_default_thread_limiter()
-
+    threadpool_stats = limiter.statistics()
     print(
         f"[THREADPOOL PERF] "
         f"path={request.url.path} "
-        f"borrowed={limiter.borrowed_tokens} "
-        f"total={limiter.total_tokens}"
+        f"borrowed={threadpool_stats.borrowed_tokens} "
+        f"total={threadpool_stats.total_tokens} "
+        f"available={limiter.available_tokens} "
+        f"waiting={threadpool_stats.tasks_waiting}"
     )
-
     call_next_start = time.perf_counter()
 
     response = await call_next(request)
