@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from app import models
 from sqlalchemy import func, literal, union_all
@@ -707,6 +707,7 @@ def get_all_lands(
 
 @router.get("/search")
 def search_lands(
+    request: Request,
     district: str | None = Query(None),
     village: str | None = Query(None),
     mandal: str | None = Query(None),
@@ -931,7 +932,7 @@ def search_lands(
         f"lands={len(results)} "
         f"owners={len(owner_ids)}"
     )
-
+    request.state.search_route_end = time.perf_counter()
     # Release database connection before response serialization
     db.close()
 

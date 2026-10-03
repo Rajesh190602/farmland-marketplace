@@ -1,5 +1,6 @@
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
+from fastapi import Request
 import os
 import time
 from sqlalchemy import create_engine, event
@@ -46,7 +47,7 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
-def get_db():
+def get_db(request: Request):
     db = SessionLocal()
     session_start = time.perf_counter()
 
@@ -64,6 +65,22 @@ def get_db():
 
     finally:
         cleanup_start = time.perf_counter()
+        search_route_end = getattr(
+            request.state,
+            "search_route_end",
+            None,
+        )
+
+        if search_route_end is not None:
+            post_route_ms = (
+                cleanup_start - search_route_end
+            ) * 1000
+
+            print(
+                f"[POST ROUTE PERF] "
+                f"path={request.url.path} "
+                f"post_route={post_route_ms:.2f}ms"
+            )
 
         after_yield_ms = (
             cleanup_start - session_start
